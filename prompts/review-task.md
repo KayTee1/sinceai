@@ -15,6 +15,9 @@ Avoid speculative improvements outside the task.
 
 Record reviewer, exact scope, validation evidence, verdict, and actionable findings
 in docs/agent/REVIEW.md. Each finding needs an ID, severity, location, impact, and
-requested fix. Approve only when acceptance is supported and no blocking findings
-remain. Human integration approval is still required. Summarize blockers first;
+requested fix. Approve only when acceptance is supported and no blocking or important findings
+remain. Include reproduction steps when applicable and identify missing or failed
+tests. Rank findings by impact; distinguish important nonblocking fixes from
+optional improvements.
+Human integration approval is still required. Summarize blockers first;
 do not commit or push unless authorized.

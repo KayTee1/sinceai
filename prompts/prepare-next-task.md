@@ -12,6 +12,11 @@ clear owner, file scope, acceptance criteria, and validation steps. If no task i
 ready, state the exact dependency or human decision needed. Coordinate claims
 between developers before parallel work. Cut optional scope if needed through
 an explicit team decision.
+Selection is a proposal until the human coordinator acknowledges ownership;
+do not claim another developer's task or treat preparation as permission to code.
+Check overlapping ownership and recommend any safely parallel task, naming the
+contract and file boundaries that make it safe. Prefer the highest-priority
+MVP-critical task whose dependencies are satisfied.
 
 Replace HANDOFF with a concise restart snapshot: task/owner, branch/commit,
 working-tree state, result, checks and outcomes, review/blocker links, and one next

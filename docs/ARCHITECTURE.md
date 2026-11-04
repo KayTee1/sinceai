@@ -4,8 +4,13 @@ Status: no stack or architecture selected. Fill this in after challenge bootstra
 keep it proportional to the MVP. Record major choices in DECISIONS.
 
 - Components and responsibilities: pending
+- Selected stack and rationale: TBD after challenge analysis and human approval
 - Main data/control flow and external dependencies: pending
 - Data storage and interfaces, if needed: pending
+- Integration contracts: TBD; specify inputs/outputs, failure behavior and owner
+  before dependent tasks run in parallel
+- Local development approach: TBD after stack approval
+- Deployment approach: TBD; no deployment target selected or authorized
 - Configuration variable names and sanitized examples: pending; never include secrets
 - Key constraints, risks, and demo fallback: pending
 
