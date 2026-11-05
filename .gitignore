@@ -10,5 +10,22 @@ Thumbs.db
 *.pem
 *.key
 
-# Add stack-specific dependency and build output rules once the stack is chosen.
-# Keep shared agent instructions and project configuration tracked.
+# Common dependency and build output (we don't know the stack yet)
+node_modules/
+.next/
+dist/
+build/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Editors and logs
+.vscode/
+.idea/
+*.log
+
+# Challenge data that may be confidential: keep it local
+data/private/
