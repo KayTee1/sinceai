@@ -1,27 +1,24 @@
-# Implement one task
+# Implement a task
 
-Input: task ID from docs/PLAN.md and the human owner/agent session.
+Input: task ID from `docs/PLAN.md`. Building it must be authorized by your human.
 
-Follow AGENTS.md. Inspect Git state and read the relevant requirements, plan,
-architecture, and handoff. Confirm the task is ready, dependencies are satisfied,
-the human has authorized implementation and accepted relevant scope/decisions,
-acceptance criteria are testable, and file ownership is coordinated. If the task
-ID is absent, propose a ready task; obtain authorization before coding unless the
-human has already authorized selecting and executing ready tasks.
+1. Follow AGENTS.md. Check `git status`/branch; read the task, the demo script
+   (REQUIREMENTS) and the interface contract (ARCHITECTURE).
+2. Work on the task's branch (`feat/T<id>-short-name`). Set the task to `doing`.
+3. Build the smallest thing that meets "done when". Keep the app runnable.
+   Stick to the contract; if it needs to change, stop and ask.
+4. Add tests where they're cheap and useful (AI pipeline logic, parsing,
+   contract shapes). Don't spend demo time on test coverage.
+5. Run the task's "how to check" plus any tests. Check the diff for secrets
+   and unrelated changes.
+6. Update the task to `review` (or `done` if a human merged it), refresh
+   HANDOFF, and add any new run commands to ARCHITECTURE.
+7. Report: what changed, commands run with results, anything not checked.
+   Commit/push only if your human asks.
 
-Use an isolated task branch/checkout for parallel work. Mark the task active;
-implement the smallest complete change within scope. Keep the application runnable.
-Inspect affected code before editing. Add appropriate tests for changed behavior
-and relevant failures; avoid tests that merely repeat the implementation.
-Raise major decisions instead of silently resolving them. Do not edit files owned
-by another active task without coordination.
+## Fixing review findings
 
-Run relevant checks and acceptance steps. Inspect the final diff for unrelated
-changes and secrets. Update PLAN to review and refresh HANDOFF with exact results,
-limitations, dirty files, and the next action. Request an independent review of a
-stable, identified diff. Report what changed and what was verified. Do not claim
-approval, commit, or push without the required authorization. When a commit is
-explicitly authorized, stage only task paths, inspect the staged diff and create
-a scoped commit. Preserve unrelated dirty files; never include them for convenience.
-Low-risk tasks may use human integration review per AGENTS.md; record that path
-instead of requesting unnecessary separate agent review.
+Given finding IDs from `docs/agent/REVIEW.md`: fix blocking and important
+ones first, with small focused changes. If you disagree with a finding, say
+why and let the humans decide; don't silently skip it. Re-run checks and
+update the finding's state.

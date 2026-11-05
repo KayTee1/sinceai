@@ -1,18 +1,13 @@
-# Decision log
+# Decisions
 
-No product or technical decisions have been made.
-
-Add entries only for consequential choices; routine implementation details do
-not need a record. Use this compact format:
+Only consequential choices (challenge, approach, stack, contract, cuts).
 
 ```text
-D<number> — Title — YYYY-MM-DD
-Status: proposed / accepted / superseded by D<number>
-Context and constraint:
-Choice and reason:
-Alternatives and tradeoff:
-Approved by:
+D<n>: Title (YYYY-MM-DD)
+Status: proposed / accepted / replaced by D<n>
+Choice and why:
+Alternatives considered:
+Agreed by:
 ```
 
-Keep assumptions marked as assumptions until confirmed. Preserve superseded
-entries so later sessions can understand why the approach changed.
+No decisions yet.

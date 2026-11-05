@@ -1,25 +1,43 @@
-# Architecture and operating instructions
+# Architecture
 
-Status: no stack or architecture selected. Fill this in after challenge bootstrap;
-keep it proportional to the MVP. Record major choices in DECISIONS.
+Status: not chosen. Keep it as simple as the demo allows.
 
-- Components and responsibilities: pending
-- Selected stack and rationale: TBD after challenge analysis and human approval
-- Main data/control flow and external dependencies: pending
-- Data storage and interfaces, if needed: pending
-- Integration contracts: TBD; specify inputs/outputs, failure behavior and owner
-  before dependent tasks run in parallel
-- Local development approach: TBD after stack approval
-- Deployment approach: TBD; no deployment target selected or authorized
-- Configuration variable names and sanitized examples: pending; never include secrets
-- Key constraints, risks, and demo fallback: pending
+## Overview
 
-## Verified commands
+- Stack:
+- Components (3-5 boxes, one line each):
+- AI model/provider and why:
+- Data storage:
+- Deployment: localhost for the video, or a public URL?
 
-No commands exist yet. Record prerequisites, working directory, and exact commands
-for installation, local run, checks/tests, and build once implemented. Include
-deployment instructions only if deployment is selected and authorized.
+## Interface contract
 
-## Demo procedure
+Agree on this before both developers start, so the lanes can work in parallel
+(e.g. the UI uses mock responses until the backend is ready). Changing it
+needs both developers to agree.
 
-Pending: setup, sample input, steps, expected output, reset procedure, and fallback.
+```text
+TBD: endpoints or function signatures with example input/output JSON
+```
+
+Mock/fixture data lives in: TBD
+
+## Configuration
+
+Environment variable names only (values go in `.env`, never in Git):
+
+- TBD
+
+## Run commands
+
+Exact, tested commands only.
+
+```sh
+# install:
+# run:
+# test:
+```
+
+## Demo setup
+
+How to reset and run the demo, plus a fallback if an external service fails.

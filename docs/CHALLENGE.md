@@ -1,37 +1,42 @@
-# Challenge brief
+# Challenge
 
-Status: not selected. Do not infer the domain, stack, or deliverables.
+Status: not chosen yet. Selection closes Fri 6 Nov 17:30 and is final.
 
-When revealed, capture the authoritative brief here, preserving wording and
-linking its source. Distinguish organizer facts from team interpretation.
-If only a summary is available, preserve it verbatim and label its provenance
-(organizer summary or team summary), date and completeness. Do not call a team
-summary the official brief. Planning may proceed provisionally; missing rules
-remain unknown until checked against the official source.
+If the brief is under NDA or confidential, don't paste it here. Write a short
+sanitized summary instead and keep the original outside Git.
 
-- Official brief and source: pending
-- Required features and constraints: pending
-- Judging criteria: pending
-- Submission artifacts and process: pending
-- Deadline and timezone: pending
-- Rules on AI, external code, datasets, and services: pending
-- Team time budget and demo duration: pending team input
-- Open questions and who will resolve them: pending
-- Pre-event baseline and reused work eligibility: pending verification against rules
+## Brief
 
-## Original statement
+- Company and challenge name:
+- Source (sinceai.app link) and date:
+- Restricted / NDA: unknown
 
-TBD — paste the permitted original statement verbatim, with source and date.
-Keep interpretation in REQUIREMENTS, and restricted material outside Git.
+Original text (verbatim):
 
-## Official constraints, deliverables and judging
+> TBD
 
-TBD — capture each from the official source using the fields above. No challenge
-constraints, deliverables or judging weights are known yet.
+## Facts from the organizers
 
-## Clarifications
+Only what the brief or organizers actually say. Our interpretation goes in
+REQUIREMENTS.
 
-TBD — record question, answer, source, date and affected requirement IDs.
+- Problem and target user:
+- Required outputs:
+- Data provided (format, size, access):
+- Required or forbidden tech:
+- IP terms:
+- How the company judges:
+- Prizes: €2,000 / €750 / €250 per challenge (verify)
 
-Record clarifications with their source and date. Derive scope in REQUIREMENTS;
-do not replace the original brief with an interpretation.
+## Event rules (all challenges)
+
+- Submit in sinceai.app by **Sun 8 Nov 10:00 EET**: project name, one-line
+  tagline, description, technologies, repo link, YouTube demo video, source
+  .zip, IP terms accepted. Demo URL and pitch deck are optional.
+- Working demos are prioritized; slides never replace a demo.
+- AI tools are allowed; disclose the main ones. Keep pre-existing work separate.
+
+## Questions for the company (Saturday Q&A)
+
+| # | Question | Answer | Source / date |
+| --- | --- | --- | --- |

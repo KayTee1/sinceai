@@ -1,23 +1,16 @@
-# Independently review a task
+# Review a task
 
-Input: task ID, base/head commits or explicit uncommitted diff scope, and author.
-Use a reviewer who did not implement the task. If you implemented it, request
-an independent reviewer instead of approving your own changes.
+Input: task ID and branch (or commit range). You must not have written this
+code. Don't modify it.
 
-Read AGENTS.md, relevant requirements, task acceptance criteria, and architecture.
-Inspect Git state and establish a stable review scope. Review the actual changes
-and surrounding behavior, not just the author's summary. Do not modify the code.
-
-Check requirement coverage, correctness, regressions, secrets/data handling,
-failure cases, complexity, and whether the documented run/demo path works.
-Run appropriate checks when possible; record unrun checks and limits honestly.
-Avoid speculative improvements outside the task.
-
-Record reviewer, exact scope, validation evidence, verdict, and actionable findings
-in docs/agent/REVIEW.md. Each finding needs an ID, severity, location, impact, and
-requested fix. Approve only when acceptance is supported and no blocking or important findings
-remain. Include reproduction steps when applicable and identify missing or failed
-tests. Rank findings by impact; distinguish important nonblocking fixes from
-optional improvements.
-Human integration approval is still required. Summarize blockers first;
-do not commit or push unless authorized.
+1. Read AGENTS.md, the task's "done when", the demo script and the contract.
+2. Review the actual diff (`git diff master...<branch>`), not just the
+   author's summary.
+3. Check: does it meet "done when"? Does it match the contract? Bugs,
+   crashes on bad input, leaked secrets, confidential data in Git, anything
+   that would break the demo?
+4. Run the task's "how to check" and tests if you can. Say what you didn't run.
+5. Add findings to `docs/agent/REVIEW.md` (ID, severity, where, problem, fix).
+   Skip style nitpicks and ideas outside the task.
+6. Verdict: **approve** (no blocking/important findings) or **changes needed**.
+   A human still decides when to merge.
