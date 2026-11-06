@@ -128,10 +128,21 @@ Tested on 2026-11-06 (Node 22):
 npm install
 mkdir -p data/private && cp <path>/Bayer_..._FINAL_Builder_Data_Pack.xlsx data/private/pack.xlsx
 npm run db:import      # XLSX -> data/private/steward.db (one table per sheet)
+npm test               # fixture tests; add PACK_XLSX=<path> for the local workbook checks
 cp .env.example .env.local   # add ANTHROPIC_API_KEY for the chat
 npm run dev            # http://localhost:3000
 npm run lint && npx tsc --noEmit && npm run build
 ```
+
+`db:import` is non-destructive (T14): it validates the workbook (sheet set,
+headers, DATA_SOURCES row counts), writes a temporary file and publishes it
+only if `steward.db` does not exist. It never deletes or overwrites a
+database; to reimport, delete the file first. Every table keeps its original
+columns plus `_source_row`, the exact Excel row (header = row 1).
+Backend services (`src/services/steward`) take a libSQL client as a parameter
+(`src/db/open.ts`), so they run in tests and scripts without Next.js:
+`npx tsx src/services/steward/cli.ts REQ-0001 [product market]` prints the
+structured analysis.
 
 Code layout: `src/app` (page + `api/chat`), `src/components` (shell, dashboard,
 agentic chat), `src/lib` (catalog loader, shared types), `src/mastra` (agent +
