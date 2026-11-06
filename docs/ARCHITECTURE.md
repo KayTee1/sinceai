@@ -90,7 +90,20 @@ Names only; values go in `.env` (ignored):
 
 ## Run commands
 
-None verified yet; no app code exists. Add exact tested commands after scaffolding.
+Tested on 2026-11-06 (Node 22):
+
+```sh
+npm install
+mkdir -p data/private && cp <path>/Bayer_..._FINAL_Builder_Data_Pack.xlsx data/private/pack.xlsx
+npm run db:import      # XLSX -> data/private/steward.db (one table per sheet)
+cp .env.example .env.local   # add ANTHROPIC_API_KEY for the chat
+npm run dev            # http://localhost:3000
+npm run lint && npx tsc --noEmit && npm run build
+```
+
+Code layout: `src/app` (page + `api/chat`), `src/components` (shell, dashboard,
+agentic chat), `src/lib` (catalog loader, shared types), `src/mastra` (agent +
+read-only catalog tools), `src/db` (SQLite client, import).
 
 ## Demo reset and fallback
 

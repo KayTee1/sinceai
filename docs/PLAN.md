@@ -35,10 +35,10 @@ on it and telling the other developer before starting.
 | T1 | Pick the challenge and plan it | Viet | docs/bayer-challenge | docs/ | Bayer briefing | Challenge chosen (done); scope re-checked after briefing; contract and tasks agreed | doing |
 | T2 | Resolve scope review findings in draft docs | KayTee / Codex | feat/T2-scope-review-fixes | docs/ | User requested fixes and final-source intake | Review issues resolved; final brief/workbook facts and limitations recorded; human reviews draft | review |
 | T3 | Correct pipeline diagrams in docs; define shared modes and lineage limits | KayTee / Codex | feat/T3-pipeline-docs | docs/ | User requested validation fixes and PR | Scope, requirements and architecture aligned; diff/links checked; PR ready for independent review | done (merged #7) |
-| T4 | Scaffold Next.js + Mastra + SQLite; import Bayer XLSX | TBD | feat/T4-scaffold | app/, src/db/ | D7 agreed | App runs; sheet counts match DATA_SOURCES | todo |
+| T4 | Scaffold Next.js + Mastra + SQLite; import Bayer XLSX | Viet / Claude | feat/initial-ui-mastra | src/, package.json | D7 agreed | App runs; sheet counts match DATA_SOURCES | review |
 | T5 | Platform services: lifecycle engine, policy, semantic layer, clock/scheduler, audit, lineage | TBD (Lane A) | feat/T5-services | src/services/ | T4 | Transitions, TTL, lease review, archive/restore covered by tests | todo |
 | T6 | Mastra agents + workflow with approval pause; step event stream | TBD (Lane A) | feat/T6-agents | src/mastra/ | T4, contract | REQ-0001 run emits step events; build path creates a Temporary insight | todo |
-| T7 | UI shell: tabs, role toggle, Dashboard tab, lineage panel | TBD (Lane B) | feat/T7-shell | app/ | Contract fixtures | Employee sees only Dashboard; lineage opens on click | todo |
+| T7 | UI shell: tabs, role toggle, Dashboard tab, lineage panel | Viet / Claude | feat/initial-ui-mastra | src/app, src/components | Contract fixtures | Employee sees only Dashboard; lineage opens on click | doing (shell, dashboard, chat done; lineage panel todo) |
 | T8 | Agentic Chat view, Pipeline view, approval inbox, clock control | TBD (Lane B) | feat/T8-agentic-ui | app/ | Contract fixtures | Both views show the same run; reject needs a reason | todo |
 | T9 | README / architecture note, demo script, video | TBD | feat/T9-docs-demo | README.md, docs/ | T5–T8 | R18 met; video recorded | todo |
 
