@@ -1,14 +1,14 @@
 # Plan
 
 Status: challenge chosen (D1). Scope follows the Miro pipeline and UI vision
-(SCOPE, D7–D9). Lanes and tasks below are proposed until KayTee agrees.
+(SCOPE, D7–D9). Lanes and tasks below are proposed until both developers agree.
 
 ## Team
 
 | Developer | Agent | Lane | Strengths |
 | --- | --- | --- | --- |
 | Viet | Claude Code | TBD | TBD |
-| KayTee | Codex | TBD | TBD |
+| KayTee | Codex / Claude Code | TBD | TBD |
 
 Proposed lanes (not agreed yet):
 
@@ -35,7 +35,8 @@ on it and telling the other developer before starting.
 | T1 | Pick the challenge and plan it | Viet | docs/bayer-challenge | docs/ | Bayer briefing | Challenge chosen (done); scope re-checked after briefing; contract and tasks agreed | doing |
 | T2 | Resolve scope review findings in draft docs | KayTee / Codex | feat/T2-scope-review-fixes | docs/ | User requested fixes and final-source intake | Review issues resolved; final brief/workbook facts and limitations recorded; human reviews draft | review |
 | T3 | Correct pipeline diagrams in docs; define shared modes and lineage limits | KayTee / Codex | feat/T3-pipeline-docs | docs/ | User requested validation fixes and PR | Scope, requirements and architecture aligned; diff/links checked; PR ready for independent review | done (merged #7) |
-| T10 | Resolve scope/design contradictions; 1 day = 1 s clock with god mode | KayTee / Claude Code | docs/T10-scope-contradictions | docs/, summary/ | D9, D10 | D12 recorded; SCOPE, REQUIREMENTS, ARCHITECTURE and summary agree; Viet reviews | review |
+| T10 | Resolve scope/design contradictions; 1 day = 1 s clock with god mode | KayTee / Claude Code | docs/T10-scope-contradictions | docs/, summary/ | D9, D10 | D12 recorded; SCOPE, REQUIREMENTS, ARCHITECTURE and summary agree; Viet reviews | merged (#10); D12 awaits Viet |
+| T11 | Fill lifecycle/approval gaps from the scope review | KayTee / Claude Code | docs/T11-scope-gaps | docs/, summary/ | D12 | D13 recorded; SCOPE, REQUIREMENTS, ARCHITECTURE and summary agree; Viet reviews | review |
 | T4 | Scaffold Next.js + Mastra + SQLite; import Bayer XLSX | TBD | feat/T4-scaffold | app/, src/db/ | D7 agreed | App runs; sheet counts match DATA_SOURCES | todo |
 | T5 | Platform services: lifecycle engine, policy, semantic layer, clock/scheduler, audit, lineage | TBD (Lane A) | feat/T5-services | src/services/ | T4 | Transitions, TTL, lease review, archive/restore covered by tests | todo |
 | T6 | Mastra agents + workflow with approval pause; step event stream | TBD (Lane A) | feat/T6-agents | src/mastra/ | T4, contract | REQ-0001 run emits step events; build path creates a Temporary insight | todo |
@@ -66,7 +67,7 @@ this intake does not claim his planning decisions.
 
 ## Timeline
 
-A proposal. Adjust once the challenge is known.
+A proposal; adjust as we go.
 
 | When | Goal |
 | --- | --- |
