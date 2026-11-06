@@ -103,3 +103,29 @@ describe("importWorkbook", () => {
     assert.deepEqual(readdirSync(dir), []);
   });
 });
+
+describe("required columns (review F3)", () => {
+  it("rejects a renamed required column before publishing anything", async () => {
+    const sheets = clone();
+    const kpi = sheetOf(sheets, "KPI_Catalog");
+    kpi.data[0] = kpi.data[0].map((c) => (c === "canonical_metric" ? "canonical_metric_v2" : c));
+    const assets = sheetOf(sheets, "Analytics_Assets");
+    assets.data[0] = assets.data[0].map((c) => (c === "workspace_id" ? "workspace" : c));
+    const errors = validateSheets(sheets, FIXTURE_EXPECTED);
+    assert.ok(errors.includes("KPI_Catalog: missing required column canonical_metric"));
+    assert.ok(errors.includes("Analytics_Assets: missing required column workspace_id"));
+
+    const dest = join(dir, "renamed.db");
+    await assert.rejects(importWorkbook({ sheets, dest, expected: FIXTURE_EXPECTED }), /missing required column canonical_metric/);
+    assert.deepEqual(readdirSync(dir), []);
+  });
+
+  it("rejects a missing value_type column", () => {
+    const sheets: ParsedSheet[] = [
+      ...clone(),
+      { sheet: "Product_Market_Monthly", data: [["product_id", "market_id", "month"], ["P-ALP", "DE", "2026-01-01"]] },
+    ];
+    const errors = validateSheets(sheets, { ...FIXTURE_EXPECTED, Product_Market_Monthly: 1 });
+    assert.ok(errors.includes("Product_Market_Monthly: missing required column value_type"));
+  });
+});

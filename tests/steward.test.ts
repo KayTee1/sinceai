@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Client } from "@libsql/client";
-import { importWorkbook } from "../src/db/import-workbook";
+import { importWorkbook, type ParsedSheet } from "../src/db/import-workbook";
 import { openDb } from "../src/db/open";
 import { analyzeRequest, RequestNotFoundError } from "../src/services/steward/analyze";
 import { ALWAYS_UNKNOWN } from "../src/services/steward/discovery";
@@ -185,5 +185,102 @@ describe("analyzeRequest", () => {
 
   it("rejects an unknown request", async () => {
     await assert.rejects(analyzeRequest(db, "REQ-NOPE"), RequestNotFoundError);
+  });
+});
+
+// Regressions from the Codex review of PR #14. Each builds its own database
+// from the fixture plus extra team-authored rows.
+const ASSET_TAIL = ["Dashboard", "Power BI", "WS-1", "2026-09-01"];
+
+async function dbWith(extra: Record<string, unknown[][]>): Promise<{ db: Client; done: () => void }> {
+  const sheets: ParsedSheet[] = FIXTURE_SHEETS.map((s) => ({
+    sheet: s.sheet,
+    data: [...s.data.map((r) => [...r]), ...(extra[s.sheet] ?? [])],
+  }));
+  const expected = Object.fromEntries(sheets.filter((s) => s.sheet !== "START_HERE").map((s) => [s.sheet, s.data.length - 1]));
+  const tmp = mkdtempSync(join(tmpdir(), "steward-regress-"));
+  await importWorkbook({ sheets, dest: join(tmp, "db.db"), expected });
+  const handle = openDb(join(tmp, "db.db"));
+  return {
+    db: handle,
+    done: () => {
+      handle.close();
+      rmSync(tmp, { recursive: true, force: true });
+    },
+  };
+}
+
+describe("review regressions", () => {
+  it("F1: two approved definitions never count as coverage or allow reuse", async () => {
+    const { db: d, done } = await dbWith({
+      KPI_Catalog: [
+        ["KPI-F1", "Units Shipped", "Units Shipped", "units", "canonical", "approved", "Fixture definition"],
+        ["KPI-F2", "Units Shipped Alt", "Units Shipped", "units", "canonical", "approved", "Fixture definition"],
+      ],
+      Analytics_Assets: [["AST-7", "Alphazol Units DE", "SM-1", "Alphazol", "DE", "OWN-1", "active", "certified", ...ASSET_TAIL]],
+      Asset_KPI_Map: [
+        ["AST-7", "KPI-A1", "primary"],
+        ["AST-7", "KPI-F1", "primary"],
+        ["AST-7", "KPI-F2", "secondary"],
+      ],
+      Business_Requests: [
+        ["REQ-T09", "2026-10-09", "Alphazol", "DE", "Net sales growth and units shipped for Alphazol.", "low", "new"],
+      ],
+    });
+    try {
+      const a = await analyzeRequest(d, "REQ-T09");
+      const units = a.kpiChecks.find((k) => k.canonicalMetric === "Units Shipped")!;
+      assert.equal(units.approved, null);
+      assert.ok(units.reasons.some((r) => r.includes("2 approved canonical definitions: KPI-F1, KPI-F2")));
+      const ast7 = a.candidates.find((c) => c.assetId === "AST-7")!;
+      assert.equal(ast7.coversAllMetrics, false);
+      assert.ok(ast7.coverage.gaps.some((g) => g.detail.startsWith("no single approved definition for this metric")));
+      assert.ok(!ast7.coverage.known.some((k) => k.detail.includes("KPI-F")));
+      assert.ok(a.candidates.every((c) => !c.coversAllMetrics));
+      assert.equal(a.recommendation.kind, "insufficient_evidence");
+      assert.match(a.recommendation.rationale[0], /No single approved canonical KPI for: Units Shipped/);
+    } finally {
+      done();
+    }
+  });
+
+  it("F2: a low-scoring complete match beyond the limit still drives reuse and is shown", async () => {
+    const partials = Array.from({ length: 11 }, (_, i) => `AST-P${String(i + 1).padStart(2, "0")}`);
+    const { db: d, done } = await dbWith({
+      Analytics_Assets: [
+        ...partials.map((id) => [id, `Betavex Growth FR ${id}`, "SM-1", "Betavex", "FR", "OWN-1", "active", "certified", ...ASSET_TAIL]),
+        ["AST-C1", "Pharma Sales Complete", "SM-1", "All Pharma", "Global", "OWN-1", "active", "none", ...ASSET_TAIL],
+      ],
+      Asset_KPI_Map: [
+        ...partials.map((id) => [id, "KPI-A1", "primary"]),
+        ["AST-C1", "KPI-A1", "primary"],
+        ["AST-C1", "KPI-B1", "primary"],
+      ],
+      Business_Requests: [
+        ["REQ-T10", "2026-10-10", "Betavex", "FR", "Net sales growth and net sales for Betavex in France.", "low", "new"],
+      ],
+    });
+    try {
+      const a = await analyzeRequest(d, "REQ-T10");
+      // 11 partials score 9 (3 + 2 + 2 + 2); the complete match scores 8 (6 + 1 + 1).
+      assert.equal(a.candidates.length, 10);
+      assert.equal(a.candidates.at(-1)!.assetId, "AST-C1");
+      assert.equal(a.candidates.at(-1)!.score, 8);
+      assert.ok(a.candidates.slice(0, -1).every((c) => c.score === 9 && !c.coversAllMetrics));
+      const scores = a.candidates.map((c) => c.score);
+      assert.deepEqual(scores, [...scores].sort((x, y) => y - x));
+      assert.equal(a.recommendation.kind, "reuse_candidates");
+      assert.ok(a.recommendation.evidence.some((e) => e.id === "AST-C1"));
+
+      // The recommendation does not depend on the presentation limit.
+      for (const limit of [1, 3, 50]) {
+        const b = await analyzeRequest(d, "REQ-T10", undefined, { limit });
+        assert.deepEqual(b.recommendation, a.recommendation, `limit ${limit}`);
+        assert.ok(b.candidates.some((c) => c.assetId === "AST-C1"), `limit ${limit}`);
+        assert.ok(b.candidates.length <= limit);
+      }
+    } finally {
+      done();
+    }
   });
 });

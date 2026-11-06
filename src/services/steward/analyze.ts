@@ -1,17 +1,20 @@
 // One deterministic pass: request -> clarification -> KPI check -> discovery ->
 // recommendation. No LLM involved; every claim carries a SourceRef.
 //
-// Recommendation rules:
-// - clarify: request text and context disagree and no answer was given.
-// - insufficient_evidence: no supported metric named; or no in-scope asset maps
-//   any requested metric (absence of results is not a gap); or a metric lacks a
-//   single approved canonical KPI; or every metric is covered by some asset but
-//   not by one asset (the requester should review the partial candidates).
-// - reuse_candidates: at least one in-scope asset maps the approved KPI of
-//   every requested metric. The requester still has to confirm fit.
-// - build_proposal: in-scope assets with KPI mappings were checked, every
-//   metric has an approved KPI, and at least one metric's approved KPI is
-//   mapped by no in-scope asset (a positive, per-metric coverage gap).
+// Recommendation rules, checked in this order; decisions use the full
+// candidate set, never the truncated presentation list:
+// 1. clarify: request text and context disagree and no answer was given.
+// 2. insufficient_evidence: no supported metric is named.
+// 3. insufficient_evidence: a metric lacks a single approved canonical KPI
+//    (blocks both governed reuse and build).
+// 4. reuse_candidates: at least one in-scope asset maps the approved KPI of
+//    every requested metric. The requester still has to confirm fit.
+// 5. insufficient_evidence: no in-scope asset maps any requested metric
+//    (absence of results is not a gap).
+// 6. insufficient_evidence: every metric's approved KPI is mapped by some
+//    asset, but not by one asset (review the partial candidates).
+// 7. build_proposal: at least one metric's approved KPI is mapped by no
+//    in-scope asset (a positive, per-metric coverage gap).
 import type { Client } from "@libsql/client";
 import { discoverCandidates } from "./discovery";
 import { checkKpis, loadKpis } from "./kpis";
@@ -39,7 +42,12 @@ function conflictSummary(checks: KpiCheck[]): string[] {
     );
 }
 
-export async function analyzeRequest(db: Client, requestId: string, answer?: Scope): Promise<StewardAnalysis> {
+export async function analyzeRequest(
+  db: Client,
+  requestId: string,
+  answer?: Scope,
+  opts: { limit?: number } = {},
+): Promise<StewardAnalysis> {
   const row = await loadRequest(db, requestId);
   if (!row) throw new RequestNotFoundError(`Business request not found: ${requestId}`);
   const reqRef = requestSource(row);
@@ -93,7 +101,13 @@ export async function analyzeRequest(db: Client, requestId: string, answer?: Sco
 
   const scope = clarification.resolved;
   const scopeText = `${scope.product} / ${scope.market}`;
-  const { candidates, relevantCount, inScopeCount, metricCoverage } = await discoverCandidates(db, scope, kpiChecks, kpis);
+  const { candidates, relevantCount, inScopeCount, completeMatches, metricCoverage } = await discoverCandidates(
+    db,
+    scope,
+    kpiChecks,
+    kpis,
+    opts,
+  );
   const result = (kind: StewardAnalysis["recommendation"]["kind"], rationale: string[], evidence: SourceRef[]): StewardAnalysis => ({
     ...base,
     candidates,
@@ -110,24 +124,27 @@ export async function analyzeRequest(db: Client, requestId: string, answer?: Sco
         : "no single approved KPI"),
   );
 
-  const full = candidates.filter((c) => c.coversAllMetrics);
-  if (full.length > 0) {
-    return result(
-      "reuse_candidates",
-      [
-        `${full.length} in-scope asset(s) for ${scopeText} map the approved KPI for every requested metric.`,
-        "Catalog metadata cannot show period, dimensions or filters; the requester must confirm fit before reuse.",
-      ],
-      full.map((c) => c.source),
-    );
-  }
-
+  // An unresolved definition blocks both governed reuse and build.
   const unapproved = kpiChecks.filter((k) => !k.approved).map((k) => k.canonicalMetric);
   if (unapproved.length > 0) {
     return result(
       "insufficient_evidence",
-      [`No single approved canonical KPI for: ${unapproved.join(", ")}; a governed build is not possible.`, ...perMetric],
+      [
+        `No single approved canonical KPI for: ${unapproved.join(", ")}; neither governed reuse nor a build can be recommended.`,
+        ...perMetric,
+      ],
       candidates.map((c) => c.source),
+    );
+  }
+
+  if (completeMatches.length > 0) {
+    return result(
+      "reuse_candidates",
+      [
+        `${completeMatches.length} in-scope asset(s) for ${scopeText} map the approved KPI for every requested metric.`,
+        "Catalog metadata cannot show period, dimensions or filters; the requester must confirm fit before reuse.",
+      ],
+      completeMatches,
     );
   }
   if (relevantCount === 0) {

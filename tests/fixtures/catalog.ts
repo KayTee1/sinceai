@@ -20,14 +20,14 @@ export const FIXTURE_SHEETS: ParsedSheet[] = [
     ["OWN-1", "Fixture Owner One", "Commercial Lead", "EMEA", "active"],
     ["OWN-2", "Fixture Owner Two", "Analyst", "EMEA", "inactive"],
   ]),
-  sheet("KPI_Catalog", ["kpi_id", "kpi_name", "canonical_metric", "unit", "definition_status", "approval_status"], [
-    ["KPI-A1", "Net Sales Growth", "Net Sales Growth", "%", "canonical", "approved"],
-    ["KPI-A2", "Net Sales Growth Local", "Net Sales Growth", "%", "duplicate_candidate", "local"],
-    ["KPI-B1", "Net Sales", "Net Sales", "EUR", "canonical", "approved"],
-    ["KPI-C1", "Market Access Coverage", "Market Access Coverage", "%", "canonical", "approved"],
-    ["KPI-D1", "Launch Index", "Launch Index", "index", "local_variant", "local"],
-    ["KPI-D2", "Launch Index", "Launch Index", "index", "definition_conflict", "unapproved"],
-    ["KPI-E1", "Forecast Variance", "Forecast Variance", "EUR", "canonical", "approved"],
+  sheet("KPI_Catalog", ["kpi_id", "kpi_name", "canonical_metric", "unit", "definition_status", "approval_status", "description"], [
+    ["KPI-A1", "Net Sales Growth", "Net Sales Growth", "%", "canonical", "approved", "Fixture definition"],
+    ["KPI-A2", "Net Sales Growth Local", "Net Sales Growth", "%", "duplicate_candidate", "local", "Fixture definition"],
+    ["KPI-B1", "Net Sales", "Net Sales", "EUR", "canonical", "approved", "Fixture definition"],
+    ["KPI-C1", "Market Access Coverage", "Market Access Coverage", "%", "canonical", "approved", "Fixture definition"],
+    ["KPI-D1", "Launch Index", "Launch Index", "index", "local_variant", "local", "Fixture definition"],
+    ["KPI-D2", "Launch Index", "Launch Index", "index", "definition_conflict", "unapproved", "Fixture definition"],
+    ["KPI-E1", "Forecast Variance", "Forecast Variance", "EUR", "canonical", "approved", "Fixture definition"],
   ]),
   sheet("Semantic_Models", ["model_id", "model_name", "refresh_status"], [
     ["SM-1", "Fixture Model One", "healthy"],
@@ -35,14 +35,17 @@ export const FIXTURE_SHEETS: ParsedSheet[] = [
   ]),
   sheet(
     "Analytics_Assets",
-    ["asset_id", "asset_name", "model_id", "product_scope", "market_scope", "owner_id", "lifecycle_status", "endorsement"],
     [
-      ["AST-1", "Alphazol Growth DE", "SM-1", "Alphazol", "DE", "OWN-1", "active", "certified"],
-      ["AST-2", "Pharma Growth Global", "SM-2", "All Pharma", "Global", null, "candidate_retire", "none"],
-      ["AST-3", "Alphazol Local Growth DE", "SM-1", "Alphazol", "DE", "OWN-2", "legacy", "promoted"],
-      ["AST-4", "Betavex Sales US", "SM-1", "Betavex", "US", "OWN-1", "active", "none"],
-      ["AST-5", "Betavex Access US", "SM-1", "Betavex", "US", "OWN-1", "active", "none"],
-      ["AST-6", "Alphazol France Report", "SM-1", "Alphazol", "FR", "OWN-1", "active", "none"],
+      "asset_id", "asset_name", "model_id", "product_scope", "market_scope", "owner_id", "lifecycle_status", "endorsement",
+      "asset_type", "platform", "workspace_id", "last_modified",
+    ],
+    [
+      ["AST-1", "Alphazol Growth DE", "SM-1", "Alphazol", "DE", "OWN-1", "active", "certified", "Dashboard", "Power BI", "WS-1", "2026-09-01"],
+      ["AST-2", "Pharma Growth Global", "SM-2", "All Pharma", "Global", null, "candidate_retire", "none", "Dashboard", "Power BI", "WS-1", "2026-09-01"],
+      ["AST-3", "Alphazol Local Growth DE", "SM-1", "Alphazol", "DE", "OWN-2", "legacy", "promoted", "Dashboard", "Power BI", "WS-1", "2026-09-01"],
+      ["AST-4", "Betavex Sales US", "SM-1", "Betavex", "US", "OWN-1", "active", "none", "Dashboard", "Power BI", "WS-1", "2026-09-01"],
+      ["AST-5", "Betavex Access US", "SM-1", "Betavex", "US", "OWN-1", "active", "none", "Dashboard", "Power BI", "WS-1", "2026-09-01"],
+      ["AST-6", "Alphazol France Report", "SM-1", "Alphazol", "FR", "OWN-1", "active", "none", "Dashboard", "Power BI", "WS-1", "2026-09-01"],
     ],
   ),
   sheet("Asset_KPI_Map", ["asset_id", "kpi_id", "usage_role"], [

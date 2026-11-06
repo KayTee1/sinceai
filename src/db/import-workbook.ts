@@ -1,6 +1,7 @@
 // Non-destructive import of the Bayer builder pack into a new SQLite file.
 //
-// - Validates the parsed workbook first (sheet set, headers, row counts).
+// - Validates the parsed workbook first (sheet set, headers, required
+//   columns read by current queries, row counts).
 // - Writes to a temporary file next to the destination, then publishes it with
 //   a hard link, which fails if the destination exists. An existing database
 //   is never deleted or overwritten; on any failure the temporary file is
@@ -10,7 +11,7 @@
 import { createClient, type InValue } from "@libsql/client";
 import { existsSync, linkSync, mkdirSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
-import { EXPECTED_ROW_COUNTS, PRESENTATION_SHEETS, SOURCE_ROW_COLUMN } from "./expected";
+import { EXPECTED_ROW_COUNTS, PRESENTATION_SHEETS, REQUIRED_COLUMNS, SOURCE_ROW_COLUMN } from "./expected";
 
 export type ParsedSheet = { sheet: string; data: unknown[][] };
 
@@ -48,6 +49,9 @@ export function validateSheets(
       else if (names.has(c)) errors.push(`${sheet}: duplicate header ${c}`);
       else names.add(c);
     });
+    for (const col of REQUIRED_COLUMNS[sheet] ?? []) {
+      if (!names.has(col)) errors.push(`${sheet}: missing required column ${col}`);
+    }
     if (rows.length !== expected[sheet]) {
       errors.push(`${sheet}: expected ${expected[sheet]} data rows, found ${rows.length}`);
     }

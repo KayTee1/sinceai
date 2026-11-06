@@ -4,7 +4,6 @@
 // of named parts. Catalog metadata cannot show period, dimensions or filters,
 // so those are always reported as unknown.
 import type { Client } from "@libsql/client";
-import { isApprovedCanonical } from "./kpis";
 import { ALL_PRODUCTS, GLOBAL } from "./requests";
 import type { CoverageItem, KpiCheck, KpiDefinition, MetricCoverage, ReuseCandidate, Scope, SourceRef } from "./types";
 
@@ -53,13 +52,23 @@ export function scopeFit(field: "product" | "market", requested: string, asset: 
   return null;
 }
 
+export type DiscoveryResult = {
+  /** Presentation list: top `limit` by score, always including the best complete match if one exists. */
+  candidates: ReuseCandidate[];
+  /** Counts and complete matches over ALL relevant candidates, independent of `limit`. */
+  relevantCount: number;
+  inScopeCount: number;
+  completeMatches: SourceRef[];
+  metricCoverage: MetricCoverage[];
+};
+
 export async function discoverCandidates(
   db: Client,
   scope: Scope,
   kpiChecks: KpiCheck[],
   kpis: KpiDefinition[],
   opts: { limit?: number } = {},
-): Promise<{ candidates: ReuseCandidate[]; relevantCount: number; inScopeCount: number; metricCoverage: MetricCoverage[] }> {
+): Promise<DiscoveryResult> {
   const limit = opts.limit ?? 10;
   const assetsRes = await db.execute(`
       SELECT a.asset_id, a.asset_name, a.product_scope, a.market_scope, a.model_id, a.owner_id,
@@ -111,7 +120,9 @@ export async function discoverCandidates(
         { sheet: "Asset_KPI_Map", row: x.m._source_row, id: `${x.m.asset_id}/${x.m.kpi_id}` },
         x.k.source,
       ];
-      const approvedHit = hits.find((x) => isApprovedCanonical(x.k));
+      // Only the uniquely approved KPI from the KPI check counts as coverage. A
+      // metric with zero or several approved definitions can never be covered.
+      const approvedHit = check.approved ? hits.find((x) => x.k.id === check.approved!.id) : undefined;
       if (approvedHit) {
         approvedCount++;
         known.push({
@@ -123,7 +134,9 @@ export async function discoverCandidates(
         variantCount++;
         gaps.push({
           aspect: `metric: ${check.canonicalMetric}`,
-          detail: `only non-approved variant(s): ${hits.map((x) => `${x.k.id} (${x.k.definitionStatus} / ${x.k.approvalStatus})`).join(", ")}`,
+          detail:
+            (check.approved ? "only non-approved variant(s): " : "no single approved definition for this metric; maps: ") +
+            hits.map((x) => `${x.k.id} (${x.k.definitionStatus} / ${x.k.approvalStatus})`).join(", "),
           evidence: hits.flatMap(ref),
         });
       } else {
@@ -177,6 +190,15 @@ export async function discoverCandidates(
 
   candidates.sort((x, y) => y.score - x.score || x.assetId.localeCompare(y.assetId));
 
+  // Decisions use the full set; only the returned list is truncated. If no
+  // complete match made the top `limit`, the best one takes the last slot
+  // (it scores lowest of the shown list, so order stays by score).
+  const complete = candidates.filter((c) => c.coversAllMetrics);
+  let shown = candidates.slice(0, limit);
+  if (complete.length > 0 && !shown.some((c) => c.coversAllMetrics)) {
+    shown = [...candidates.slice(0, Math.max(0, limit - 1)), complete[0]];
+  }
+
   // Per requested metric: which in-scope assets map its approved KPI (all of
   // them, not only the returned top candidates).
   const metricCoverage: MetricCoverage[] = kpiChecks.map((check) => ({
@@ -188,9 +210,10 @@ export async function discoverCandidates(
   }));
 
   return {
-    candidates: candidates.slice(0, limit),
+    candidates: shown,
     relevantCount: candidates.length,
     inScopeCount: inScope.length,
+    completeMatches: complete.map((c) => c.source),
     metricCoverage,
   };
 }
