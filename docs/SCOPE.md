@@ -13,10 +13,14 @@ follow D9 and D11. Contract and lanes still need both developers' agreement.
 Analytics Steward stops BI sprawl at the source: before anything new is built,
 agents search what already exists, flag conflicting KPIs, and only then build a
 **temporary** insight on certified metrics. Every asset must earn its place:
-it is promoted on real use and re-justified every 90-day cycle, otherwise it is
-archived (restorable). A human approves every change; everything is logged.
+it is promoted on real use and re-justified every 90 days, otherwise it is
+archived (restorable). Agents propose and humans decide; when an owner stays
+silent, a logged, reversible policy default applies (D9). Everything is logged.
 
 Pitch line: *"Every dashboard must earn its next 90 days."*
+
+**Simulated time (D12):** 1 simulated day = 1 real second while the clock runs,
+so a 30-day TTL is 30 s and a 90-day lease is 90 s. Time only moves forward.
 
 ## The pipeline (Miro board)
 
@@ -34,8 +38,9 @@ stateDiagram-v2
   Personal --> LeaseEnd
   Team --> LeaseEnd
   Certified --> LeaseEnd
-  LeaseEnd --> OwnerReview: lease ends (90 days / DSO cycle)
-  OwnerReview --> Team: renew, new 90 days
+  LeaseEnd --> OwnerReview: lease ends (90 days after promotion or renewal)
+  OwnerReview --> Renewed: renew, same tier, new 90 days
+  Renewed --> LeaseEnd
   OwnerReview --> Merged: merge (redirect to target asset)
   OwnerReview --> Archived: retire
   OwnerReview --> Archived: no response = default
@@ -46,13 +51,19 @@ stateDiagram-v2
 | Tier | Owner | How it gets here | Expiry |
 | --- | --- | --- | --- |
 | Temporary | requester | approved build of an ephemeral insight | TTL 30 days → archived |
-| Personal | requester | used again by its owner | lease to end of 90-day cycle |
-| Team | team lead | 3+ users in the team, approved | lease to end of cycle |
-| Certified | data steward | cross-team use + steward approval | lease to end of cycle |
+| Personal | requester | used again by its owner | lease 90 days from promotion |
+| Team | team lead | 3+ users in the team, approved | lease 90 days from promotion |
+| Certified | data steward | cross-team use + steward approval | lease 90 days from promotion |
+
+Leases are per asset (D12): each asset's lease starts when it enters its tier
+or is renewed, so reviews arrive staggered rather than all at once. Renew
+keeps the asset in its current tier and starts a new 90-day lease; it never
+moves the asset to another tier.
 
 Owner review at lease end shows usage, cost and overlaps and proposes
 **renew / merge / retire**. Default (no response) is archive (D9). Archive keeps
 a snapshot and is always restorable; nothing is deleted. Thresholds are config.
+Restore brings an archived asset back; it is not a rewind of the clock.
 
 Known trade-off (KayTee's review, D10): auto-archive acts without a fresh human
 decision. Mitigations: the owner sees an expiry warning in the inbox before the
@@ -66,7 +77,11 @@ Tiers are app-owned review state. Imported audience, endorsement and
 
 ### 2. Request flow (sequence diagram)
 
-1. Requester asks ("What's Q3 net sales by region?").
+1. The manager runs a request on a requester's behalf, usually a pack business
+   request ("What's Q3 net sales by region?"). Employees do not ask the agents
+   (D8). `Business_Requests` has no requester field, so the manager names the
+   requester from the pack's owners; that mapping is ours and is labelled so.
+   The requester owns any Temporary insight the run builds.
 2. **Orchestrator** parses intent (metrics, dimensions, filters) via the
    **Intent parser**; asks a clarifying question when text and context disagree.
 3. **Discovery agent** runs hybrid search (vector + keyword) over the
@@ -77,11 +92,12 @@ Tiers are app-owned review state. Imported audience, endorsement and
 4. **Conflict detector** compares definitions in the **semantic layer**
    (same name, different definition, e.g. gross vs. net) → conflict + reasoning.
 5. Orchestrator suggests reuse and flags the conflict.
-6. **Existing asset fits:** user opens the certified dashboard; lifecycle engine
-   logs reuse (usage +1).
+6. **Existing asset fits:** the run returns the certified dashboard for the
+   requester; lifecycle engine logs reuse (app usage event +1).
 7. **Nothing fits:** orchestrator requests approval to build → approver approves
    → **Builder agent** queries certified metrics only → lifecycle engine
-   registers it as **Temporary, TTL 30d** → user gets the insight link + expiry.
+   registers it as **Temporary, TTL 30d**, owned by the requester → the insight
+   appears in the Dashboard tab with its expiry.
 
 ### 3. System architecture (Miro → our build)
 
@@ -113,7 +129,9 @@ Platform services (deterministic code, never the LLM):
 - **Lifecycle engine:** state machine, TTL, leases, promotion, archive/restore.
 - **Policy engine:** promotion thresholds, required owners/approvers, Bayer rules.
 - **Semantic layer:** certified KPI definitions; the only source for builds.
-- **Scheduler + simulated clock:** TTL expiry and lease reviews; fast-forward.
+- **Scheduler + simulated clock:** 1 day = 1 s while running; TTL expiry and
+  lease reviews fire on that clock; pause, resume and fast-forward, never
+  backwards (D12).
 - **Audit writer:** append-only, called by the backend on every proposal,
   decision and state change (not an agent tool, so agents cannot skip it).
 
@@ -126,7 +144,10 @@ One full-screen app.
 
 The toggle controls what you see, not what you may approve. Approval authority
 comes from the proposal's required approvers (asset owner, team lead, data
-steward); the demo lets the manager act as a simulated approver identity.
+steward). In Manager mode an **"acting as"** picker selects a simulated
+identity from the pack's owners; the inbox only enables Approve when that
+identity is one of the proposal's required approvers. The decision is logged
+under that identity. This is simulated, not real authentication.
 
 **Employee: as simple as possible.** Sees only the Dashboard tab; the
 Agentic tab is hidden. Browses existing dashboards (certified first), each with
@@ -146,7 +167,13 @@ ask the agents questions.
     through the lifecycle diagram.
   - **Approval inbox** (both views): build / promote / renew / merge / retire /
     restore proposals with evidence; approve, reject (reason required) or edit.
-  - **Clock control:** fast-forward the simulated date (30 days, 90 days).
+  - **God mode (clock panel):** a small modal for the simulated clock. It shows
+    the simulated date and the next due event, with **pause**, **resume** and
+    **fast-forward** (+1 day, +30 days, +90 days, or skip to the next due
+    event). No going back in time: that would need clock snapshots, so it is
+    out of scope. The clock starts paused after a demo reset, so nothing
+    expires before the presenter is ready. Every clock action is written to
+    the audit log.
 - **Dashboard tab:** everything employees see, plus portfolio view (sprawl,
   tiers, leases due, conflicts, archived, before/after) and full lineage detail.
 - **Audit timeline** per asset.
@@ -216,9 +243,10 @@ see the full graph. Each proposal stores its lineage snapshot for the audit.
    Second request where nothing fits: build proposal → manager approves →
    Builder makes a Temporary insight (TTL 30 days) on certified KPIs.
 5. **Human says no:** manager rejects one proposal with a reason; audit shows it.
-6. **Fast-forward 90 days:** temporary used again → Personal → Team (approved);
-   lease ends → owner review proposes renew / merge / retire; one unanswered
-   asset is archived by default, then restored.
+6. **Resume the clock (god mode):** days tick by at 1 per second; fast-forward
+   where the video needs it. Temporary used again → Personal → Team
+   (approved); its lease ends 90 s later → owner review proposes renew / merge
+   / retire; one unanswered asset is archived by default, then restored.
 7. **Audit + portfolio:** per-asset timeline; before/after counts.
    Close: "Every dashboard must earn its next 90 days."
 
@@ -237,7 +265,10 @@ see the full graph. Each proposal stores its lineage snapshot for the audit.
   services; nodes highlight from the same step events the Chat view uses.
 - Lifecycle engine: Temporary TTL 30d, Personal, Team, Certified, 90-day lease,
   owner review, renew/merge/retire, default archive, restore.
-- Simulated clock with fast-forward; scheduler runs TTL expiry and lease reviews.
+- Simulated clock at 1 day = 1 s with a god-mode panel (pause, resume,
+  fast-forward; no rewind); scheduler runs TTL expiry and lease reviews.
+- "Acting as" approver picker for the manager; approval checked against the
+  proposal's required approvers.
 - Lineage drill-down (D6); append-only audit log + per-asset timeline.
 - README / architecture note (data assumptions, AI approach, governance controls,
   Power BI/Fabric integration path).

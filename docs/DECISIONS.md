@@ -122,3 +122,28 @@ run. Builder and Lease steward agents move to P1; in P0 a deterministic build
 tool renders the Temporary insight and the lifecycle engine runs lease reviews.
 Alternatives considered: all six agents in P0; one orchestrator only.
 Agreed by: Viet
+
+D12: Resolve scope contradictions; real-time simulated clock (2026-11-06)
+Status: proposed (KayTee). Refines D8, D9 and D10; needs Viet's agreement
+because it changes the contract (clock, decision actor, asset state, runs).
+Choice and why:
+- Pitch: "a human approves every change" contradicted D9 auto-archive. D9
+  stays; the wording becomes "agents propose, humans decide; silence has a
+  logged, reversible policy default".
+- Who asks: employees still don't ask (D8). The manager runs a request on a
+  named requester's behalf. `Business_Requests` has no requester field, so the
+  requester is picked from the pack's owners and labelled as our mapping. The
+  requester owns the resulting Temporary insight.
+- Approval: the manager picks an "acting as" identity; Approve is enabled only
+  when that identity is a required approver. Removes the gap between "toggle
+  is visibility only" and "the manager approves".
+- Renew keeps the asset's current tier (the Miro diagram sent every renew to
+  Team).
+- Leases are per asset: 90 days from promotion or renewal, not a shared cycle.
+- Clock: 1 simulated day = 1 real second while running (30-day TTL = 30 s,
+  90-day lease = 90 s). A god-mode panel pauses, resumes and fast-forwards
+  (+1 / +30 / +90 days, next due event). No rewind: it would need clock
+  snapshots. Starts paused after reset; clock actions are audited.
+Alternatives considered: silence only proposes archive; employee request box;
+shared 90-day cycle; fast-forward-only clock; time travel with snapshots.
+Agreed by: KayTee; Viet pending

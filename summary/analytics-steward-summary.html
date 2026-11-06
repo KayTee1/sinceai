@@ -103,7 +103,7 @@
     <div>
       <h2>Problem &amp; idea</h2>
       <p>Self-service BI and AI make dashboards nearly free, so enterprises drown in duplicates, conflicting KPIs, unowned reports and tech debt. Bayer’s Tableau→Power BI migration makes it worse.</p>
-      <p><b>Our answer:</b> agents that <b>reuse before they build</b>, flag KPI conflicts, build only <b>temporary</b> insights on certified KPIs, and make every asset re-earn its place each 90-day cycle. Agents propose; humans approve; everything is audited.</p>
+      <p><b>Our answer:</b> agents that <b>reuse before they build</b>, flag KPI conflicts, build only <b>temporary</b> insights on certified KPIs, and make every asset re-earn its place every 90 days. Agents propose; humans decide; silence has a logged, reversible default; everything is audited.</p>
     </div>
     <div>
       <h2>How Bayer judges</h2>
@@ -127,18 +127,18 @@
       <div class="node n-tier">Personal<small>used again</small></div><span class="arr">→</span>
       <div class="node n-tier">Team<small>3+ users</small></div><span class="arr">→</span>
       <div class="node n-cert">Certified<small>+ steward OK</small></div><span class="arr">→</span>
-      <div class="node n-dec">Lease ends<small>90-day cycle</small></div><span class="arr">→</span>
+      <div class="node n-dec">Lease ends<small>90 days per asset</small></div><span class="arr">→</span>
       <div class="node n-rev">Owner review<small>renew·merge·retire</small></div><span class="arr">→</span>
       <div class="node n-arch">Archived<small>restorable</small></div>
     </div>
-    <div class="flownote">No response = archive by default — logged as a policy action, expiry warning first, one-click restore, and never for assets with downstream dependencies or no owner (those go to review). Simulated clock fast-forwards 90 days in seconds. Tiers are app-owned; Bayer’s source fields stay untouched.</div>
+    <div class="flownote">No response = archive by default — logged as a policy action, expiry warning first, one-click restore, and never for assets with downstream dependencies or no owner (those go to review). Renew keeps the tier. Simulated clock: 1 day = 1 second (30-day TTL = 30 s, 90-day lease = 90 s); god mode pauses, resumes and fast-forwards, never rewinds. Tiers are app-owned; Bayer’s source fields stay untouched.</div>
   </div>
 
   <div class="grid3">
     <div>
       <h2>Request flow</h2>
       <ol>
-        <li>Manager runs a request (e.g. REQ-0001).</li>
+        <li>Manager runs a request for a named requester (e.g. REQ-0001).</li>
         <li><b>Orchestrator</b> parses intent; asks when text and context disagree.</li>
         <li><b>Discovery</b>: hybrid search over assets, KPIs, models.</li>
         <li><b>Conflict detector</b>: e.g. Net Sales vs Net Sales Local vs v2.</li>
@@ -155,10 +155,10 @@
         </div>
         <div class="wire-body">
           <div><b>Employee</b><br>Dashboard tab only. Browse dashboards (tier, owner, expiry). Click a chart → simple lineage. No questions to agents.</div>
-          <div><b>Manager</b><br>Everything. Agentic tab: <b>Chat view ⇄ Pipeline view</b> (live Miro diagram), approval inbox, clock. Portfolio + full lineage.</div>
+          <div><b>Manager</b><br>Everything. Agentic tab: <b>Chat view ⇄ Pipeline view</b> (live Miro diagram), approval inbox, “acting as” approver, god-mode clock. Portfolio + full lineage.</div>
         </div>
       </div>
-      <p class="muted" style="margin-top:1.2mm">Toggle = visibility only. Approval comes from the proposal’s owner / team lead / steward.</p>
+      <p class="muted" style="margin-top:1.2mm">Toggle = visibility only. Approve works only when the “acting as” identity is the proposal’s owner / team lead / steward.</p>
     </div>
     <div>
       <h2>Lineage drill-down (D6)</h2>
@@ -191,7 +191,7 @@
         <li>3 Mastra agents on one workflow with approval pause</li>
         <li>Chat view (live step states) + simple Pipeline view</li>
         <li>Approval inbox; reject/edit need a reason</li>
-        <li>Lifecycle engine + simulated clock</li>
+        <li>Lifecycle engine + clock (1 day = 1 s, god mode)</li>
         <li>Lineage drill-down; append-only audit timeline</li>
         <li>README / architecture note</li>
       </ul>
@@ -204,7 +204,7 @@
         <li>Flip to Pipeline view: agents light up</li>
         <li>Reuse first; else build Temporary (30d)</li>
         <li>Reject one proposal with a reason</li>
-        <li>Fast-forward 90 days: promote, review, archive, restore</li>
+        <li>Run / fast-forward clock: promote, review, archive, restore</li>
         <li>Audit + before/after → pitch line</li>
       </ol>
     </div>
@@ -225,7 +225,7 @@
   </div>
 
   <footer>
-    <span>Decisions: D6 lineage · D7 stack · D8 UI/roles · D9 lifecycle P0 · D10 KayTee review (accepted with exceptions) · D11 P0 agents</span>
+    <span>Decisions: D6 lineage · D7 stack · D8 UI/roles · D9 lifecycle P0 · D10 KayTee review (accepted with exceptions) · D11 P0 agents · D12 contradictions + clock (proposed)</span>
     <span>Source of truth: docs/SCOPE.md · all data synthetic</span>
   </footer>
 </div>
