@@ -26,7 +26,8 @@ Check exact Mastra APIs against its docs when scaffolding; don't rely on memory.
 ```text
 Client (Next.js)
   Top middle: [Agentic | Dashboard]      Top right: [Employee | Manager]
-  Agentic (Manager only): Chat view <-> Pipeline view, Approval inbox, Clock
+  Agentic (Manager only): Chat view <-> Pipeline view, Approval inbox,
+    "acting as" approver picker, God-mode clock panel
   Dashboard: dashboard list, charts, lineage panel, portfolio (Manager)
         |
 API routes (simulated RBAC from the role toggle)
@@ -61,8 +62,15 @@ scheduler, audit, lineage), `src/db/` (schema, import), `data/private/`
    Types: reuse, build_temporary, promote, renew, merge, retire, restore,
    reassign_owner.
 3. **Decision:** `{ proposalId, version, actor, action: approve|reject|edit, reason }`.
-4. **Asset state:** `{ assetId, tier: temporary|personal|team|certified, status: active|lease_due|archived|merged, owner, leaseEnd, ttlEnd, sourceEndorsement }`.
-5. **Lineage:** `trace_lineage(objectId, direction, depth)` → nodes (id, type,
+   `actor` is the identity from the "acting as" picker; the API rejects an
+   approve when `actor` is not in `requiredApprovers`.
+4. **Asset state:** `{ assetId, tier: temporary|personal|team|certified, status: active|lease_due|archived|merged, owner, requester, leaseStart, leaseEnd, ttlEnd, sourceEndorsement }`.
+   Leases are per asset: `leaseEnd = leaseStart + 90` simulated days; renew
+   keeps `tier` and resets `leaseStart`.
+5. **Clock:** `{ simDate, running, msPerDay: 1000, nextDueEvent }`. 1 simulated
+   day = 1 s while running; starts paused after reset. Actions: pause, resume,
+   advance by N days, advance to next due event. Forward only; no rewind.
+6. **Lineage:** `trace_lineage(objectId, direction, depth)` → nodes (id, type,
    name, owner, tier/endorsement, refresh, AI readiness, risk flags), edges
    (source `Lineage_Edges` rows), distinct affected asset count, per-asset
    monthly users, missing mappings and truncation. Handle cycles; deduplicate
@@ -70,13 +78,17 @@ scheduler, audit, lineage), `src/db/` (schema, import), `data/private/`
    the actual stored query/parameters, units, filters, period, `value_type` and
    source rows. No inferred fact-to-asset links. Snapshot stored per proposal
    version.
-6. **Endpoints (draft):** `POST /api/runs` (start run), `GET /api/runs/:id/events`
+7. **Endpoints (draft):** `POST /api/runs` (start run; body includes
+   `requesterId`), `GET /api/runs/:id/events`
    (stream), `GET /api/proposals`, `POST /api/proposals/:id/decision`,
    `GET /api/assets`, `GET /api/assets/:id/lineage`, `GET /api/assets/:id/audit`,
-   `POST /api/usage`, `POST /api/clock/advance`, `GET /api/portfolio`.
+   `POST /api/usage`, `GET /api/clock`, `POST /api/clock/pause`,
+   `POST /api/clock/resume`, `POST /api/clock/advance` (`{ days }` or
+   `{ toNextEvent: true }`), `GET /api/portfolio`.
 
 Role toggle controls visibility only; approval checks the proposal's required
-approvers (owner / team lead / steward). App open events are stored apart from
+approvers (owner / team lead / steward) against the acting identity. Runs are
+started by the manager for a named requester; employees never start runs. App open events are stored apart from
 imported usage. The UI lane can build against fixtures of these shapes until
 the backend is ready.
 
@@ -95,7 +107,7 @@ None verified yet; no app code exists. Add exact tested commands after scaffoldi
 ## Demo reset and fallback
 
 Reset: rebuild SQLite from the XLSX, reseed synthetic usage with a fixed seed,
-reset the clock. Fallback: a recorded run of the step events can be replayed in
+reset the clock to its start date, paused. Fallback: a recorded run of the step events can be replayed in
 both views if the model API fails; label it as a replay.
 
 ## Production path (for the README note)

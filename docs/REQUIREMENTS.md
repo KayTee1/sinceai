@@ -9,14 +9,14 @@ pipeline + UI vision, D7–D9). Team must still agree the contract and lanes.
 | ID | Requirement | Source | Must / nice | How we check it |
 | --- | --- | --- | --- | --- |
 | R1 | Import Bayer pack read-only with IDs, types and provenance | B1 §05; W1 START_HERE | must | Sheet counts match DATA_SOURCES; blanks preserved; Excel dates decoded |
-| R2 | Intake: parse intent, clarify text/context conflicts, map canonical KPIs | B1 §03–04; W1 rules 1–2; Miro seq. | must | REQ-0001 conflict surfaced and asked; corrected intent drives search |
+| R2 | Intake: manager runs a request on a named requester's behalf (D8, D12); parse intent, clarify text/context conflicts, map canonical KPIs | B1 §03–04; W1 rules 1–2; Miro seq. | must | REQ-0001 conflict surfaced and asked; corrected intent drives search; requester recorded and labelled as our mapping |
 | R3 | Discovery: hybrid search (keyword + vector) over assets, KPIs and models; reuse before build | W1 rule 1; Miro seq. | must | Ranked candidates with score parts and source IDs |
 | R4 | Conflict detector: same canonical metric, different definition/status; no invented formulas or monetary gaps | W1 KPI_Catalog; Miro seq. | must | Net Sales / Net Sales Local / Net Sales v2 flagged with KPI IDs and status |
 | R5 | Build path: approval to build → Builder on certified KPIs only → Temporary insight with TTL 30d and expiry shown | Miro seq.; W1 rule 2 | must | Insight cites only approved canonical KPIs; expiry date visible |
-| R6 | Lifecycle engine: Temporary → Personal → Team → Certified, 90-day lease, owner review renew/merge/retire, default archive, restore | Miro lifecycle; D9 | must | Each transition reachable in demo; archive restorable; no deletes; auto-archive logged as policy action and skipped for assets with dependencies or no owner |
-| R7 | Simulated clock with fast-forward; scheduler runs TTL expiry and lease reviews | D9 | must | Fast-forward 30/90 days triggers expiry and owner review proposals |
+| R6 | Lifecycle engine: Temporary → Personal → Team → Certified, 90-day lease, owner review renew/merge/retire, default archive, restore; leases per asset; renew keeps the tier | Miro lifecycle; D9, D12 | must | Each transition reachable in demo; renewed asset keeps its tier; archive restorable; no deletes; auto-archive logged as policy action and skipped for assets with dependencies or no owner |
+| R7 | Simulated clock at 1 day = 1 s; god-mode panel with pause, resume, fast-forward (no rewind); scheduler runs TTL expiry and lease reviews | D9, D12 | must | Running 30 s expires a new Temporary; 90 s after promotion an owner review proposal appears; clock starts paused after reset; clock actions audited |
 | R8 | Labelled synthetic per-user usage events for promotion; app open events and pack monthly usage kept separate | D9, D10; W1 Data_Dictionary | must | Promotion uses app events; UI labels them team-synthetic; imported usage never incremented; no monthly sums as distinct users |
-| R9 | Approval inbox: approve / reject / edit; reject and edit need a reason; edits reset approvals; authority from required approvers (owner / team lead / steward), not the role toggle | B1 §04 human-in-the-loop; D10 | must | Reject without reason blocked; rejection leaves state unchanged; wrong approver cannot approve |
+| R9 | Approval inbox: approve / reject / edit; reject and edit need a reason; edits reset approvals; authority from required approvers (owner / team lead / steward) via the manager's "acting as" picker, not the role toggle | B1 §04 human-in-the-loop; D10, D12 | must | Reject without reason blocked; rejection leaves state unchanged; Approve disabled when the acting identity is not a required approver; decision logged under that identity |
 | R10 | Missing/inactive owner blocks execution until a human assigns one | W1 rule 3 | must | 21 blank-owner assets detected; execution blocked |
 | R11 | Append-only audit log on every proposal, decision and state change + per-asset timeline | B1 governance; SCOPE rules | must | One row per event; timeline shows actor, reason, evidence, lineage snapshot |
 | R12 | UI shell: Agentic / Dashboard tabs top middle; Employee/Manager toggle top right | D8 | must | Employee sees only Dashboard; Manager sees both |
@@ -33,14 +33,15 @@ pipeline + UI vision, D7–D9). Team must still agree the contract and lanes.
 | R23 | Tableau→Power BI migration review ("don't migrate waste") | B1 §02; W1 rule 6 | nice | Backlog items assessed with evidence, not copied |
 | R24 | Optional separately labelled SQL conflict fixture | Team idea | nice | Not attributed to the pack |
 | R25 | Health score, audit export, cost estimates | Team idea | nice | Assumptions explained; no invented savings |
-| R26 | Stretch: scheduled data-source health checks (arrival consistency, freshness, validity) on the simulated clock, using pack refresh and quality fields; warning badge propagated through lineage | Team idea; SCOPE "Stretch goal" | stretch | Fast-forward runs the check; a model with failed refresh marks its dashboards with a badge and reasons; result in audit log |
+| R26 | Stretch: scheduled data-source health checks (arrival consistency, freshness, validity) on the simulated clock, using pack refresh and quality fields; warning badge propagated through lineage | Team idea; SCOPE "Stretch goal" | stretch | The clock (running or fast-forwarded) runs the check; a model with failed refresh marks its dashboards with a badge and reasons; result in audit log |
 | R27 | Stretch: domain validity windows (finance period close, legal retention/holds, HR retention/GDPR, GxP) with audit evidence | Team idea | stretch | One or two example policies shown; no compliance certification claimed |
 
 ## Demo script
 
 See [SCOPE](SCOPE.md#demo-story-target-3-min-portal-limit-unknown): employee
 browse + lineage → manager chat on REQ-0001 → pipeline view → reuse vs. build
-Temporary → reject with reason → fast-forward 90 days → audit + portfolio.
+Temporary → reject with reason → run / fast-forward the clock in god mode →
+audit + portfolio.
 
 ## Out of scope
 
