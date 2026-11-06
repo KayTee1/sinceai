@@ -1,6 +1,7 @@
 # Plan
 
-Status: waiting for the challenge.
+Status: challenge chosen (D1). Approach drafted in [SCOPE](SCOPE.md) (D2,
+proposed). Lanes and tasks wait for the Bayer briefing.
 
 ## Team
 
@@ -8,6 +9,9 @@ Status: waiting for the challenge.
 | --- | --- | --- | --- |
 | Viet | Claude Code | TBD | TBD |
 | KayTee | Codex | TBD | TBD |
+
+SCOPE suggests four roles (Data, Agent, App, Pitch). With two people, a likely
+split is Data + Agent vs. App + Pitch. Not agreed yet.
 
 - Merges to `master`: TBD
 - Records the demo video: TBD
@@ -20,7 +24,7 @@ on it and telling the other developer before starting.
 
 | ID | Task | Owner | Branch | Files | Depends on | Done when | State |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | Pick the challenge and plan it | TBD | master | docs/ | Challenge summaries (Thu 15:00) | Challenge chosen by Fri 17:30; approach, contract and tasks agreed | todo |
+| T1 | Pick the challenge and plan it | Viet | docs/bayer-challenge | docs/ | Bayer briefing | Challenge chosen (done); scope re-checked after briefing; contract and tasks agreed | doing |
 
 For bigger tasks, add details under the table:
 
