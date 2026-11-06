@@ -21,6 +21,8 @@ planted-data requirements; final scope remains pending team approval.
 | R13 | Show model trust/refresh, usage window, quality and lineage | W1 START_HERE / rules 4/5/7/8 | must | Cite model, usage and directed upstream/downstream evidence |
 | R14 | Working workflow and README/architecture note | B1 §07 | must | Demonstrate full workflow; document assumptions, AI, controls and BI integration path |
 | R15 | Use only Pharma scenario; label synthetic values and honor exclusions | W1 START_HERE | must | No cross-division/clinical demo; no actual Bayer performance claims |
+| R16 | Shared evidence/lineage panel for app-rendered charts, values and candidate assets | W1 rules 4/8; team design D6 | must | Catalog edges for imported assets; actual query/source rows for app-computed values; missing mappings explicit; no distinct audience claims across assets/months; proposal stores snapshot |
+| R17 | Dashboard and prompting workspaces share catalog, evidence, proposals and audit | KayTee design request; D7 | must | User searches an existing asset; manager clarifies a request and proposes a change; approval depends on owner/steward role, not prompting access |
 
 ## Demo script
 
