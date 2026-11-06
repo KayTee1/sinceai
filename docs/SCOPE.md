@@ -13,10 +13,15 @@ follow D9 and D11. Contract and lanes still need both developers' agreement.
 Analytics Steward stops BI sprawl at the source: before anything new is built,
 agents search what already exists, flag conflicting KPIs, and only then build a
 **temporary** insight on certified metrics. Every asset must earn its place:
-it is promoted on real use and re-justified every 90-day cycle, otherwise it is
-archived (restorable). A human approves every change; everything is logged.
+it is promoted on real use and re-justified every 90 days, otherwise it is
+archived (restorable). Agents propose and humans decide; when an owner stays
+silent, a logged, reversible policy default applies (D9). Everything is logged.
 
 Pitch line: *"Every dashboard must earn its next 90 days."*
+
+**Simulated time (D12):** 1 simulated day = 1 real second while the clock runs,
+so a 30-day TTL is 30 s and a 90-day lease is 90 s. Time only moves forward.
+The clock starts on 2026-11-01, just after the pack's last data (D13).
 
 ## The pipeline (Miro board)
 
@@ -34,54 +39,96 @@ stateDiagram-v2
   Personal --> LeaseEnd
   Team --> LeaseEnd
   Certified --> LeaseEnd
-  LeaseEnd --> OwnerReview: lease ends (90 days / DSO cycle)
-  OwnerReview --> Team: renew, new 90 days
+  LeaseEnd --> OwnerReview: lease ends (90 days after promotion or renewal)
+  OwnerReview --> Renewed: renew (or reject retire/merge), same tier, new 90 days
+  Renewed --> LeaseEnd
   OwnerReview --> Merged: merge (redirect to target asset)
   OwnerReview --> Archived: retire
-  OwnerReview --> Archived: no response = default
+  OwnerReview --> Archived: no response in 14 days = default
   Merged --> Archived
   Archived --> Restored: restore on request
+  Restored --> LeaseEnd: previous tier, new 90-day lease
+  Restored --> Temporary: was Temporary, fresh 30-day TTL
 ```
 
 | Tier | Owner | How it gets here | Expiry |
 | --- | --- | --- | --- |
 | Temporary | requester | approved build of an ephemeral insight | TTL 30 days → archived |
-| Personal | requester | used again by its owner | lease to end of 90-day cycle |
-| Team | team lead | 3+ users in the team, approved | lease to end of cycle |
-| Certified | data steward | cross-team use + steward approval | lease to end of cycle |
+| Personal | requester | used again by its owner (automatic, logged) | lease 90 days from promotion |
+| Team | unchanged | 3+ users in the team, approved by a Lead in the owner's region | lease 90 days from promotion |
+| Certified | unchanged | cross-team use, approved by the region's data steward | lease 90 days from promotion |
 
-Owner review at lease end shows usage, cost and overlaps and proposes
-**renew / merge / retire**. Default (no response) is archive (D9). Archive keeps
-a snapshot and is always restorable; nothing is deleted. Thresholds are config.
+Promotion never changes the owner (D14); it only changes who must approve.
+
+Leases are per asset (D12): each asset's lease starts when it enters its tier
+or is renewed, so reviews arrive staggered rather than all at once. Renew
+keeps the asset in its current tier and starts a new 90-day lease; it never
+moves the asset to another tier.
+
+Imported assets get a seeded lease (D13, team assumption): each lease started
+on the latest date on or before the clock start that is a whole number of 90-day
+periods after the asset's `last_modified`. Pack edits run from 2026-01-01 to
+2026-10-28, so the first reviews arrive spread over the first 90 days instead
+of all on day 90.
+
+Owner review at lease end shows usage, owner status and overlap candidates,
+and proposes **renew / merge / retire**. Merge candidates are rule-based in P0
+(D13): other active assets on the same semantic model with overlapping KPIs
+(`Asset_KPI_Map`); the owner picks the target. That shows the assets are
+related, not that one can replace the other, so a merge executes only when the
+target is active (not archived or under review), its product and market scope
+covers the source's, and the source's downstream assets are listed and
+redirected to the target (D14). The pack has no query costs, so the review
+shows no cost. Default (no response within the 14-day review window) is
+archive (D9). Any decision closes the review: rejecting a retire or merge
+proposal means the owner keeps the asset, so it is renewed for 90 days and
+silence can no longer archive it (D14). Archive keeps a snapshot and is always
+restorable; nothing is deleted. Thresholds and the review window are config.
+Restore brings an archived asset back to its previous tier with a new 90-day
+lease (D13); a restored Temporary insight gets a fresh 30-day TTL instead
+(D14). Restore is not a rewind of the clock.
 
 Known trade-off (KayTee's review, D10): auto-archive acts without a fresh human
-decision. Mitigations: the owner sees an expiry warning in the inbox before the
-deadline; the archive is written to the audit log as "policy applied, no
-response" with the policy version; restore is one click; assets with
-downstream dependencies or a missing owner are never auto-archived and go to
-review instead.
+decision. Mitigations: an expiry warning appears in the inbox for the owner before the
+deadline (in the demo the manager sees it by acting as that owner); the
+archive is written to the audit log as "policy applied, no response" with the
+policy version; restore is one click; assets with downstream dependencies or
+a missing or inactive owner are never auto-archived and go to review instead
+(the pack has 21 assets with no owner and 65 with an inactive owner).
 
 Tiers are app-owned review state. Imported audience, endorsement and
 `lifecycle_status` stay as separate source fields and are never overwritten.
 
 ### 2. Request flow (sequence diagram)
 
-1. Requester asks ("What's Q3 net sales by region?").
+1. The manager runs a request on a requester's behalf, usually a pack business
+   request ("What's Q3 net sales by region?"). Employees do not ask the agents
+   (D8). `Business_Requests` has no requester field, so the manager names the
+   requester from the pack's owners; that mapping is ours and is labelled so.
+   The requester owns any Temporary insight the run builds.
 2. **Orchestrator** parses intent (metrics, dimensions, filters) via the
    **Intent parser**; asks a clarifying question when text and context disagree.
-3. **Discovery agent** runs hybrid search (vector + keyword) over the
+3. **Discovery agent** runs hybrid search (keyword + local word-overlap
+   vectors, D13) over the
    **metadata catalog** → candidate dashboards and KPI definitions.
    Certification alone does not prove fit: dimensions, filters, period,
    refresh, ownership and quality are checked too. Missing evidence stays
-   "unknown".
+   "unknown". The result is a **reuse candidate** with known and unknown
+   coverage, never proof that the dashboard answers the question (D14).
 4. **Conflict detector** compares definitions in the **semantic layer**
    (same name, different definition, e.g. gross vs. net) → conflict + reasoning.
 5. Orchestrator suggests reuse and flags the conflict.
-6. **Existing asset fits:** user opens the certified dashboard; lifecycle engine
-   logs reuse (usage +1).
-7. **Nothing fits:** orchestrator requests approval to build → approver approves
-   → **Builder agent** queries certified metrics only → lifecycle engine
-   registers it as **Temporary, TTL 30d** → user gets the insight link + expiry.
+6. **A candidate looks right:** the run shows the reuse candidate and its
+   coverage; the **requester confirms** "use this" or "not right" (D14; no
+   approver needed). On confirm, the lifecycle engine logs the reuse (app usage
+   event +1 for the requester) and the audit log records it. "Not right" moves
+   to the next candidate or the build path.
+7. **Nothing fits:** orchestrator proposes a build → any active **Lead** in the
+   requester's region approves (D13, D14) → the build step (deterministic tool
+   in P0, Builder agent in P1) computes only KPIs in the computable KPI mapping
+   (see Data) → lifecycle engine
+   registers it as **Temporary, TTL 30d**, owned by the requester → the insight
+   appears in the Dashboard tab with its expiry.
 
 ### 3. System architecture (Miro → our build)
 
@@ -113,7 +160,10 @@ Platform services (deterministic code, never the LLM):
 - **Lifecycle engine:** state machine, TTL, leases, promotion, archive/restore.
 - **Policy engine:** promotion thresholds, required owners/approvers, Bayer rules.
 - **Semantic layer:** certified KPI definitions; the only source for builds.
-- **Scheduler + simulated clock:** TTL expiry and lease reviews; fast-forward.
+- **Scheduler + simulated clock:** 1 day = 1 s while running; TTL expiry and
+  lease reviews fire on that clock; pause, resume and fast-forward, never
+  backwards (D12). Fast-forward processes every due event in date order, so
+  jumping 120 days gives the same result as letting the clock run (D14).
 - **Audit writer:** append-only, called by the backend on every proposal,
   decision and state change (not an agent tool, so agents cannot skip it).
 
@@ -126,12 +176,16 @@ One full-screen app.
 
 The toggle controls what you see, not what you may approve. Approval authority
 comes from the proposal's required approvers (asset owner, team lead, data
-steward); the demo lets the manager act as a simulated approver identity.
+steward). In Manager mode an **"acting as"** picker selects a simulated
+identity from the pack's owners; the inbox only enables Approve when that
+identity is one of the proposal's required approvers. The decision is logged
+under that identity. This is simulated, not real authentication.
 
 **Employee: as simple as possible.** Sees only the Dashboard tab; the
-Agentic tab is hidden. Browses existing dashboards (certified first), each with
-tier badge, owner and expiry. Opening a dashboard logs an app usage event
-(feeds promotion). App events are stored separately from Bayer's imported usage
+Agentic tab is hidden. A small **"viewing as"** picker selects a simulated
+person from the pack's owners (D13). Browses existing dashboards (certified
+first), each with tier badge, owner and expiry. Opening a dashboard logs an app
+usage event for that person (feeds promotion). App events are stored separately from Bayer's imported usage
 and never added to it.
 Clicking a chart or number opens a simple lineage view (D6). Employees do not
 ask the agents questions.
@@ -146,9 +200,16 @@ ask the agents questions.
     through the lifecycle diagram.
   - **Approval inbox** (both views): build / promote / renew / merge / retire /
     restore proposals with evidence; approve, reject (reason required) or edit.
-  - **Clock control:** fast-forward the simulated date (30 days, 90 days).
-- **Dashboard tab:** everything employees see, plus portfolio view (sprawl,
-  tiers, leases due, conflicts, archived, before/after) and full lineage detail.
+  - **God mode (clock panel):** a small modal for the simulated clock. It shows
+    the simulated date and the next due event, with **pause**, **resume** and
+    **fast-forward** (+1 day, +30 days, +90 days, or skip to the next due
+    event). No going back in time: that would need clock snapshots, so it is
+    out of scope. The clock starts paused after a demo reset, so nothing
+    expires before the presenter is ready. Every clock action is written to
+    the audit log.
+- **Dashboard tab:** everything employees see, plus a counts panel (P0:
+  before/after counts of tiers, leases due, conflicts, archived; D13), the
+  full portfolio view in P1, and full lineage detail.
 - **Audit timeline** per asset.
 
 ## Lineage drill-down (D6)
@@ -190,15 +251,39 @@ see the full graph. Each proposal stores its lineage snapshot for the audit.
 - **Initial tier mapping (team assumption):** pack `endorsement` certified →
   Certified, promoted → Team, none → Personal. Original pack fields stay
   unchanged next to the app tier.
-- **Teams:** the pack has owners (role, scope) but no teams. We derive teams
-  from owner role + scope and label the mapping as ours.
+- **Teams (D14, our mapping):** the pack has owners (role, scope) but no
+  teams. A team is an owner region (`scope`: Global, EMEA, Asia Pacific, North
+  America, Latin America). Any active owner in the region whose role ends in
+  "Lead" can approve as team lead (2–10 per region). Each region's data
+  steward is its active "Data Steward" owner; Asia Pacific has none active, so
+  the Global steward covers it.
 - **Usage for promotion:** pack usage is monthly totals (`unique_users`), not
-  per person. Promotion uses app-generated synthetic per-user usage events,
-  seeded and labelled "team-synthetic"; never presented as Bayer data.
+  per person. Promotion uses app usage events only: seeded synthetic per-user
+  events labelled "team-synthetic", plus opens logged under the employee's
+  "viewing as" identity. Never presented as Bayer data.
 - **KPI conflicts:** from `KPI_Catalog` (`canonical_metric` groups,
   `definition_status`, `approval_status`). The pack has no formulas, so we show
   definitional ambiguity, not invented monetary gaps. An optional separate SQL
   fixture (P1) must be labelled as ours.
+- **Computable KPI mapping (D14, team-authored):** the pack has no executable
+  KPI formulas, so we map a few approved KPIs to source columns ourselves and
+  label the mapping as ours. Any other KPI returns "cannot compute from this
+  pack". Percentages are never summed. Column meanings are checked at import
+  (T4).
+
+  | KPI | Computed as |
+  | --- | --- |
+  | KPI-001 Net Sales | `Product_Market_Monthly.net_sales_m_eur_syn` (M EUR) |
+  | KPI-004 Net Sales Growth | % change of KPI-001 vs. the prior period, same product and market |
+  | KPI-042 Forecast Variance | `net_sales_m_eur_syn − forecast_m_eur_syn` (M EUR) |
+  | KPI-027 Market Access Coverage | `market_access_coverage_pct_syn` |
+  | KPI-014 Units Shipped | `units_shipped_syn` |
+  | KPI-016 Inventory Coverage | `inventory_weeks_syn` |
+  | KPI-020 On-Time In-Full | `otif_pct_syn` |
+  | KPI-006 Demand Forecast Accuracy | `Supply_Operations.forecast_accuracy_pct_syn` |
+  | KPI-054 Certified Asset Share | share of `Analytics_Assets` with endorsement certified |
+
+  REQ-0001 needs KPI-004, KPI-042 and KPI-027, which are all in the table.
 - Numbers shown to users come from code over source rows, never from the LLM.
 - Warehouse integration, live BI telemetry and query costs are future
   capabilities (production path), not available in the pack.
@@ -211,15 +296,20 @@ see the full graph. Each proposal stores its lineage snapshot for the audit.
    Its text (global Nubeqa) and context (Beyonttra / EMEA) disagree; the agent
    asks which is meant.
 3. **Flip to Pipeline view:** intent parser → discovery (hybrid search) →
-   conflict detector finds Net Sales vs. Net Sales Local vs. Net Sales v2.
-4. **Reuse first:** agent proposes the certified asset and flags the conflict.
-   Second request where nothing fits: build proposal → manager approves →
-   Builder makes a Temporary insight (TTL 30 days) on certified KPIs.
+   conflict detector finds Net Sales Growth (KPI-004, canonical) vs. Net Sales
+   Growth Local (KPI-005, duplicate candidate), which is what REQ-0001's "sales
+   growth" maps to (D13).
+4. **Reuse first:** agent shows the certified reuse candidate with its
+   coverage and flags the conflict; the requester confirms it. Second request
+   where nothing fits: build proposal → manager, acting as a Lead in the
+   requester's region, approves → the build step makes a Temporary insight
+   (TTL 30 days) on certified KPIs.
 5. **Human says no:** manager rejects one proposal with a reason; audit shows it.
-6. **Fast-forward 90 days:** temporary used again → Personal → Team (approved);
-   lease ends → owner review proposes renew / merge / retire; one unanswered
-   asset is archived by default, then restored.
-7. **Audit + portfolio:** per-asset timeline; before/after counts.
+6. **Resume the clock (god mode):** days tick by at 1 per second; fast-forward
+   where the video needs it. Temporary used again → Personal → Team
+   (approved); its lease ends 90 s later → owner review proposes renew / merge
+   / retire; one unanswered asset is archived by default, then restored.
+7. **Audit + counts:** per-asset timeline; before/after counts panel.
    Close: "Every dashboard must earn its next 90 days."
 
 ## Priorities
@@ -237,20 +327,30 @@ see the full graph. Each proposal stores its lineage snapshot for the audit.
   services; nodes highlight from the same step events the Chat view uses.
 - Lifecycle engine: Temporary TTL 30d, Personal, Team, Certified, 90-day lease,
   owner review, renew/merge/retire, default archive, restore.
-- Simulated clock with fast-forward; scheduler runs TTL expiry and lease reviews.
+- Simulated clock at 1 day = 1 s with a god-mode panel (pause, resume,
+  fast-forward; no rewind); scheduler runs TTL expiry and lease reviews.
+- "Acting as" approver picker for the manager; approval checked against the
+  proposal's required approvers.
 - Lineage drill-down (D6); append-only audit log + per-asset timeline.
+- Manager counts panel: before/after counts of tiers, leases due, conflicts,
+  archived (D13), counted from applied state changes (decisions, expiries,
+  policy archives); conflicts shown as detected vs. resolved (D14).
+- Employee "viewing as" picker; app usage events per person (D13).
 - README / architecture note (data assumptions, AI approach, governance controls,
   Power BI/Fabric integration path).
 
 **P1:** Builder agent; Pipeline view polish (animated edges, request moving
 through the lifecycle diagram); Lease steward agent with overlap
-detection for merge; portfolio before/after view; Tableau→Power BI migration
+detection for merge; full portfolio view; Tableau→Power BI migration
 review ("don't migrate waste"); optional SQL conflict fixture.
 
 **Stretch (if time remains):** data-source health checks (see below).
 
-**P2:** health score, audit export (CSV/JSON), cost estimates, real embeddings
-provider if keyword + simple vectors are not good enough.
+**P2:** health score, audit export (CSV/JSON), cost estimates, an embeddings
+API if local keyword + word-overlap matching is not good enough (D13).
+
+**Build order (D14):** the golden path in PLAN comes first; the rest of P0
+follows. Nothing is cut.
 
 Both Agentic views read one stream of step events, so the Pipeline view costs
 little once the Chat view works.
@@ -260,13 +360,15 @@ little once the Chat view works.
 1. Agents propose; humans decide. Agents only write proposals.
 2. Numbers come from executed code over source rows, never from the LLM.
 3. No evidence, no proposal: score parts, source IDs, lineage, usage.
-4. Builds use certified (approved, canonical) KPIs only.
+4. Builds use approved canonical KPIs in the computable KPI mapping only;
+   anything else returns "cannot compute from this pack".
 5. Reject or edit requires a reason; edits create a new version and reset approvals.
 6. Every proposal, decision and state change writes one audit row with
    evidence and a concise rationale (not private model reasoning).
 7. Archive, never delete; restore is always possible. Auto-archive on silence
    is a logged policy action, skipped for assets with dependencies or no owner.
-8. Missing or inactive owners block execution until a human assigns one.
+8. Missing or inactive owners block execution until the region's data
+   steward assigns one (D14).
 9. Catalog text and request text are data, not instructions to the agent.
 10. Never present synthetic values as actual Bayer performance.
 11. Approval follows the proposal's required approvers, not the role toggle.
