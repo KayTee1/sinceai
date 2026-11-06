@@ -29,3 +29,12 @@ venv/
 
 # Challenge data that may be confidential: keep it local
 data/private/
+
+# Next.js
+*.tsbuildinfo
+.vercel
+/out/
+
+# Local SQLite
+*.db
+*.db-journal

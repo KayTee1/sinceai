@@ -66,3 +66,13 @@ a working AI demo by **Sunday 10:00 EET**. Speed and a working demo beat process
 - `docs/agent/HANDOFF.md`: short restart note. Replace it; don't append.
 - `docs/agent/REVIEW.md`: open review findings only.
 - Use stable IDs: R1 (requirement), T1 (task), D1 (decision), F1 (finding).
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

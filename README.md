@@ -5,7 +5,7 @@ Team workspace for two developers (Claude Code + Codex) at the
 We're building **Analytics Steward** for Bayer's "Build Less, Build Better"
 challenge: agents that reuse before they build and make every dashboard earn
 its next 90 days. TypeScript, Next.js + Mastra + SQLite. See
-[SCOPE](docs/SCOPE.md). No app code yet.
+[SCOPE](docs/SCOPE.md). Run instructions: [ARCHITECTURE](docs/ARCHITECTURE.md#run-commands).
 
 ## Key times (EET)
 

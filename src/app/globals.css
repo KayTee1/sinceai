@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+/* Bayer-inspired palette. Chart series colours were checked with the dataviz
+   validator (CVD + contrast) against the white card surface. */
+:root {
+  --navy: #10384f; /* Bayer dark blue: header, headings */
+  --blue: #0091df; /* Bayer blue: primary action, series 1 */
+  --sky: #00bcff; /* Bayer light blue: highlights only, never text */
+  --green: #66b512; /* Bayer green: accents, certified */
+  --green-deep: #4e8a12; /* series 2 (passes contrast on white) */
+  --canvas: #f3f6f8;
+  --surface: #ffffff;
+  --line: #dbe3e9;
+  --line-strong: #c3ced7;
+  --ink: #10384f;
+  --ink-2: #44606f;
+  --ink-3: #6f8592;
+  --warn: #b25e00;
+  --danger: #c0272d;
+}
+
+@theme inline {
+  --color-navy: var(--navy);
+  --color-blue: var(--blue);
+  --color-sky: var(--sky);
+  --color-green: var(--green);
+  --color-green-deep: var(--green-deep);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Markdown inside agent replies */
+.prose-steward p {
+  margin: 0 0 0.6em;
+}
+.prose-steward p:last-child {
+  margin-bottom: 0;
+}
+.prose-steward ul,
+.prose-steward ol {
+  margin: 0.25em 0 0.75em 1.1em;
+}
+.prose-steward ul {
+  list-style: disc;
+}
+.prose-steward ol {
+  list-style: decimal;
+}
+.prose-steward li {
+  margin: 0.2em 0;
+}
+.prose-steward strong {
+  font-weight: 600;
+}
+.prose-steward code {
+  font-size: 0.85em;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+.prose-steward h1,
+.prose-steward h2,
+.prose-steward h3 {
+  font-weight: 600;
+  margin: 0.8em 0 0.3em;
+}
+.prose-steward table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  font-size: 13px;
+}
+.prose-steward th,
+.prose-steward td {
+  border: 1px solid var(--line);
+  padding: 4px 8px;
+  text-align: left;
+}
