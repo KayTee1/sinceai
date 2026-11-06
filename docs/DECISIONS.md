@@ -17,7 +17,8 @@ Alternatives considered: other company challenges.
 Agreed by: Viet, KayTee
 
 D2: Approach: Analytics Steward (2026-11-06)
-Status: proposed (revised after final-source intake; see D5)
+Status: replaced by D5 (the pack has no KPI formulas, so conflicts are
+definitional, not SQL-computed numbers)
 Choice and why: an agent that proposes reuse before build, explains metric
 conflicts with SQL-computed numbers, runs 90-day ownership leases, and logs
 every proposal and decision. Full scope in docs/SCOPE.md.
@@ -44,7 +45,7 @@ Agreed by: pending. KayTee requested documentation fixes; final scope, stack and
 interface still need team agreement after the briefing.
 
 D5: Rebase draft scope on final brief and Pharmaceuticals pack (2026-11-06)
-Status: proposed
+Status: proposed; stack replaced by D7, lifecycle placement by D9
 Choice and why: KayTee requested source intake. CHALLENGE/DATA_SOURCES record
 confirmed facts. Revised SCOPE uses supplied BI estate and source-cited evidence;
 Pharmaceuticals replaces Crop Science, and KPI ambiguity replaces unsupported
@@ -146,4 +147,36 @@ Choice and why:
   snapshots. Starts paused after reset; clock actions are audited.
 Alternatives considered: silence only proposes archive; employee request box;
 shared 90-day cycle; fast-forward-only clock; time travel with snapshots.
+Agreed by: KayTee; Viet pending (docs merged in #10)
+
+D13: Fill lifecycle and approval gaps found in the scope review (2026-11-06)
+Status: proposed (KayTee). Refines D9 and D12; needs Viet's agreement because it
+changes the contract (proposal types, asset state, clock, usage events).
+Choice and why:
+- Imported leases: seeded from each asset's `last_modified` (latest date
+  before the clock start that is a whole number of 90-day periods after it).
+  Without this all 360 imported assets reach review on day 90 at once.
+- Approvers: build_temporary needs the requester's team lead; reuse needs no
+  approval and is logged. The demo's "manager approves" means the manager
+  acting as that team lead.
+- Usage identity: Employee mode gets a "viewing as" picker; opens count for
+  that person next to the seeded team-synthetic events.
+- Merge in P0: rule-based candidates (same semantic model + overlapping KPIs);
+  the owner picks the target. Lease steward reasoning stays P1.
+- Restore: back to the previous tier with a new 90-day lease.
+- Search: keyword + local word-overlap (TF-IDF) vectors in P0; an embeddings
+  API only if results are poor (P2). No extra key; no data sent to another
+  service.
+- Demo conflict: REQ-0001 asks for sales growth, so the demo shows Net Sales
+  Growth (KPI-004) vs. Net Sales Growth Local (KPI-005).
+- A simple before/after counts panel moves to P0 (the demo ends on it); the
+  full portfolio view stays P1.
+- Smaller defaults: auto-archive also skips assets with an inactive owner
+  (65 in the pack); owner review shows no cost (the pack has none); 14-day
+  review window before the default applies; clock starts 2026-11-01;
+  scheduler events reuse the step-event shape with `runId: "clock"`.
+Alternatives considered: no lease until touched; demo-only leases; data
+steward or requester approves builds; seeded usage only; merge to P1; restore
+to Personal; embeddings API in P0; Net Sales trio in the demo; dropping
+before/after from the demo.
 Agreed by: KayTee; Viet pending
