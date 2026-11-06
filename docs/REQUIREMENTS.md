@@ -4,7 +4,7 @@ Organizer facts: [CHALLENGE](CHALLENGE.md). Dataset semantics:
 [DATA_SOURCES](DATA_SOURCES.md). Product scope: [SCOPE](SCOPE.md) (Miro
 pipeline + UI vision, D7–D9). Team must still agree the contract and lanes.
 
-"Must" means the demo fails without it.
+"Must" means the demo fails without it. "Stretch" means build it if time remains after P0/P1.
 
 | ID | Requirement | Source | Must / nice | How we check it |
 | --- | --- | --- | --- | --- |
@@ -33,6 +33,8 @@ pipeline + UI vision, D7–D9). Team must still agree the contract and lanes.
 | R23 | Tableau→Power BI migration review ("don't migrate waste") | B1 §02; W1 rule 6 | nice | Backlog items assessed with evidence, not copied |
 | R24 | Optional separately labelled SQL conflict fixture | Team idea | nice | Not attributed to the pack |
 | R25 | Health score, audit export, cost estimates | Team idea | nice | Assumptions explained; no invented savings |
+| R26 | Stretch: scheduled data-source health checks (arrival consistency, freshness, validity) on the simulated clock, using pack refresh and quality fields; warning badge propagated through lineage | Team idea; SCOPE "Stretch goal" | stretch | Fast-forward runs the check; a model with failed refresh marks its dashboards with a badge and reasons; result in audit log |
+| R27 | Stretch: domain validity windows (finance period close, legal retention/holds, HR retention/GDPR, GxP) with audit evidence | Team idea | stretch | One or two example policies shown; no compliance certification claimed |
 
 ## Demo script
 

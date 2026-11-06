@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analytics Steward — One-Page Summary</title>
+<style>
+  @page { size: A4; margin: 0; }
+  :root {
+    --ink: #1b1f24; --muted: #5b6470; --line: #d9dee4; --soft: #f4f6f8;
+    --accent: #0b6e4f; --accent-soft: #e3f2ec; --warn: #9a5b00; --warn-soft: #fbf0dc;
+    --blue: #1f5fa8; --blue-soft: #e5eef9; --violet: #5b3fa0; --violet-soft: #eee9f8;
+    --grey-soft: #eceef1;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #e9ecef; color: var(--ink); }
+  body { font: 8pt/1.28 -apple-system, "Segoe UI", Inter, Helvetica, Arial, sans-serif; }
+  .page {
+    width: 210mm; height: 297mm; margin: 10mm auto; background: #fff;
+    padding: 8mm 10mm 7mm; overflow: hidden; box-shadow: 0 2px 14px rgba(0,0,0,.12);
+    display: flex; flex-direction: column; gap: 2.6mm;
+  }
+  @media print { html, body { background: #fff; } .page { margin: 0; box-shadow: none; } }
+  h1 { font-size: 17pt; margin: 0; letter-spacing: -.01em; }
+  h2 { font-size: 8.6pt; text-transform: uppercase; letter-spacing: .06em; color: var(--accent);
+       margin: 0 0 1.4mm; padding-bottom: .8mm; border-bottom: 1px solid var(--line); }
+  p { margin: 0 0 1mm; }
+  ul, ol { margin: 0; padding-left: 4mm; }
+  li { margin: 0 0 .5mm; }
+  b { font-weight: 650; }
+  .muted { color: var(--muted); }
+  .tag { display: inline-block; font-size: 7pt; font-weight: 600; padding: .2mm 1.4mm; border-radius: 3px;
+         background: var(--soft); border: 1px solid var(--line); white-space: nowrap; }
+  .p0 { background: var(--accent-soft); border-color: #bfe0d2; color: var(--accent); }
+  .p1 { background: var(--warn-soft); border-color: #efd8ad; color: var(--warn); }
+
+  header { display: flex; justify-content: space-between; align-items: flex-end; gap: 6mm;
+           border-bottom: 2px solid var(--ink); padding-bottom: 2mm; }
+  .sub { color: var(--muted); font-size: 8.6pt; margin-top: .6mm; }
+  .pitch { font-style: italic; font-size: 10.5pt; color: var(--accent); font-weight: 600; text-align: right; }
+  .deadline { font-size: 7.6pt; color: var(--muted); text-align: right; margin-top: .6mm; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
+  .grid3 { display: grid; grid-template-columns: 1.05fr 1fr 1fr; gap: 4mm; }
+  .box { border: 1px solid var(--line); border-radius: 4px; padding: 2mm 2.4mm; background: #fff; }
+
+  /* lifecycle flow */
+  .flow { display: flex; align-items: center; flex-wrap: nowrap; gap: .6mm; font-size: 6.9pt; }
+  .node { border: 1px solid; border-radius: 3px; padding: .8mm 1mm; text-align: center; line-height: 1.2; white-space: nowrap; }
+  .node small { display: block; font-size: 6pt; color: var(--muted); }
+  .n-start { background: var(--accent-soft); border-color: #9fd0bb; border-radius: 10px; }
+  .n-dec { background: var(--blue-soft); border-color: #a9c4e6; }
+  .n-tier { background: #fff6d6; border-color: #e3cf86; }
+  .n-cert { background: var(--accent-soft); border-color: #9fd0bb; }
+  .n-rev { background: var(--violet-soft); border-color: #c7b8ea; }
+  .n-arch { background: var(--grey-soft); border-color: #c4c9cf; }
+  .arr { color: var(--muted); font-size: 7pt; }
+  .flownote { font-size: 7.2pt; color: var(--muted); margin-top: 1.2mm; }
+
+  /* wireframe */
+  .wire { border: 1.5px solid var(--ink); border-radius: 4px; overflow: hidden; font-size: 7.2pt; }
+  .wire-top { display: flex; justify-content: space-between; align-items: center; gap: 1mm; padding: 1mm 1.4mm;
+              background: var(--soft); border-bottom: 1px solid var(--line); }
+  .seg { display: inline-flex; border: 1px solid var(--ink); border-radius: 3px; overflow: hidden; }
+  .seg span { padding: .3mm 1.2mm; font-weight: 600; font-size: 6.6pt; }
+  .seg span.on { background: var(--ink); color: #fff; }
+  .wire-body { display: grid; grid-template-columns: 1fr 1fr; }
+  .wire-body > div { padding: 1.4mm 1.8mm; }
+  .wire-body > div + div { border-left: 1px dashed var(--line); }
+
+  /* layers */
+  .layer { display: grid; grid-template-columns: 13mm 1fr; gap: 1.6mm; padding: .5mm 0; border-bottom: 1px dotted var(--line); }
+  .layer:last-child { border-bottom: 0; }
+  .layer > b { font-size: 7.6pt; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 7.6pt; }
+  td { padding: .55mm 1mm; vertical-align: top; border-bottom: 1px solid var(--soft); }
+  td:first-child { font-weight: 650; white-space: nowrap; width: 9mm; color: var(--accent); }
+
+  .bars { display: grid; grid-template-columns: auto 1fr auto; gap: .6mm 1.6mm; align-items: center; font-size: 7.4pt; }
+  .bar { height: 2.2mm; background: var(--accent); border-radius: 1px; }
+  .future { background: var(--blue-soft); border-color: #a9c4e6; }
+  .future h2 { color: var(--blue); }
+  footer { margin-top: auto; font-size: 6.8pt; color: var(--muted); border-top: 1px solid var(--line); padding-top: 1.2mm;
+           display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div>
+      <h1>Analytics Steward</h1>
+      <div class="sub">Bayer · “Build Less, Build Better: AI for Governed Analytics” · Since AI Hackathon, Turku, 6–8 Nov 2026 · Viet + KayTee</div>
+    </div>
+    <div>
+      <div class="pitch">“Every dashboard must earn its next 90 days.”</div>
+      <div class="deadline">Submit by <b>Sun 8 Nov 10:00 EET</b> · scope freeze Sat 22:00</div>
+    </div>
+  </header>
+
+  <div class="grid2">
+    <div>
+      <h2>Problem &amp; idea</h2>
+      <p>Self-service BI and AI make dashboards nearly free, so enterprises drown in duplicates, conflicting KPIs, unowned reports and tech debt. Bayer’s Tableau→Power BI migration makes it worse.</p>
+      <p><b>Our answer:</b> agents that <b>reuse before they build</b>, flag KPI conflicts, build only <b>temporary</b> insights on certified KPIs, and make every asset re-earn its place each 90-day cycle. Agents propose; humans approve; everything is audited.</p>
+    </div>
+    <div>
+      <h2>How Bayer judges</h2>
+      <div class="bars">
+        <span>Problem fit &amp; business value</span><div class="bar" style="width:100%"></div><b>30%</b>
+        <span>Governance &amp; maintainability</span><div class="bar" style="width:83%"></div><b>25%</b>
+        <span>Technical quality &amp; meaningful AI</span><div class="bar" style="width:67%"></div><b>20%</b>
+        <span>Usability for business &amp; IT</span><div class="bar" style="width:50%"></div><b>15%</b>
+        <span>Scalability &amp; demo quality</span><div class="bar" style="width:33%"></div><b>10%</b>
+      </div>
+      <p class="muted" style="margin-top:1mm">Deliver: working prototype, short demo, repo, README / architecture note (data, AI, governance, Power BI/Fabric path).</p>
+    </div>
+  </div>
+
+  <div>
+    <h2>The core: asset lifecycle (Miro board, D9)</h2>
+    <div class="flow">
+      <div class="node n-start">Question</div><span class="arr">→</span>
+      <div class="node n-dec">Certified fits?<small>yes → reuse</small></div><span class="arr">→</span>
+      <div class="node n-tier">Temporary<small>TTL 30 days</small></div><span class="arr">→</span>
+      <div class="node n-tier">Personal<small>used again</small></div><span class="arr">→</span>
+      <div class="node n-tier">Team<small>3+ users</small></div><span class="arr">→</span>
+      <div class="node n-cert">Certified<small>+ steward OK</small></div><span class="arr">→</span>
+      <div class="node n-dec">Lease ends<small>90-day cycle</small></div><span class="arr">→</span>
+      <div class="node n-rev">Owner review<small>renew·merge·retire</small></div><span class="arr">→</span>
+      <div class="node n-arch">Archived<small>restorable</small></div>
+    </div>
+    <div class="flownote">No response = archive by default — logged as a policy action, expiry warning first, one-click restore, and never for assets with downstream dependencies or no owner (those go to review). Simulated clock fast-forwards 90 days in seconds. Tiers are app-owned; Bayer’s source fields stay untouched.</div>
+  </div>
+
+  <div class="grid3">
+    <div>
+      <h2>Request flow</h2>
+      <ol>
+        <li>Manager runs a request (e.g. REQ-0001).</li>
+        <li><b>Orchestrator</b> parses intent; asks when text and context disagree.</li>
+        <li><b>Discovery</b>: hybrid search over assets, KPIs, models.</li>
+        <li><b>Conflict detector</b>: e.g. Net Sales vs Net Sales Local vs v2.</li>
+        <li>Fits → reuse certified asset (usage +1).</li>
+        <li>Nothing fits → approval → Temporary insight on certified KPIs only, with expiry.</li>
+      </ol>
+    </div>
+    <div>
+      <h2>Screen &amp; roles (D8)</h2>
+      <div class="wire">
+        <div class="wire-top">
+          <span class="seg"><span class="on">Agentic</span><span>Dashboard</span></span>
+          <span class="seg"><span>Employee</span><span class="on">Manager</span></span>
+        </div>
+        <div class="wire-body">
+          <div><b>Employee</b><br>Dashboard tab only. Browse dashboards (tier, owner, expiry). Click a chart → simple lineage. No questions to agents.</div>
+          <div><b>Manager</b><br>Everything. Agentic tab: <b>Chat view ⇄ Pipeline view</b> (live Miro diagram), approval inbox, clock. Portfolio + full lineage.</div>
+        </div>
+      </div>
+      <p class="muted" style="margin-top:1.2mm">Toggle = visibility only. Approval comes from the proposal’s owner / team lead / steward.</p>
+    </div>
+    <div>
+      <h2>Lineage drill-down (D6)</h2>
+      <p>Click any chart, number or asset → <b>graph</b> (upstream models → asset → downstream assets, risky nodes highlighted) + <b>how it was traced</b> (exact <code>Lineage_Edges</code> rows; for app-computed values the real query + source rows).</p>
+      <p class="muted">Imported reports show catalog edges only. Missing links shown as “no lineage recorded”. Users never summed into “people reached”.</p>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="box">
+      <h2>Architecture (TypeScript · D7, D11)</h2>
+      <div class="layer"><b>Client</b><span>Next.js: Agentic | Dashboard tabs, inbox, lineage panel</span></div>
+      <div class="layer"><b>Agents</b><span>Mastra + Claude · <span class="tag p0">P0</span> Orchestrator, Discovery, Conflict detector · <span class="tag p1">P1</span> Builder, Lease steward. LLM explains; code computes every number.</span></div>
+      <div class="layer"><b>Platform</b><span>Plain TS tools: lifecycle engine, policy, semantic layer (certified KPIs), scheduler + clock, audit writer (not an agent tool)</span></div>
+      <div class="layer"><b>Data</b><span>SQLite/libSQL: Bayer pack read-only + app-owned tiers, usage events, proposals, audit, archive</span></div>
+    </div>
+    <div class="box">
+      <h2>Data: Bayer Pharma pack (synthetic)</h2>
+      <p>360 assets (266 Power BI, 94 Tableau) · 56 KPIs (18 canonical) · 75 semantic models · 438 lineage edges · 3,600 monthly usage rows · 410 governance signals · 94 migration items · 150 business requests. <b>Pharma only</b> — no Crop Science / Consumer Health.</p>
+      <p class="muted"><b>Our assumptions:</b> start tiers from endorsement (certified→Certified, promoted→Team, none→Personal); teams derived from owner role + region; promotion uses our labelled synthetic per-user usage (pack has monthly totals only); KPI conflicts are definitional — the pack has no formulas.</p>
+    </div>
+  </div>
+
+  <div class="grid3">
+    <div>
+      <h2>P0 — must ship</h2>
+      <ul>
+        <li>Import pack + app tier/lease/usage layer</li>
+        <li>Tabs + Employee/Manager toggle</li>
+        <li>3 Mastra agents on one workflow with approval pause</li>
+        <li>Chat view (live step states) + simple Pipeline view</li>
+        <li>Approval inbox; reject/edit need a reason</li>
+        <li>Lifecycle engine + simulated clock</li>
+        <li>Lineage drill-down; append-only audit timeline</li>
+        <li>README / architecture note</li>
+      </ul>
+    </div>
+    <div>
+      <h2>Demo story (~3 min)</h2>
+      <ol>
+        <li>Employee browses; clicks chart → lineage</li>
+        <li>Manager chat: REQ-0001, agent clarifies</li>
+        <li>Flip to Pipeline view: agents light up</li>
+        <li>Reuse first; else build Temporary (30d)</li>
+        <li>Reject one proposal with a reason</li>
+        <li>Fast-forward 90 days: promote, review, archive, restore</li>
+        <li>Audit + before/after → pitch line</li>
+      </ol>
+    </div>
+    <div>
+      <h2>Next &amp; open</h2>
+      <table>
+        <tr><td>Next</td><td>Agree contract (step events, proposal, lineage) + lanes, then <b>T4 scaffold</b></td></tr>
+        <tr><td>Lane A</td><td>Agents + platform services + import + API</td></tr>
+        <tr><td>Lane B</td><td>UI shell, dashboard, chat/pipeline, inbox, demo video</td></tr>
+        <tr><td>Open</td><td>Embeddings provider · team mapping · IP / AI processing terms · video limit · DSO fit (ask Bayer Sat Q&amp;A)</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="box future">
+    <h2>Stretch goal (build if time remains): data-source health checks</h2>
+    <p>Scheduled <b>cron jobs</b> check every source: <b>arrival</b> (did refreshes run on schedule, missed or late?), <b>freshness</b> (is the data older than its limit?) and <b>validity</b> (schema or volume changes, quality rules, inactive owner, closed or restated periods). Health flows down the lineage so dashboards on stale data get a warning badge; unhealthy sources block certification and raise an owner proposal. Policy windows per domain — <b>finance</b> period close, <b>legal</b> retention and holds, <b>HR</b> retention / GDPR, <b>GxP</b> — with every check logged as audit evidence. <span class="muted">After P0/P1, before Sat 22:00 freeze: small version on the simulated clock using the pack's refresh and quality fields. Supports compliance with evidence; doesn't certify it.</span></p>
+  </div>
+
+  <footer>
+    <span>Decisions: D6 lineage · D7 stack · D8 UI/roles · D9 lifecycle P0 · D10 KayTee review (accepted with exceptions) · D11 P0 agents</span>
+    <span>Source of truth: docs/SCOPE.md · all data synthetic</span>
+  </footer>
+</div>
+</body>
+</html>
