@@ -1,15 +1,18 @@
 # Handoff
 
-- **Now:** final Bayer brief (DOCX/PDF) and v2.0 XLSX inspected locally. Facts,
-  hashes, schemas and caveats are in CHALLENGE and DATA_SOURCES. Raw files remain
-  outside Git. T2 doc review/intake changes are on feat/T2-scope-review-fixes.
-- **Key corrections:** Pharmaceuticals only, no Crop Science/Consumer Health.
-  360 assets, 75 models, 56 KPIs; Tableau→Power BI context. Judging weights known.
-  Synthetic data explicitly allowed. No ground-truth answers, executable KPI
-  formulas or order-level warehouse. Request text/context can conflict.
-- **Proposal:** revised SCOPE: clarify request → existing assets/KPIs/models →
-  source-cited governance/lineage evidence → human decision → local change/audit.
-  Stack, lanes and exact contract still unapproved (D2/D3/D5).
-- **Next:** Viet + KayTee review revised scope and contract, then assign app
-  tasks. No app code written. T1 remains Viet's task.
+- **Now:** T3 documentation corrections on `feat/T3-pipeline-docs`, ready for
+  independent review. No app code. T2 source intake is merged into master.
+- **Design:** one app with normal-user dashboard and manager/analyst prompting
+  workspaces; shared catalog, evidence, proposals and audit. Approval authority
+  follows owner/steward roles, not prompting access (D7; Viet confirmation pending).
+- **Lineage:** incorporates/refines unmerged `a09495b` D6. Imported assets expose
+  catalog edges; only app-computed values expose actual query provenance. No
+  internal BI chart queries or distinct users across assets/months are available.
+- **Pipeline:** clarify → retrieve → check fit/governance → reuse/extend/new-build
+  proposal → versioned approval → simulated local execution/audit. P0 new build
+  creates a build request. Expiry/silence never auto-archives. No SQL formulas
+  or live BI telemetry assumed; source and app-owned states/events stay separate.
+- **Next:** Viet/other human reviews T3 with `prompts/review-task.md` before merge,
+  confirms D6/D7 refinements, then both developers agree stack/contract and assign
+  implementation tasks. T1 remains Viet's task; D2/D3/D5 still proposed.
 - **Unknowns:** IP/redistribution/external processing terms, video limit, DSO fit.

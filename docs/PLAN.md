@@ -26,6 +26,14 @@ on it and telling the other developer before starting.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | T1 | Pick the challenge and plan it | Viet | docs/bayer-challenge | docs/ | Bayer briefing | Challenge chosen (done); scope re-checked after briefing; contract and tasks agreed | doing |
 | T2 | Resolve scope review findings in draft docs | KayTee / Codex | feat/T2-scope-review-fixes | docs/ | User requested fixes and final-source intake | Review issues resolved; final brief/workbook facts and limitations recorded; human reviews draft | review |
+| T3 | Correct pipeline diagrams in docs; define shared modes and lineage limits | KayTee / Codex | feat/T3-pipeline-docs | docs/ | User requested validation fixes and PR | Scope, requirements and architecture aligned; diff/links checked; PR ready for independent review | review |
+
+T3 incorporates and refines the unmerged D6 lineage proposal from
+`origin/docs/bayer-challenge` (`a09495b`); it does not assign or implement T1.
+How to check: `git diff --check`, inspect `git diff master...HEAD -- docs/`,
+and verify relative Markdown file links. No application/runtime checks apply.
+Viet/other human must review proposed governance/contract semantics with
+`prompts/review-task.md` before merge; this PR does not approve the contract.
 
 For bigger tasks, add details under the table:
 
