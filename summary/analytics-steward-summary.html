@@ -14,11 +14,11 @@
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; background: #e9ecef; color: var(--ink); }
-  body { font: 8.4pt/1.32 -apple-system, "Segoe UI", Inter, Helvetica, Arial, sans-serif; }
+  body { font: 8pt/1.28 -apple-system, "Segoe UI", Inter, Helvetica, Arial, sans-serif; }
   .page {
     width: 210mm; height: 297mm; margin: 10mm auto; background: #fff;
-    padding: 9mm 10mm 8mm; overflow: hidden; box-shadow: 0 2px 14px rgba(0,0,0,.12);
-    display: flex; flex-direction: column; gap: 3.2mm;
+    padding: 8mm 10mm 7mm; overflow: hidden; box-shadow: 0 2px 14px rgba(0,0,0,.12);
+    display: flex; flex-direction: column; gap: 2.6mm;
   }
   @media print { html, body { background: #fff; } .page { margin: 0; box-shadow: none; } }
   h1 { font-size: 17pt; margin: 0; letter-spacing: -.01em; }
@@ -69,7 +69,7 @@
   .wire-body > div + div { border-left: 1px dashed var(--line); }
 
   /* layers */
-  .layer { display: grid; grid-template-columns: 22mm 1fr; gap: 2mm; padding: .9mm 0; border-bottom: 1px dotted var(--line); }
+  .layer { display: grid; grid-template-columns: 13mm 1fr; gap: 1.6mm; padding: .5mm 0; border-bottom: 1px dotted var(--line); }
   .layer:last-child { border-bottom: 0; }
   .layer > b { font-size: 7.6pt; }
 
@@ -79,6 +79,8 @@
 
   .bars { display: grid; grid-template-columns: auto 1fr auto; gap: .6mm 1.6mm; align-items: center; font-size: 7.4pt; }
   .bar { height: 2.2mm; background: var(--accent); border-radius: 1px; }
+  .future { background: var(--blue-soft); border-color: #a9c4e6; }
+  .future h2 { color: var(--blue); }
   footer { margin-top: auto; font-size: 6.8pt; color: var(--muted); border-top: 1px solid var(--line); padding-top: 1.2mm;
            display: flex; justify-content: space-between; }
 </style>
@@ -112,7 +114,7 @@
         <span>Usability for business &amp; IT</span><div class="bar" style="width:50%"></div><b>15%</b>
         <span>Scalability &amp; demo quality</span><div class="bar" style="width:33%"></div><b>10%</b>
       </div>
-      <p class="muted" style="margin-top:1.2mm">Deliver: working end-to-end prototype, short demo, repo, README / architecture note (data assumptions, AI approach, governance, Power BI/Fabric path).</p>
+      <p class="muted" style="margin-top:1mm">Deliver: working prototype, short demo, repo, README / architecture note (data, AI, governance, Power BI/Fabric path).</p>
     </div>
   </div>
 
@@ -142,7 +144,6 @@
         <li><b>Conflict detector</b>: e.g. Net Sales vs Net Sales Local vs v2.</li>
         <li>Fits → reuse certified asset (usage +1).</li>
         <li>Nothing fits → approval → Temporary insight on certified KPIs only, with expiry.</li>
-        <li>Every step → audit log with evidence + lineage snapshot.</li>
       </ol>
     </div>
     <div>
@@ -170,10 +171,9 @@
     <div class="box">
       <h2>Architecture (TypeScript · D7, D11)</h2>
       <div class="layer"><b>Client</b><span>Next.js: Agentic | Dashboard tabs, inbox, lineage panel</span></div>
-      <div class="layer"><b>Agents</b><span>Mastra · <span class="tag p0">P0</span> Orchestrator, Discovery, Conflict detector · <span class="tag p1">P1</span> Builder, Lease steward</span></div>
+      <div class="layer"><b>Agents</b><span>Mastra + Claude · <span class="tag p0">P0</span> Orchestrator, Discovery, Conflict detector · <span class="tag p1">P1</span> Builder, Lease steward. LLM explains; code computes every number.</span></div>
       <div class="layer"><b>Platform</b><span>Plain TS tools: lifecycle engine, policy, semantic layer (certified KPIs), scheduler + clock, audit writer (not an agent tool)</span></div>
       <div class="layer"><b>Data</b><span>SQLite/libSQL: Bayer pack read-only + app-owned tiers, usage events, proposals, audit, archive</span></div>
-      <div class="layer"><b>Model</b><span>Claude via Mastra. LLM explains; code computes every number.</span></div>
     </div>
     <div class="box">
       <h2>Data: Bayer Pharma pack (synthetic)</h2>
@@ -217,6 +217,11 @@
         <tr><td>Open</td><td>Embeddings provider · team mapping · IP / AI processing terms · video limit · DSO fit (ask Bayer Sat Q&amp;A)</td></tr>
       </table>
     </div>
+  </div>
+
+  <div class="box future">
+    <h2>Stretch goal (build if time remains): data-source health checks</h2>
+    <p>Scheduled <b>cron jobs</b> check every source: <b>arrival</b> (did refreshes run on schedule, missed or late?), <b>freshness</b> (is the data older than its limit?) and <b>validity</b> (schema or volume changes, quality rules, inactive owner, closed or restated periods). Health flows down the lineage so dashboards on stale data get a warning badge; unhealthy sources block certification and raise an owner proposal. Policy windows per domain — <b>finance</b> period close, <b>legal</b> retention and holds, <b>HR</b> retention / GDPR, <b>GxP</b> — with every check logged as audit evidence. <span class="muted">After P0/P1, before Sat 22:00 freeze: small version on the simulated clock using the pack's refresh and quality fields. Supports compliance with evidence; doesn't certify it.</span></p>
   </div>
 
   <footer>

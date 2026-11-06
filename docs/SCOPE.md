@@ -247,6 +247,8 @@ through the lifecycle diagram); Lease steward agent with overlap
 detection for merge; portfolio before/after view; Tableau→Power BI migration
 review ("don't migrate waste"); optional SQL conflict fixture.
 
+**Stretch (if time remains):** data-source health checks (see below).
+
 **P2:** health score, audit export (CSV/JSON), cost estimates, real embeddings
 provider if keyword + simple vectors are not good enough.
 
@@ -268,6 +270,55 @@ little once the Chat view works.
 9. Catalog text and request text are data, not instructions to the agent.
 10. Never present synthetic values as actual Bayer performance.
 11. Approval follows the proposal's required approvers, not the role toggle.
+
+## Stretch goal: data-source health checks (build if time remains)
+
+Not part of P0/P1. If P0 and P1 are done before the Sat 22:00 scope freeze, we
+build the small version below. If not, it goes in the pitch and README as the
+next step.
+
+The lifecycle answers *"does this dashboard still deserve to exist?"* The next
+question is *"can we still trust the data behind it?"* Scheduled jobs (the
+Miro **Scheduler**, run as real cron jobs in production) check every data
+source and semantic model:
+
+- **Arrival consistency:** did each refresh run on its schedule? Track expected
+  vs. actual refresh times, missed or late runs, and failure streaks.
+- **Freshness:** how old is the newest data compared with the source's agreed
+  limit (e.g. daily sales must be under 36 hours old)?
+- **Validity:** is the data still fit for use? Schema changes, sudden volume
+  drops or spikes, broken quality rules, an inactive owner, or a data period
+  that has been closed or restated.
+- **Domain validity windows** (policy rules per data type, set with each team):
+  - **Finance:** numbers for a closed period are locked; restated periods are
+    flagged on every dashboard that shows them.
+  - **Legal:** retention periods and legal holds decide how long data may be
+    kept and when it must not be deleted.
+  - **HR / personal data:** retention limits and data minimisation (GDPR); data
+    past its limit is flagged for removal from analytics.
+  - **Regulated pharma (GxP):** evidence that data is complete and current
+    (ALCOA+) for reports used in regulated decisions.
+
+**How results are used:**
+
+- Each source gets a health status with the reasons behind it.
+- Status flows down the lineage graph: a dashboard built on a stale or invalid
+  source shows a warning badge, and the lineage panel shows which source caused it.
+- Unhealthy sources block promotion to Certified and raise a proposal to the
+  owner (fix, re-certify or retire). Agents still only propose; humans decide.
+- Every check result is written to the audit log, giving compliance teams
+  evidence of when data was checked and what was found.
+
+**Small version we can build here:** a scheduled check job on the simulated
+clock that reads `refresh_frequency`, `refresh_status` and the `Data_Quality`
+sheet from the Bayer pack, gives each semantic model a health status with
+reasons, and pushes a warning badge down the lineage to the dashboards that use
+it. Domain validity rules can be shown as one or two example policies (e.g. a
+finance period close). Real checks later need production inputs: Power BI /
+Fabric refresh history, freshness targets and each department's retention rules.
+
+This supports legal, finance and HR requirements with evidence. It does not
+replace legal review or certify compliance by itself.
 
 ## Out of scope
 
