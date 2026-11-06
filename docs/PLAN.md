@@ -1,7 +1,7 @@
 # Plan
 
 Status: challenge chosen (D1). Approach drafted in [SCOPE](SCOPE.md) (D2,
-proposed). Lanes and tasks wait for the Bayer briefing.
+proposed). Final brief and workbook captured; lanes and implementation tasks wait for team agreement.
 
 ## Team
 
@@ -25,6 +25,7 @@ on it and telling the other developer before starting.
 | ID | Task | Owner | Branch | Files | Depends on | Done when | State |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | T1 | Pick the challenge and plan it | Viet | docs/bayer-challenge | docs/ | Bayer briefing | Challenge chosen (done); scope re-checked after briefing; contract and tasks agreed | doing |
+| T2 | Resolve scope review findings in draft docs | KayTee / Codex | feat/T2-scope-review-fixes | docs/ | User requested fixes and final-source intake | Review issues resolved; final brief/workbook facts and limitations recorded; human reviews draft | review |
 
 For bigger tasks, add details under the table:
 
@@ -36,6 +37,13 @@ Done when: <observable result>
 How to check: <command or manual steps, expected result>
 Estimate:
 ```
+
+## Final-source intake (T2)
+
+Final DOCX/PDF and workbook inspected on 2026-11-06; see DATA_SOURCES.
+Pharmaceuticals-only scope replaces the Crop Science demo. Team must approve
+revised SCOPE and contract before assigning app work. T1 remains Viet’s task;
+this intake does not claim his planning decisions.
 
 ## Timeline
 

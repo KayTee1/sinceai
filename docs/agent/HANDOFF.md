@@ -1,12 +1,15 @@
 # Handoff
 
-Replace this note at each milestone. Keep it short.
-
-- **Now:** challenge chosen: **Bayer** (D1). Draft approach **Analytics
-  Steward** written up in `docs/SCOPE.md` (D2, proposed), with draft
-  requirements R1-R12 and a proposed stack (D3). No app code yet.
-- **Next:** short briefing with Bayer. Then Viet updates SCOPE, we agree the
-  approach, stack, lanes and interface contract, and split P0 into tasks.
-- **Open questions:** see REQUIREMENTS "Assumptions and unknowns" (synthetic
-  data OK? DSO angle? judging, tech, IP, video length).
-- **Blockers:** don't start app code until the scope is confirmed.
+- **Now:** final Bayer brief (DOCX/PDF) and v2.0 XLSX inspected locally. Facts,
+  hashes, schemas and caveats are in CHALLENGE and DATA_SOURCES. Raw files remain
+  outside Git. T2 doc review/intake changes are on feat/T2-scope-review-fixes.
+- **Key corrections:** Pharmaceuticals only, no Crop Science/Consumer Health.
+  360 assets, 75 models, 56 KPIs; Tableau→Power BI context. Judging weights known.
+  Synthetic data explicitly allowed. No ground-truth answers, executable KPI
+  formulas or order-level warehouse. Request text/context can conflict.
+- **Proposal:** revised SCOPE: clarify request → existing assets/KPIs/models →
+  source-cited governance/lineage evidence → human decision → local change/audit.
+  Stack, lanes and exact contract still unapproved (D2/D3/D5).
+- **Next:** Viet + KayTee review revised scope and contract, then assign app
+  tasks. No app code written. T1 remains Viet's task.
+- **Unknowns:** IP/redistribution/external processing terms, video limit, DSO fit.
