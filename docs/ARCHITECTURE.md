@@ -10,7 +10,8 @@ TypeScript everywhere.
 
 - **App:** Next.js (App Router) for both tabs and the API routes.
 - **Agents:** Mastra (agents, tools, one workflow with a suspend/resume step for
-  human approval). Model: Claude via Mastra's model routing.
+  human approval). P0 agents: Orchestrator, Discovery, Conflict detector;
+  Builder and Lease steward in P1 (D11). Model: Claude via Mastra's model routing.
 - **Storage:** SQLite through libSQL (Mastra supports it natively). One file.
 - **Search:** keyword + vector, in process (about 500 objects; no vector DB).
   Embeddings provider TBD.
@@ -31,8 +32,8 @@ Client (Next.js)
 API routes (simulated RBAC from the role toggle)
         |
 Agent layer (Mastra)
-  Orchestrator -> Intent parser, Discovery agent -> Conflict detector,
-  Builder agent, Lease steward
+  P0: Orchestrator (incl. intent parsing) -> Discovery agent -> Conflict detector
+  P1: Builder agent, Lease steward (P0 uses deterministic build/lease tools)
         | tool calls only
 Platform services (plain TS, deterministic)
   Lifecycle engine | Policy engine | Semantic layer | Scheduler + sim clock
@@ -63,14 +64,21 @@ scheduler, audit, lineage), `src/db/` (schema, import), `data/private/`
 4. **Asset state:** `{ assetId, tier: temporary|personal|team|certified, status: active|lease_due|archived|merged, owner, leaseEnd, ttlEnd, sourceEndorsement }`.
 5. **Lineage:** `trace_lineage(objectId, direction, depth)` → nodes (id, type,
    name, owner, tier/endorsement, refresh, AI readiness, risk flags), edges
-   (source `Lineage_Edges` rows), impact summary, and for a number the stored
-   query and source rows.
+   (source `Lineage_Edges` rows), distinct affected asset count, per-asset
+   monthly users, missing mappings and truncation. Handle cycles; deduplicate
+   nodes. Imported assets expose catalog edges only; app-computed values return
+   the actual stored query/parameters, units, filters, period, `value_type` and
+   source rows. No inferred fact-to-asset links. Snapshot stored per proposal
+   version.
 6. **Endpoints (draft):** `POST /api/runs` (start run), `GET /api/runs/:id/events`
    (stream), `GET /api/proposals`, `POST /api/proposals/:id/decision`,
    `GET /api/assets`, `GET /api/assets/:id/lineage`, `GET /api/assets/:id/audit`,
    `POST /api/usage`, `POST /api/clock/advance`, `GET /api/portfolio`.
 
-The UI lane can build against fixtures of these shapes until the backend is ready.
+Role toggle controls visibility only; approval checks the proposal's required
+approvers (owner / team lead / steward). App open events are stored apart from
+imported usage. The UI lane can build against fixtures of these shapes until
+the backend is ready.
 
 ## Configuration
 

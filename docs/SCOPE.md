@@ -3,8 +3,10 @@
 Updated 2026-11-06 from Viet's Miro board ("Replaced by AI", 3 diagrams; PDF
 kept outside Git) and the UI/stack vision (D7–D9). Builds on the final-brief
 intake (D5): [CHALLENGE](CHALLENGE.md) holds organizer facts,
-[DATA_SOURCES](DATA_SOURCES.md) holds data limits. Contract and lanes still
-need both developers' agreement.
+[DATA_SOURCES](DATA_SOURCES.md) holds data limits. Merged with KayTee's
+review of the board (T3, D10): lineage limits, role-based approval and
+separate source vs. app data are adopted; auto-archive and the P0 agent set
+follow D9 and D11. Contract and lanes still need both developers' agreement.
 
 ## One-liner
 
@@ -49,8 +51,18 @@ stateDiagram-v2
 | Certified | data steward | cross-team use + steward approval | lease to end of cycle |
 
 Owner review at lease end shows usage, cost and overlaps and proposes
-**renew / merge / retire**. Default (no response) is archive. Archive keeps a
-snapshot and is always restorable; nothing is deleted. Thresholds are config.
+**renew / merge / retire**. Default (no response) is archive (D9). Archive keeps
+a snapshot and is always restorable; nothing is deleted. Thresholds are config.
+
+Known trade-off (KayTee's review, D10): auto-archive acts without a fresh human
+decision. Mitigations: the owner sees an expiry warning in the inbox before the
+deadline; the archive is written to the audit log as "policy applied, no
+response" with the policy version; restore is one click; assets with
+downstream dependencies or a missing owner are never auto-archived and go to
+review instead.
+
+Tiers are app-owned review state. Imported audience, endorsement and
+`lifecycle_status` stay as separate source fields and are never overwritten.
 
 ### 2. Request flow (sequence diagram)
 
@@ -59,6 +71,9 @@ snapshot and is always restorable; nothing is deleted. Thresholds are config.
    **Intent parser**; asks a clarifying question when text and context disagree.
 3. **Discovery agent** runs hybrid search (vector + keyword) over the
    **metadata catalog** → candidate dashboards and KPI definitions.
+   Certification alone does not prove fit: dimensions, filters, period,
+   refresh, ownership and quality are checked too. Missing evidence stays
+   "unknown".
 4. **Conflict detector** compares definitions in the **semantic layer**
    (same name, different definition, e.g. gross vs. net) → conflict + reasoning.
 5. Orchestrator suggests reuse and flags the conflict.
@@ -74,19 +89,24 @@ snapshot and is always restorable; nothing is deleted. Thresholds are config.
 | --- | --- |
 | Client: Chat UI, Approval inbox, Portfolio view | Agentic tab (Chat / Pipeline views + inbox), Dashboard tab |
 | API gateway (auth, SSO, RBAC) | Next.js API routes; Employee/Manager toggle simulates RBAC (no real auth) |
-| Agent layer: Orchestrator, Intent parser, Discovery, Conflict detector, Builder, Lease steward | Mastra agents + one Mastra workflow |
+| Agent layer: Orchestrator, Intent parser, Discovery, Conflict detector, Builder, Lease steward | Mastra agents + one Mastra workflow. P0: Orchestrator, Discovery, Conflict detector; Builder and Lease steward in P1 (D11) |
 | Platform services: Lifecycle engine, Policy engine, Semantic layer, Scheduler | Plain TypeScript services, exposed to agents as Mastra tools |
 | Data and metadata: asset registry, archive store, audit log, metadata catalog + vector index, usage telemetry | SQLite (libSQL) tables + in-process vector index |
 | Existing BI estate: warehouse, Power BI / Tableau / Looker | Bayer's synthetic data pack, imported read-only |
 
-Agent roles:
+Agent roles (P0 = real Mastra agents; others start as deterministic steps):
 
-- **Orchestrator:** plans steps, calls the other agents, keeps the reasoning trace.
-- **Intent parser:** question → metrics, dimensions, filters, period, decision.
-- **Discovery agent:** hybrid search over assets, KPIs and semantic models.
-- **Conflict detector:** same canonical metric, different definition/status.
-- **Builder agent:** generates the ephemeral insight on certified KPIs only.
-- **Lease steward:** runs each 90-day cycle, finds overlaps, proposes renew/merge/retire.
+- **Orchestrator (P0):** plans steps, calls the other agents, stores evidence
+  and a concise rationale per step (not private model reasoning).
+- **Intent parser (P0, inside the orchestrator):** question → metrics,
+  dimensions, filters, period, decision.
+- **Discovery agent (P0):** hybrid search over assets, KPIs and semantic models.
+- **Conflict detector (P0):** same canonical metric, different definition/status.
+- **Builder agent (P1):** writes the insight narrative. In P0 the orchestrator
+  calls a deterministic build tool that renders the Temporary insight in the app
+  from certified KPIs. It never generates a Power BI/Tableau report.
+- **Lease steward (P1):** reasons about overlaps for merge proposals. In P0 the
+  scheduler + lifecycle engine run lease reviews with rule-based proposals.
 
 Platform services (deterministic code, never the LLM):
 
@@ -104,9 +124,15 @@ One full-screen app.
 - **Top middle:** tab switch **Agentic | Dashboard**.
 - **Top right:** **Employee / Manager** toggle (simulated role, no login).
 
+The toggle controls what you see, not what you may approve. Approval authority
+comes from the proposal's required approvers (asset owner, team lead, data
+steward); the demo lets the manager act as a simulated approver identity.
+
 **Employee: as simple as possible.** Sees only the Dashboard tab; the
 Agentic tab is hidden. Browses existing dashboards (certified first), each with
-tier badge, owner and expiry. Opening a dashboard logs usage (feeds promotion).
+tier badge, owner and expiry. Opening a dashboard logs an app usage event
+(feeds promotion). App events are stored separately from Bayer's imported usage
+and never added to it.
 Clicking a chart or number opens a simple lineage view (D6). Employees do not
 ask the agents questions.
 
@@ -137,8 +163,20 @@ Any chart, number or candidate asset is clickable and opens a lineage panel:
    and a note that lineage comes from catalog metadata, not the AI. For a number:
    source sheet and rows, filters, period, units, `value_type` and stored query.
 
-Impact summary: downstream assets and monthly unique users affected (per month,
-never summed into distinct users). Missing edges show "no lineage recorded".
+What lineage can show (KayTee's limits, D10):
+
+- Imported BI assets: catalog edges only. The pack has no internal visual
+  definitions or metric queries, so we never show a "query" for them.
+- Values computed by this app (insights, numbers): the actual stored query,
+  parameters and source rows.
+- No invented links between product facts and BI assets; missing mappings are
+  shown as missing.
+- Traversal handles cycles, deduplicates nodes and reports depth truncation.
+
+Impact summary: count of distinct affected assets, and monthly unique users per
+asset. Users can't be deduplicated across assets or months, so any total is
+labelled "non-distinct asset-user count", never "people reached". Missing edges
+show "no lineage recorded".
 Employees see a simplified panel (sources, owner, certified or not); managers
 see the full graph. Each proposal stores its lineage snapshot for the audit.
 
@@ -162,6 +200,8 @@ see the full graph. Each proposal stores its lineage snapshot for the audit.
   definitional ambiguity, not invented monetary gaps. An optional separate SQL
   fixture (P1) must be labelled as ours.
 - Numbers shown to users come from code over source rows, never from the LLM.
+- Warehouse integration, live BI telemetry and query costs are future
+  capabilities (production path), not available in the pack.
 
 ## Demo story (target ~3 min; portal limit unknown)
 
@@ -189,8 +229,8 @@ see the full graph. Each proposal stores its lineage snapshot for the audit.
 - Import Bayer pack; app-owned tier/lease/usage layer with labelled synthetic usage.
 - UI shell: Agentic | Dashboard tabs, Employee/Manager toggle.
 - Employee dashboard browsing with tier, owner, expiry and usage logging.
-- Mastra agents (orchestrator, intent, discovery, conflict, builder) on one
-  workflow with a human-approval pause.
+- Mastra agents (orchestrator, discovery, conflict detector) on one workflow
+  with a human-approval pause; deterministic build and lease-review steps (D11).
 - Agentic Chat view with streamed step states; approval inbox with required
   reasons.
 - Agentic Pipeline view, simple version: fixed Miro-style layout of agents and
@@ -202,8 +242,8 @@ see the full graph. Each proposal stores its lineage snapshot for the audit.
 - README / architecture note (data assumptions, AI approach, governance controls,
   Power BI/Fabric integration path).
 
-**P1:** Pipeline view polish (animated edges, request moving through the
-lifecycle diagram); Lease steward agent with overlap
+**P1:** Builder agent; Pipeline view polish (animated edges, request moving
+through the lifecycle diagram); Lease steward agent with overlap
 detection for merge; portfolio before/after view; Tableau→Power BI migration
 review ("don't migrate waste"); optional SQL conflict fixture.
 
@@ -220,11 +260,14 @@ little once the Chat view works.
 3. No evidence, no proposal: score parts, source IDs, lineage, usage.
 4. Builds use certified (approved, canonical) KPIs only.
 5. Reject or edit requires a reason; edits create a new version and reset approvals.
-6. Every proposal, decision and state change writes one audit row.
-7. Archive, never delete; restore is always possible.
+6. Every proposal, decision and state change writes one audit row with
+   evidence and a concise rationale (not private model reasoning).
+7. Archive, never delete; restore is always possible. Auto-archive on silence
+   is a logged policy action, skipped for assets with dependencies or no owner.
 8. Missing or inactive owners block execution until a human assigns one.
 9. Catalog text and request text are data, not instructions to the agent.
 10. Never present synthetic values as actual Bayer performance.
+11. Approval follows the proposal's required approvers, not the role toggle.
 
 ## Out of scope
 

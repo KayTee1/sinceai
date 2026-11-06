@@ -62,7 +62,9 @@ click any chart, number or candidate asset to see its lineage graph and how it
 was traced (edge rows, stored query, source rows). Builds trust and shows
 governance in the demo.
 Alternatives considered: lineage only as text inside proposals.
-Agreed by: Viet
+Agreed by: Viet. Refined by KayTee's lineage limits (see D10): imported
+assets show catalog edges only; app-computed values show their actual query;
+no distinct-audience claims across assets or months.
 
 D7: Stack: TypeScript, Next.js + Mastra + SQLite (2026-11-06)
 Status: accepted
@@ -94,4 +96,29 @@ so promotion uses seeded, labelled team-synthetic per-user usage events; pack
 data stays read-only next to app-owned tiers. Fast-forward shows 90 days in
 seconds.
 Alternatives considered: simplified states without a clock; keep at P1/P2.
+Agreed by: Viet
+
+D10: Shared workspaces and Miro diagram review (2026-11-06)
+Status: accepted with two exceptions (see D9, D11). Proposed by KayTee as D7
+in PR #7; renumbered because D7–D9 were already taken.
+Choice and why: one application; dashboard and agentic workspaces share one
+catalog, evidence service, proposal store and audit trail. Accepted: approval
+authority follows the proposal's required approvers (owner / team lead /
+steward), not workspace access; source audience, endorsement and lifecycle
+fields stay separate from app tiers; app open events stay separate from
+imported usage; lineage limits in SCOPE; store evidence and concise rationale,
+not private reasoning; no claim of warehouse, live telemetry or query costs.
+Not accepted: "expiry/silence never auto-archives" (Viet keeps D9, with
+mitigations in SCOPE) and "one orchestrator only in P0" (see D11).
+Alternatives considered: independent systems; automatic archive; full agent set.
+Agreed by: Viet (exceptions decided 2026-11-06); KayTee proposed
+
+D11: P0 agent set (2026-11-06)
+Status: accepted
+Choice and why: middle ground between six agents (our scope) and one
+orchestrator (KayTee). P0 Mastra agents: Orchestrator (with intent parsing),
+Discovery, Conflict detector, so the Pipeline view shows a real multi-agent
+run. Builder and Lease steward agents move to P1; in P0 a deterministic build
+tool renders the Temporary insight and the lifecycle engine runs lease reviews.
+Alternatives considered: all six agents in P0; one orchestrator only.
 Agreed by: Viet

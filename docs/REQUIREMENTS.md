@@ -13,22 +13,22 @@ pipeline + UI vision, D7–D9). Team must still agree the contract and lanes.
 | R3 | Discovery: hybrid search (keyword + vector) over assets, KPIs and models; reuse before build | W1 rule 1; Miro seq. | must | Ranked candidates with score parts and source IDs |
 | R4 | Conflict detector: same canonical metric, different definition/status; no invented formulas or monetary gaps | W1 KPI_Catalog; Miro seq. | must | Net Sales / Net Sales Local / Net Sales v2 flagged with KPI IDs and status |
 | R5 | Build path: approval to build → Builder on certified KPIs only → Temporary insight with TTL 30d and expiry shown | Miro seq.; W1 rule 2 | must | Insight cites only approved canonical KPIs; expiry date visible |
-| R6 | Lifecycle engine: Temporary → Personal → Team → Certified, 90-day lease, owner review renew/merge/retire, default archive, restore | Miro lifecycle; D9 | must | Each transition reachable in demo; archive restorable; no deletes |
+| R6 | Lifecycle engine: Temporary → Personal → Team → Certified, 90-day lease, owner review renew/merge/retire, default archive, restore | Miro lifecycle; D9 | must | Each transition reachable in demo; archive restorable; no deletes; auto-archive logged as policy action and skipped for assets with dependencies or no owner |
 | R7 | Simulated clock with fast-forward; scheduler runs TTL expiry and lease reviews | D9 | must | Fast-forward 30/90 days triggers expiry and owner review proposals |
-| R8 | Labelled synthetic per-user usage events for promotion; pack monthly usage kept separate | D9; W1 Data_Dictionary | must | Promotion uses app events; UI labels them team-synthetic; no monthly sums as distinct users |
-| R9 | Approval inbox: approve / reject / edit; reject and edit need a reason; edits reset approvals | B1 §04 human-in-the-loop | must | Reject without reason blocked; rejection leaves state unchanged |
+| R8 | Labelled synthetic per-user usage events for promotion; app open events and pack monthly usage kept separate | D9, D10; W1 Data_Dictionary | must | Promotion uses app events; UI labels them team-synthetic; imported usage never incremented; no monthly sums as distinct users |
+| R9 | Approval inbox: approve / reject / edit; reject and edit need a reason; edits reset approvals; authority from required approvers (owner / team lead / steward), not the role toggle | B1 §04 human-in-the-loop; D10 | must | Reject without reason blocked; rejection leaves state unchanged; wrong approver cannot approve |
 | R10 | Missing/inactive owner blocks execution until a human assigns one | W1 rule 3 | must | 21 blank-owner assets detected; execution blocked |
 | R11 | Append-only audit log on every proposal, decision and state change + per-asset timeline | B1 governance; SCOPE rules | must | One row per event; timeline shows actor, reason, evidence, lineage snapshot |
 | R12 | UI shell: Agentic / Dashboard tabs top middle; Employee/Manager toggle top right | D8 | must | Employee sees only Dashboard; Manager sees both |
 | R13 | Employee Dashboard: browse dashboards with tier, owner, expiry; opening logs usage | D8 | must | Opening a dashboard adds a usage event |
 | R14 | Agentic Chat view: responsive chat, each step streamed with its state and evidence | D8 | must | States running / done / waiting for approval / failed visible live |
 | R15 | Agentic Pipeline view (simple): Miro layout, nodes highlight from the same step events; switchable with Chat view | D8 | must | Switching views mid-run shows the same run state |
-| R16 | Lineage drill-down: click chart, number or asset → graph + "how it was traced"; simple for Employee, full for Manager | W1 rules 4/8; D6 | must | Edge rows and stored query shown; "no lineage recorded" when missing |
-| R17 | Agents built with Mastra; platform services are deterministic TypeScript tools; LLM never produces numbers | D7 | must | Numbers trace to code/query; agents only create proposals |
+| R16 | Lineage drill-down: click chart, number or asset → graph + "how it was traced"; simple for Employee, full for Manager | W1 rules 4/8; D6, D10 | must | Imported assets show catalog edges only; app-computed values show actual query and source rows; missing mappings explicit; cycles handled; no distinct-audience claims across assets/months; proposal stores snapshot |
+| R17 | Mastra agents for Orchestrator, Discovery and Conflict detector (P0); platform services are deterministic TypeScript tools; LLM never produces numbers | D7, D11 | must | Numbers trace to code/query; agents only create proposals |
 | R18 | README / architecture note: data assumptions, AI approach, governance controls, Power BI/Fabric path | B1 §07 | must | Note exists and matches the build |
 | R19 | Pharma only; synthetic values labelled; exclusions honoured | W1 START_HERE | must | Footer label; no Crop Science / clinical content |
 | R20 | Pipeline view polish (animated edges, request moving through lifecycle) | D8 | nice | — |
-| R21 | Lease steward agent with overlap detection for merge proposals | Miro arch. | nice | Overlapping assets proposed for merge with evidence |
+| R21 | Builder agent and Lease steward agent (overlap reasoning for merge proposals) | Miro arch.; D11 | nice | Overlapping assets proposed for merge with evidence |
 | R22 | Portfolio view with before/after counts (sprawl, tiers, leases due, conflicts, archived) | Miro client | nice | Counts reflect applied changes only |
 | R23 | Tableau→Power BI migration review ("don't migrate waste") | B1 §02; W1 rule 6 | nice | Backlog items assessed with evidence, not copied |
 | R24 | Optional separately labelled SQL conflict fixture | Team idea | nice | Not attributed to the pack |
