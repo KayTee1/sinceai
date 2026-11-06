@@ -2,9 +2,10 @@
 
 Replace this note at each milestone. Keep it short.
 
-- **Now:** repo set up, no challenge chosen, no app code.
-- **Next:** when challenge summaries open (Thu 5 Nov 15:00), run the intake
-  (`/since-ai-challenge` or `prompts/bootstrap-challenge.md`) and pick a
-  challenge before Fri 17:30.
-- **Open questions:** stack and lanes, which wait for the challenge.
+- **Now:** challenge chosen: **Bayer** (BI lifecycle / analytics reuse and
+  governance). Brief recorded in `docs/CHALLENGE.md`. No app code yet.
+- **Next:** run the build intake (`/since-ai-challenge` or
+  `prompts/bootstrap-challenge.md`): approaches, stack, lanes, plan.
+- **Open questions:** data provided, required outputs, IP terms, judging
+  criteria (all unknown; ask at Saturday Q&A).
 - **Blockers:** none.
