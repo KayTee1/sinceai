@@ -1,41 +1,50 @@
 # Requirements
 
 Organizer facts: [CHALLENGE](CHALLENGE.md). Dataset semantics:
-[DATA_SOURCES](DATA_SOURCES.md). This implementation proposal supersedes earlier
-planted-data requirements; final scope remains pending team approval.
+[DATA_SOURCES](DATA_SOURCES.md). Product scope: [SCOPE](SCOPE.md) (Miro
+pipeline + UI vision, D7–D9). Team must still agree the contract and lanes.
+
+"Must" means the demo fails without it.
 
 | ID | Requirement | Source | Must / nice | How we check it |
 | --- | --- | --- | --- | --- |
-| R1 | Import provided Pharmaceuticals estate with IDs, types and provenance | B1 §05; W1 START_HERE; proposed SCOPE | must | Sheet counts match DATA_SOURCES; blanks preserved; dates decoded |
-| R2 | Clarify conflicting intent, map canonical KPIs, recommend reuse/extend/new build with evidence | B1 §03–04; W1 rules 1–2 | must | REQ-0001 conflict surfaced; corrected intent drives candidates; no exact score target |
-| R3 | Explain KPI ambiguity with source evidence; never invent formulas or monetary gaps | W1 KPI_Catalog / Data_Dictionary | must | Source KPI IDs/status shown; unsupported numeric reconciliation blocked |
-| R4 | Versioned human approvals before simulated local change; reject/edit require reasons | B1 §06; proposed SCOPE | must | Rejection leaves state unchanged; edits reset approvals; required owners approve same version |
-| R5 | Append-only proposal, decision and execution audit with evidence references | B1 governance/oversight; proposed SCOPE | must | One event per action; timeline includes actor, rationale and evidence snapshot |
-| R6 | Evidence-backed lifecycle/migration review; archive only after approval | B1 §02; W1 rules 4/6/8 | nice | Dependencies and usage visible; candidate labels do not auto-apply |
-| R7 | Simulated clock | Team idea, SCOPE P2 | nice | Only if useful; expiry flags review, never auto-archives |
-| R8 | Optional separate SQL conflict fixture with documented definitions | Team idea, SCOPE P1 | nice | Clearly separate provenance; query/results reproducible; not claimed as pack content |
-| R9 | Promotion ladder | Team idea, SCOPE P2 | nice | Requires approval; no quarterly-distinct count from monthly sums |
-| R10 | Missing/inactive owner detection blocks changes | W1 Owners / rules 3; proposed SCOPE | must | Detect 21 blank asset owners; unresolved approvers prevent execution |
-| R11 | Portfolio before/after | Team idea, SCOPE P1 | nice | Counts reflect applied local changes, not pending proposals |
-| R12 | Health score, export and cost estimates | Team idea, SCOPE P2 | nice | Explain assumptions; no invented savings |
-| R13 | Show model trust/refresh, usage window, quality and lineage | W1 START_HERE / rules 4/5/7/8 | must | Cite model, usage and directed upstream/downstream evidence |
-| R14 | Working workflow and README/architecture note | B1 §07 | must | Demonstrate full workflow; document assumptions, AI, controls and BI integration path |
-| R15 | Use only Pharma scenario; label synthetic values and honor exclusions | W1 START_HERE | must | No cross-division/clinical demo; no actual Bayer performance claims |
-| R16 | Shared evidence/lineage panel for app-rendered charts, values and candidate assets | W1 rules 4/8; team design D6 | must | Catalog edges for imported assets; actual query/source rows for app-computed values; missing mappings explicit; no distinct audience claims across assets/months; proposal stores snapshot |
-| R17 | Dashboard and prompting workspaces share catalog, evidence, proposals and audit | KayTee design request; D7 | must | User searches an existing asset; manager clarifies a request and proposes a change; approval depends on owner/steward role, not prompting access |
+| R1 | Import Bayer pack read-only with IDs, types and provenance | B1 §05; W1 START_HERE | must | Sheet counts match DATA_SOURCES; blanks preserved; Excel dates decoded |
+| R2 | Intake: parse intent, clarify text/context conflicts, map canonical KPIs | B1 §03–04; W1 rules 1–2; Miro seq. | must | REQ-0001 conflict surfaced and asked; corrected intent drives search |
+| R3 | Discovery: hybrid search (keyword + vector) over assets, KPIs and models; reuse before build | W1 rule 1; Miro seq. | must | Ranked candidates with score parts and source IDs |
+| R4 | Conflict detector: same canonical metric, different definition/status; no invented formulas or monetary gaps | W1 KPI_Catalog; Miro seq. | must | Net Sales / Net Sales Local / Net Sales v2 flagged with KPI IDs and status |
+| R5 | Build path: approval to build → Builder on certified KPIs only → Temporary insight with TTL 30d and expiry shown | Miro seq.; W1 rule 2 | must | Insight cites only approved canonical KPIs; expiry date visible |
+| R6 | Lifecycle engine: Temporary → Personal → Team → Certified, 90-day lease, owner review renew/merge/retire, default archive, restore | Miro lifecycle; D9 | must | Each transition reachable in demo; archive restorable; no deletes; auto-archive logged as policy action and skipped for assets with dependencies or no owner |
+| R7 | Simulated clock with fast-forward; scheduler runs TTL expiry and lease reviews | D9 | must | Fast-forward 30/90 days triggers expiry and owner review proposals |
+| R8 | Labelled synthetic per-user usage events for promotion; app open events and pack monthly usage kept separate | D9, D10; W1 Data_Dictionary | must | Promotion uses app events; UI labels them team-synthetic; imported usage never incremented; no monthly sums as distinct users |
+| R9 | Approval inbox: approve / reject / edit; reject and edit need a reason; edits reset approvals; authority from required approvers (owner / team lead / steward), not the role toggle | B1 §04 human-in-the-loop; D10 | must | Reject without reason blocked; rejection leaves state unchanged; wrong approver cannot approve |
+| R10 | Missing/inactive owner blocks execution until a human assigns one | W1 rule 3 | must | 21 blank-owner assets detected; execution blocked |
+| R11 | Append-only audit log on every proposal, decision and state change + per-asset timeline | B1 governance; SCOPE rules | must | One row per event; timeline shows actor, reason, evidence, lineage snapshot |
+| R12 | UI shell: Agentic / Dashboard tabs top middle; Employee/Manager toggle top right | D8 | must | Employee sees only Dashboard; Manager sees both |
+| R13 | Employee Dashboard: browse dashboards with tier, owner, expiry; opening logs usage | D8 | must | Opening a dashboard adds a usage event |
+| R14 | Agentic Chat view: responsive chat, each step streamed with its state and evidence | D8 | must | States running / done / waiting for approval / failed visible live |
+| R15 | Agentic Pipeline view (simple): Miro layout, nodes highlight from the same step events; switchable with Chat view | D8 | must | Switching views mid-run shows the same run state |
+| R16 | Lineage drill-down: click chart, number or asset → graph + "how it was traced"; simple for Employee, full for Manager | W1 rules 4/8; D6, D10 | must | Imported assets show catalog edges only; app-computed values show actual query and source rows; missing mappings explicit; cycles handled; no distinct-audience claims across assets/months; proposal stores snapshot |
+| R17 | Mastra agents for Orchestrator, Discovery and Conflict detector (P0); platform services are deterministic TypeScript tools; LLM never produces numbers | D7, D11 | must | Numbers trace to code/query; agents only create proposals |
+| R18 | README / architecture note: data assumptions, AI approach, governance controls, Power BI/Fabric path | B1 §07 | must | Note exists and matches the build |
+| R19 | Pharma only; synthetic values labelled; exclusions honoured | W1 START_HERE | must | Footer label; no Crop Science / clinical content |
+| R20 | Pipeline view polish (animated edges, request moving through lifecycle) | D8 | nice | — |
+| R21 | Builder agent and Lease steward agent (overlap reasoning for merge proposals) | Miro arch.; D11 | nice | Overlapping assets proposed for merge with evidence |
+| R22 | Portfolio view with before/after counts (sprawl, tiers, leases due, conflicts, archived) | Miro client | nice | Counts reflect applied changes only |
+| R23 | Tableau→Power BI migration review ("don't migrate waste") | B1 §02; W1 rule 6 | nice | Backlog items assessed with evidence, not copied |
+| R24 | Optional separately labelled SQL conflict fixture | Team idea | nice | Not attributed to the pack |
+| R25 | Health score, audit export, cost estimates | Team idea | nice | Assumptions explained; no invented savings |
 
 ## Demo script
 
-See [SCOPE](SCOPE.md#pitch-and-demo): supplied request → clarification → existing
-assets/KPIs/models → governance evidence → human decision → local result/audit.
-60–90 seconds is our target; published limit remains unknown. No lifecycle
-simulation, four planted variants or numeric attribution needed for core demo.
+See [SCOPE](SCOPE.md#demo-story-target-3-min-portal-limit-unknown): employee
+browse + lineage → manager chat on REQ-0001 → pipeline view → reuse vs. build
+Temporary → reject with reason → fast-forward 90 days → audit + portfolio.
 
 ## Out of scope
 
-W1 exclusions apply: Crop Science/Consumer Health, clinical/treatment decisions,
-pharmacovigilance, patient profiling, real Bayer systems or actual performance
-claims. No live integration, production auth or certified compliance.
+Crop Science, Consumer Health, clinical/treatment decisions, pharmacovigilance,
+patient profiling, real Bayer systems, real SSO/RBAC, live BI changes,
+production scale, certified compliance.
 
 ## Unknowns
 
@@ -43,6 +52,7 @@ claims. No live integration, production auth or certified compliance.
 | --- | --- | --- |
 | IP, source redistribution, external AI processing terms | Data handling / submission | Organizers / Bayer |
 | Video limit and current portal rules | Demo / submission | Organizers |
-| Whether DSO / 90-day review adds value | Optional scope | Bayer |
-| How text/context disagreements should be resolved | Intake behavior | Bayer / user clarification |
-| Final approach, stack, action vocabulary and contract | Implementation | Viet + KayTee |
+| Whether DSO / 90-day framing resonates with Bayer | Pitch | Bayer Q&A (Sat) |
+| Embeddings provider for hybrid search (Claude has no embeddings API) | R3 | Viet + KayTee |
+| Team derivation from owner role + scope | R6, R8 | Viet + KayTee |
+| Final contract (step events, proposal JSON, endpoints) and lanes | Implementation | Viet + KayTee |

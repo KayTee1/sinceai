@@ -25,7 +25,7 @@ Alternatives considered: none recorded.
 Agreed by: pending
 
 D3: Stack (2026-11-06)
-Status: proposed
+Status: replaced by D7
 Choice and why: Python + FastAPI, SQLite or DuckDB, Claude API with tool use,
 in-memory embeddings, Next.js or Streamlit, Recharts or Plotly. Simple, one
 file of data, real SQL for the conflict explainer.
@@ -56,26 +56,69 @@ fixture later. Existing stack choices remain pending.
 Agreed by: pending for design/contract. Source facts are evidence, not a team vote.
 
 D6: Lineage drill-down in P0 (2026-11-06)
-Status: proposed refinement; Viet accepted the original, both developers to review these limits
+Status: accepted
 Choice and why: Bayer rule 4 asks for upstream/downstream lineage. Users can
-open evidence/lineage for app-rendered charts, values and candidate assets.
-Imported assets expose catalog edges; app-computed values expose their actual
-query/source rows. No internal BI visual queries or cross-asset distinct audience
-can be inferred from this pack. Builds trust and shows
+click any chart, number or candidate asset to see its lineage graph and how it
+was traced (edge rows, stored query, source rows). Builds trust and shows
 governance in the demo.
 Alternatives considered: lineage only as text inside proposals.
-Agreed by: Viet (original); refined semantics pending team review.
+Agreed by: Viet. Refined by KayTee's lineage limits (see D10): imported
+assets show catalog edges only; app-computed values show their actual query;
+no distinct-audience claims across assets or months.
 
-D7: Shared dashboard and prompting workspaces; correct diagram semantics (2026-11-06)
-Status: accepted by KayTee; Viet to confirm
-Choice and why: one application with a normal-user discovery dashboard and a
-manager/analyst prompting workspace, sharing evidence, proposals and audit.
-Role-based owners/stewards approve versioned proposals. Expiry/silence triggers
-review, not archive. P0 uses one orchestrator and deterministic tools, proposes
-reuse/extension before new work, and records a local build request rather than
-generating BI dashboards. Separate audience, endorsement and lifecycle fields;
-keep local open events separate from imported usage. See SCOPE for PDF corrections.
-Alternatives considered: independent systems, automatic archive, full builder
-and lease agents in the first slice.
-Agreed by: KayTee requested the two modes and documentation fixes; Viet pending.
-Stack and exact shared contract remain unapproved.
+D7: Stack: TypeScript, Next.js + Mastra + SQLite (2026-11-06)
+Status: accepted
+Choice and why: whole project mainly TypeScript. Next.js serves both tabs and
+the API routes; Mastra builds the agent layer (agents, tools, workflow with a
+human-approval pause); SQLite via libSQL, which Mastra supports. Claude via
+Mastra model routing. One repo, one language, quick to change.
+Alternatives considered: Python + FastAPI (D3); Vite React + separate Mastra
+server.
+Agreed by: Viet
+
+D8: UI layout and roles (2026-11-06)
+Status: accepted
+Choice and why: one full-screen app. Top middle: Agentic | Dashboard tabs. Top
+right: Employee / Manager toggle (simulated RBAC). Employee sees only the
+Dashboard and only browses (no questions to agents). Manager sees everything:
+Agentic tab with a switch between a responsive Chat view (streamed step states)
+and a visual Pipeline view of the Miro agent layer + platform services, plus the
+approval inbox and clock. Keeps the employee experience as simple as possible.
+Alternatives considered: employee ask bar; chat-only Agentic tab.
+Agreed by: Viet
+
+D9: Miro lifecycle is P0, with a simulated clock (2026-11-06)
+Status: accepted. Supersedes the P2 placement in D5.
+Choice and why: the Miro lifecycle (Temporary TTL 30d → Personal → Team →
+Certified, 90-day lease, owner review renew/merge/retire, default archive,
+restore) is the core of the pitch. Bayer's pack has only monthly usage totals,
+so promotion uses seeded, labelled team-synthetic per-user usage events; pack
+data stays read-only next to app-owned tiers. Fast-forward shows 90 days in
+seconds.
+Alternatives considered: simplified states without a clock; keep at P1/P2.
+Agreed by: Viet
+
+D10: Shared workspaces and Miro diagram review (2026-11-06)
+Status: accepted with two exceptions (see D9, D11). Proposed by KayTee as D7
+in PR #7; renumbered because D7–D9 were already taken.
+Choice and why: one application; dashboard and agentic workspaces share one
+catalog, evidence service, proposal store and audit trail. Accepted: approval
+authority follows the proposal's required approvers (owner / team lead /
+steward), not workspace access; source audience, endorsement and lifecycle
+fields stay separate from app tiers; app open events stay separate from
+imported usage; lineage limits in SCOPE; store evidence and concise rationale,
+not private reasoning; no claim of warehouse, live telemetry or query costs.
+Not accepted: "expiry/silence never auto-archives" (Viet keeps D9, with
+mitigations in SCOPE) and "one orchestrator only in P0" (see D11).
+Alternatives considered: independent systems; automatic archive; full agent set.
+Agreed by: Viet (exceptions decided 2026-11-06); KayTee proposed
+
+D11: P0 agent set (2026-11-06)
+Status: accepted
+Choice and why: middle ground between six agents (our scope) and one
+orchestrator (KayTee). P0 Mastra agents: Orchestrator (with intent parsing),
+Discovery, Conflict detector, so the Pipeline view shows a real multi-agent
+run. Builder and Lease steward agents move to P1; in P0 a deterministic build
+tool renders the Temporary insight and the lifecycle engine runs lease reviews.
+Alternatives considered: all six agents in P0; one orchestrator only.
+Agreed by: Viet

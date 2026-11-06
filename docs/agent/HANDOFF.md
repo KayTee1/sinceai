@@ -1,18 +1,16 @@
 # Handoff
 
-- **Now:** T3 documentation corrections on `feat/T3-pipeline-docs`, ready for
-  independent review. No app code. T2 source intake is merged into master.
-- **Design:** one app with normal-user dashboard and manager/analyst prompting
-  workspaces; shared catalog, evidence, proposals and audit. Approval authority
-  follows owner/steward roles, not prompting access (D7; Viet confirmation pending).
-- **Lineage:** incorporates/refines unmerged `a09495b` D6. Imported assets expose
-  catalog edges; only app-computed values expose actual query provenance. No
-  internal BI chart queries or distinct users across assets/months are available.
-- **Pipeline:** clarify → retrieve → check fit/governance → reuse/extend/new-build
-  proposal → versioned approval → simulated local execution/audit. P0 new build
-  creates a build request. Expiry/silence never auto-archives. No SQL formulas
-  or live BI telemetry assumed; source and app-owned states/events stay separate.
-- **Next:** Viet/other human reviews T3 with `prompts/review-task.md` before merge,
-  confirms D6/D7 refinements, then both developers agree stack/contract and assign
-  implementation tasks. T1 remains Viet's task; D2/D3/D5 still proposed.
-- **Unknowns:** IP/redistribution/external processing terms, video limit, DSO fit.
+- **Now:** Bayer challenge (D1). Facts in CHALLENGE / DATA_SOURCES (raw files
+  outside Git). SCOPE follows Viet's Miro board, merged with KayTee's review
+  (PR #7). No app code yet.
+- **Decisions:** lifecycle is P0 with simulated clock and auto-archive on
+  silence, logged and restorable, skipped for assets with dependencies or no
+  owner (D9). Lineage drill-down with KayTee's limits (D6, D10). Stack:
+  TypeScript, Next.js + Mastra + SQLite (D7). UI: Agentic | Dashboard tabs,
+  Employee / Manager toggle; employee only browses (D8). P0 agents:
+  Orchestrator, Discovery, Conflict detector; Builder and Lease steward in P1
+  (D11). Approvals follow required approvers, not the role toggle (D10).
+- **Next:** agree the draft contract (ARCHITECTURE) and lanes (PLAN: A =
+  agentic + platform, B = client + demo), then T4 scaffold.
+- **Open:** embeddings provider; team derivation from owners; IP / external AI
+  processing terms; video limit; whether Bayer values the DSO framing.
