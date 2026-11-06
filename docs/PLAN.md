@@ -37,12 +37,28 @@ on it and telling the other developer before starting.
 | T3 | Correct pipeline diagrams in docs; define shared modes and lineage limits | KayTee / Codex | feat/T3-pipeline-docs | docs/ | User requested validation fixes and PR | Scope, requirements and architecture aligned; diff/links checked; PR ready for independent review | done (merged #7) |
 | T10 | Resolve scope/design contradictions; 1 day = 1 s clock with god mode | KayTee / Claude Code | docs/T10-scope-contradictions | docs/, summary/ | D9, D10 | D12 recorded; SCOPE, REQUIREMENTS, ARCHITECTURE and summary agree; Viet reviews | merged (#10); D12 awaits Viet |
 | T11 | Fill lifecycle/approval gaps from the scope review | KayTee / Claude Code | docs/T11-scope-gaps | docs/, summary/ | D12 | D13 recorded; SCOPE, REQUIREMENTS, ARCHITECTURE and summary agree; Viet reviews | review |
+| T12 | Fill gaps from Codex's MVP review | KayTee / Claude Code | docs/T12-review-gaps | docs/ | D13 | D14 recorded; SCOPE, REQUIREMENTS, ARCHITECTURE agree; Viet reviews | review |
+| T13 | Team-authored test set: 6 scenarios with expected outcomes (R30) | TBD | feat/T13-test-set | docs/, tests/ | T4 | Scenarios reviewed by a human; runnable against the golden path | todo |
 | T4 | Scaffold Next.js + Mastra + SQLite; import Bayer XLSX | TBD | feat/T4-scaffold | app/, src/db/ | D7 agreed | App runs; sheet counts match DATA_SOURCES | todo |
 | T5 | Platform services: lifecycle engine, policy, semantic layer, clock/scheduler, audit, lineage | TBD (Lane A) | feat/T5-services | src/services/ | T4 | Transitions, TTL, lease review, archive/restore covered by tests | todo |
 | T6 | Mastra agents + workflow with approval pause; step event stream | TBD (Lane A) | feat/T6-agents | src/mastra/ | T4, contract | REQ-0001 run emits step events; build path creates a Temporary insight | todo |
 | T7 | UI shell: tabs, role toggle, Dashboard tab, lineage panel | TBD (Lane B) | feat/T7-shell | app/ | Contract fixtures | Employee sees only Dashboard; lineage opens on click | todo |
 | T8 | Agentic Chat view, Pipeline view, approval inbox, clock control | TBD (Lane B) | feat/T8-agentic-ui | app/ | Contract fixtures | Both views show the same run; reject needs a reason | todo |
 | T9 | README / architecture note, demo script, video | TBD | feat/T9-docs-demo | README.md, docs/ | T5–T8 | R18 met; video recorded | todo |
+
+## Build order (D14)
+
+Golden path first, end to end on `master`, before the rest of P0:
+
+1. REQ-0001: clarify the text vs. context conflict.
+2. Discovery returns reuse candidates with source IDs and coverage gaps.
+3. Conflict detector explains KPI-004 vs. KPI-005 without invented numbers.
+4. Requester confirms reuse, or a Lead approves one Temporary insight on
+   mapped KPIs.
+5. One lease review, one default archive and restore, audit trail.
+
+Then: remaining promotions, merge execution, Pipeline view, counts panel,
+lineage polish. Nothing is cut; this only sets the order.
 
 T3 (KayTee) was merged in #7 and folded into Viet's scope on
 docs/bayer-challenge: accepted parts in D10, exceptions in D9 and D11.
@@ -72,7 +88,7 @@ A proposal; adjust as we go.
 | When | Goal |
 | --- | --- |
 | Fri 17:30-22:00 | Challenge chosen, approach + contract agreed, riskiest piece proven |
-| Sat 12:00 | End-to-end slice works on `master` (ugly is fine) |
+| Sat 12:00 | Golden path (Build order) works on `master` (ugly is fine) |
 | Sat (Q&A) | Ask the company our open questions |
 | Sat 22:00 | **Scope freeze.** Only fixes and polish after this |
 | Sun 06:00-08:30 | Record and upload the demo video, write the description |

@@ -180,3 +180,35 @@ steward or requester approves builds; seeded usage only; merge to P1; restore
 to Personal; embeddings API in P0; Net Sales trio in the demo; dropping
 before/after from the demo.
 Agreed by: KayTee; Viet pending
+
+D14: Close gaps from Codex's MVP review (2026-11-06)
+Status: proposed (KayTee). Refines D13; needs Viet's agreement because it
+changes the contract (approvers, reuse step, restore, clock).
+Choice and why:
+- KPIs: the pack has no executable formulas, so a small team-authored
+  mapping turns supported approved KPIs into source columns (SCOPE, Data).
+  Other KPIs return "cannot compute from this pack".
+- Reuse: catalog metadata can't prove a dashboard answers a question, so
+  discovery returns reuse candidates with known/unknown coverage and the
+  requester confirms one (no approver). Replaces D13's silent reuse.
+- Teams: a team is an owner region (`scope`). Any active Lead in the region
+  may approve as team lead. Data steward per region; Global covers Asia
+  Pacific, which has no active steward.
+- Ownership: reassign_owner is approved by the region's data steward.
+  Promotion never changes the owner. Temporary → Personal is automatic and
+  logged.
+- Reviews: any decision closes a lease review; rejecting retire or merge
+  renews the lease, so silence can't archive it later.
+- Restore: a restored Temporary gets a fresh 30-day TTL; other tiers keep
+  D13 (previous tier, new 90-day lease).
+- Merge: executes only for an active target whose scope covers the source,
+  with the source's downstream assets redirected.
+- Clock: fast-forward processes due events in date order.
+- Counts: from applied state changes, including expiries and policy archives;
+  conflicts shown as detected vs. resolved.
+- Build order: golden path first (PLAN). Test set of 6 human-reviewed
+  scenarios as T13 (R30), labelled ours.
+Alternatives considered: one picked lead per region; silent reuse; review
+stays open after a rejection; restore Temporary as Personal; Lead reassigns
+owners; owner moves up on promotion; no build order; no test set.
+Agreed by: KayTee; Viet pending
