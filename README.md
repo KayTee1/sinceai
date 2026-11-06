@@ -2,7 +2,10 @@
 
 Team workspace for two developers (Claude Code + Codex) at the
 [Since AI Hackathon](https://sinceai.ai/hackathon), Turku, 6-8 Nov 2026.
-No challenge chosen yet, so there's no app code yet.
+We're building **Analytics Steward** for Bayer's "Build Less, Build Better"
+challenge: agents that reuse before they build and make every dashboard earn
+its next 90 days. TypeScript, Next.js + Mastra + SQLite. See
+[SCOPE](docs/SCOPE.md). No app code yet.
 
 ## Key times (EET)
 
@@ -57,6 +60,8 @@ Next: Follow prompts/next-task.md. Suggest what each developer does next.
 | --- | --- |
 | [AGENTS.md](AGENTS.md) | Rules for both agents |
 | [CHALLENGE](docs/CHALLENGE.md) | The brief, rules, judging, open questions |
+| [SCOPE](docs/SCOPE.md) | What we build: pipeline, screens, priorities |
+| [DATA_SOURCES](docs/DATA_SOURCES.md) | Bayer data pack facts and limits |
 | [REQUIREMENTS](docs/REQUIREMENTS.md) | MVP scope and the demo script |
 | [ARCHITECTURE](docs/ARCHITECTURE.md) | Stack, interface contract, run commands |
 | [PLAN](docs/PLAN.md) | Tasks, owners, timeline, submission checklist |

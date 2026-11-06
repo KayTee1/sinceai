@@ -1,7 +1,7 @@
 # Plan
 
-Status: challenge chosen (D1). Approach drafted in [SCOPE](SCOPE.md) (D2,
-proposed). Final brief and workbook captured; lanes and implementation tasks wait for team agreement.
+Status: challenge chosen (D1). Scope follows the Miro pipeline and UI vision
+(SCOPE, D7–D9). Lanes and tasks below are proposed until KayTee agrees.
 
 ## Team
 
@@ -10,8 +10,16 @@ proposed). Final brief and workbook captured; lanes and implementation tasks wai
 | Viet | Claude Code | TBD | TBD |
 | KayTee | Codex | TBD | TBD |
 
-SCOPE suggests four roles (Data, Agent, App, Pitch). With two people, a likely
-split is Data + Agent vs. App + Pitch. Not agreed yet.
+Proposed lanes (not agreed yet):
+
+- **Lane A: agentic + platform.** Mastra agents and workflow, platform
+  services (lifecycle, policy, semantic layer, scheduler/clock, audit, lineage),
+  data import, API routes.
+- **Lane B: client + demo.** Next.js shell, role toggle, Dashboard tab, Agentic
+  Chat and Pipeline views, approval inbox, lineage panel; demo script and video.
+
+Both lanes meet at the contract in ARCHITECTURE (step events, proposal,
+decision, asset state, lineage). Lane B builds on fixtures until Lane A is ready.
 
 - Merges to `master`: TBD
 - Records the demo video: TBD
@@ -25,6 +33,12 @@ on it and telling the other developer before starting.
 | ID | Task | Owner | Branch | Files | Depends on | Done when | State |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | T1 | Pick the challenge and plan it | Viet | docs/bayer-challenge | docs/ | Bayer briefing | Challenge chosen (done); scope re-checked after briefing; contract and tasks agreed | doing |
+| T3 | Scaffold Next.js + Mastra + SQLite; import Bayer XLSX | TBD | feat/T3-scaffold | app/, src/db/ | D7 agreed | App runs; sheet counts match DATA_SOURCES | todo |
+| T4 | Platform services: lifecycle engine, policy, semantic layer, clock/scheduler, audit, lineage | TBD (Lane A) | feat/T4-services | src/services/ | T3 | Transitions, TTL, lease review, archive/restore covered by tests | todo |
+| T5 | Mastra agents + workflow with approval pause; step event stream | TBD (Lane A) | feat/T5-agents | src/mastra/ | T3, contract | REQ-0001 run emits step events; build path creates a Temporary insight | todo |
+| T6 | UI shell: tabs, role toggle, Dashboard tab, lineage panel | TBD (Lane B) | feat/T6-shell | app/ | Contract fixtures | Employee sees only Dashboard; lineage opens on click | todo |
+| T7 | Agentic Chat view, Pipeline view, approval inbox, clock control | TBD (Lane B) | feat/T7-agentic-ui | app/ | Contract fixtures | Both views show the same run; reject needs a reason | todo |
+| T8 | README / architecture note, demo script, video | TBD | feat/T8-docs-demo | README.md, docs/ | T4–T7 | R18 met; video recorded | todo |
 | T2 | Resolve scope review findings in draft docs | KayTee / Codex | feat/T2-scope-review-fixes | docs/ | User requested fixes and final-source intake | Review issues resolved; final brief/workbook facts and limitations recorded; human reviews draft | review |
 
 For bigger tasks, add details under the table:

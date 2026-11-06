@@ -25,7 +25,7 @@ Alternatives considered: none recorded.
 Agreed by: pending
 
 D3: Stack (2026-11-06)
-Status: proposed
+Status: replaced by D7
 Choice and why: Python + FastAPI, SQLite or DuckDB, Claude API with tool use,
 in-memory embeddings, Next.js or Streamlit, Recharts or Plotly. Simple, one
 file of data, real SQL for the conflict explainer.
@@ -56,10 +56,42 @@ fixture later. Existing stack choices remain pending.
 Agreed by: pending for design/contract. Source facts are evidence, not a team vote.
 
 D6: Lineage drill-down in P0 (2026-11-06)
-Status: accepted by Viet; KayTee to confirm
+Status: accepted
 Choice and why: Bayer rule 4 asks for upstream/downstream lineage. Users can
 click any chart, number or candidate asset to see its lineage graph and how it
 was traced (edge rows, stored query, source rows). Builds trust and shows
 governance in the demo.
 Alternatives considered: lineage only as text inside proposals.
+Agreed by: Viet
+
+D7: Stack: TypeScript, Next.js + Mastra + SQLite (2026-11-06)
+Status: accepted
+Choice and why: whole project mainly TypeScript. Next.js serves both tabs and
+the API routes; Mastra builds the agent layer (agents, tools, workflow with a
+human-approval pause); SQLite via libSQL, which Mastra supports. Claude via
+Mastra model routing. One repo, one language, quick to change.
+Alternatives considered: Python + FastAPI (D3); Vite React + separate Mastra
+server.
+Agreed by: Viet
+
+D8: UI layout and roles (2026-11-06)
+Status: accepted
+Choice and why: one full-screen app. Top middle: Agentic | Dashboard tabs. Top
+right: Employee / Manager toggle (simulated RBAC). Employee sees only the
+Dashboard and only browses (no questions to agents). Manager sees everything:
+Agentic tab with a switch between a responsive Chat view (streamed step states)
+and a visual Pipeline view of the Miro agent layer + platform services, plus the
+approval inbox and clock. Keeps the employee experience as simple as possible.
+Alternatives considered: employee ask bar; chat-only Agentic tab.
+Agreed by: Viet
+
+D9: Miro lifecycle is P0, with a simulated clock (2026-11-06)
+Status: accepted. Supersedes the P2 placement in D5.
+Choice and why: the Miro lifecycle (Temporary TTL 30d → Personal → Team →
+Certified, 90-day lease, owner review renew/merge/retire, default archive,
+restore) is the core of the pitch. Bayer's pack has only monthly usage totals,
+so promotion uses seeded, labelled team-synthetic per-user usage events; pack
+data stays read-only next to app-owned tiers. Fast-forward shows 90 days in
+seconds.
+Alternatives considered: simplified states without a clock; keep at P1/P2.
 Agreed by: Viet
