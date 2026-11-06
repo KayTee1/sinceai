@@ -51,37 +51,46 @@ Data (SQLite)
 Suggested folders (to agree): `app/` (Next.js routes and UI), `src/mastra/`
 (agents, tools, workflow), `src/services/` (lifecycle, policy, semantic,
 scheduler, audit, lineage), `src/db/` (schema, import), `data/private/`
-(ignored; local copy of the XLSX).
+(ignored; local copy of the XLSX). The semantic layer holds the computable
+KPI mapping from SCOPE (D14).
 
 ## Contract to agree before both lanes start
 
 1. **Step events** (one stream, read by both Agentic views):
    `{ runId, step, agent, status: running|done|waiting_approval|failed, summary, evidence[], ts }`.
-   Steps: intent, clarify, discovery, conflict, propose, approve, build,
+   Steps: intent, clarify, discovery, conflict, confirm_reuse, propose, approve, build,
    register, done. The scheduler emits the same shape with `runId: "clock"`
    and `agent` set to the service (scheduler, lifecycle) for steps expire,
    lease_review, archive and restore, so the Pipeline view can light them up.
 2. **Proposal:** `{ id, version, type, assetIds[], rationale, evidence[], lineageSnapshot, requiredApprovers[], status }`.
    Types: build_temporary, promote, renew, merge, retire, restore,
-   reassign_owner. Reuse is not a proposal: it needs no approval and is logged
-   as a usage event plus an audit row (D13). Merge proposals add
+   reassign_owner. Reuse is not a proposal: the requester confirms the reuse
+   candidate (no approver) and it is logged as a usage event plus an audit
+   row (D13, D14). Merge proposals add
    `candidates[]` (same model + overlapping KPIs) and the owner's chosen
-   `targetAssetId`. Required approvers (D13): build_temporary → requester's
-   team lead; promote to Team → team lead; promote to Certified → data
-   steward; renew / merge / retire / restore → asset owner.
+   `targetAssetId`; execution requires an active target whose scope covers
+   the source and redirects the source's downstream assets. Required approvers (D13, D14): build_temporary → any active
+   Lead in the requester's region; promote to Team → any active Lead in the
+   owner's region; promote to Certified → the region's data steward; renew /
+   merge / retire / restore → asset owner; reassign_owner → the region's data
+   steward (Global steward for Asia Pacific). Temporary → Personal is
+   automatic and logged. Promotion never changes the owner. Any decision
+   closes a lease review; rejecting retire or merge renews the lease.
 3. **Decision:** `{ proposalId, version, actor, action: approve|reject|edit, reason }`.
    `actor` is the identity from the "acting as" picker; the API rejects an
    approve when `actor` is not in `requiredApprovers`.
 4. **Asset state:** `{ assetId, tier: temporary|personal|team|certified, previousTier, status: active|lease_due|archived|merged, owner, requester, leaseStart, leaseEnd, leaseSeeded, reviewDeadline, ttlEnd, sourceEndorsement }`.
    Leases are per asset: `leaseEnd = leaseStart + 90` simulated days; renew
    keeps `tier` and resets `leaseStart`. Restore sets `tier = previousTier`,
-   `status = active` and starts a new lease. Imported assets get a seeded lease
+   `status = active` and starts a new lease; a restored Temporary gets a
+   fresh 30-day `ttlEnd` instead. Imported assets get a seeded lease
    (`leaseSeeded: true`): `leaseStart` is the latest date on or before the
    clock start that equals `last_modified` + k × 90 days. `reviewDeadline =
    leaseEnd + 14` days; silence past it applies the default archive.
 5. **Clock:** `{ simDate, startDate: "2026-11-01", running, msPerDay: 1000, reviewWindowDays: 14, nextDueEvent }`. 1 simulated
    day = 1 s while running; starts paused after reset. Actions: pause, resume,
    advance by N days, advance to next due event. Forward only; no rewind.
+   Advancing processes every due event in date order.
 6. **Lineage:** `trace_lineage(objectId, direction, depth)` → nodes (id, type,
    name, owner, tier/endorsement, refresh, AI readiness, risk flags), edges
    (source `Lineage_Edges` rows), distinct affected asset count, per-asset
