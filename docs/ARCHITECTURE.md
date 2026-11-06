@@ -7,7 +7,8 @@ DATA_SOURCES and SCOPE.
 ## Proposed components
 
 - UI: request clarification, ranked candidates, governance evidence, proposals,
-  simulated human decisions and audit timeline.
+  simulated human decisions and audit timeline. Charts, numbers and candidate
+  assets are clickable and open a lineage panel (graph + "how it was traced").
 - Backend: metadata retrieval, scoring, lineage, governance, approval executor
   and automatic audit writer. Model produces explanations/proposals, not numbers.
 - Storage: SQLite or DuckDB, source import preserving workbook IDs/statuses;
@@ -21,6 +22,10 @@ DATA_SOURCES and SCOPE.
 
 ## Contract still to agree
 
+Define a lineage response for `trace_lineage(object_id, direction, depth)`:
+nodes (id, type, name, owner, endorsement, refresh/AI readiness, risk flags),
+edges (the source `Lineage_Edges` rows), impact summary and, for a chart or
+number, the stored query/parameters and source rows.
 Define request intent and conflicts, candidate score components, evidence source
 references, governance risks, proposal versions/required approvers, human
 responses and atomic local execution. Exact JSON, endpoints, supported actions,

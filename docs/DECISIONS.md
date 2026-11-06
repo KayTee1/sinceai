@@ -54,3 +54,12 @@ are known. No official ground truth, KPI formulas or 90-day requirement exists.
 Alternatives considered: retain custom generator; add a separately labelled SQL
 fixture later. Existing stack choices remain pending.
 Agreed by: pending for design/contract. Source facts are evidence, not a team vote.
+
+D6: Lineage drill-down in P0 (2026-11-06)
+Status: accepted by Viet; KayTee to confirm
+Choice and why: Bayer rule 4 asks for upstream/downstream lineage. Users can
+click any chart, number or candidate asset to see its lineage graph and how it
+was traced (edge rows, stored query, source rows). Builds trust and shows
+governance in the demo.
+Alternatives considered: lineage only as text inside proposals.
+Agreed by: Viet

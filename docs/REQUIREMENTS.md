@@ -21,6 +21,7 @@ planted-data requirements; final scope remains pending team approval.
 | R13 | Show model trust/refresh, usage window, quality and lineage | W1 START_HERE / rules 4/5/7/8 | must | Cite model, usage and directed upstream/downstream evidence |
 | R14 | Working workflow and README/architecture note | B1 §07 | must | Demonstrate full workflow; document assumptions, AI, controls and BI integration path |
 | R15 | Use only Pharma scenario; label synthetic values and honor exclusions | W1 START_HERE | must | No cross-division/clinical demo; no actual Bayer performance claims |
+| R16 | Click any chart, number or candidate asset to open its lineage view: upstream models, downstream assets, the `Lineage_Edges` rows and the query/source rows behind the value | W1 rule 4/8; team decision D6 | must | Clicking a chart in the demo shows the graph, edge rows and stored query; missing edges shown as "no lineage recorded"; same snapshot appears in the audit timeline |
 
 ## Demo script
 

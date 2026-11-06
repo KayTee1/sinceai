@@ -10,6 +10,8 @@
 - **Proposal:** revised SCOPE: clarify request → existing assets/KPIs/models →
   source-cited governance/lineage evidence → human decision → local change/audit.
   Stack, lanes and exact contract still unapproved (D2/D3/D5).
+- **Lineage (D6):** P0 now includes a clickable lineage view on every chart,
+  number and candidate asset (SCOPE "Lineage drill-down", R16).
 - **Next:** Viet + KayTee review revised scope and contract, then assign app
   tasks. No app code written. T1 remains Viet's task.
 - **Unknowns:** IP/redistribution/external processing terms, video limit, DSO fit.

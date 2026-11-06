@@ -19,7 +19,8 @@ Core demo (60–90 seconds is our target, not a published limit):
 2. Resolve product, market, period, decision and canonical KPIs; show ranked
    existing reports/models and missing capabilities.
 3. Explain ownership, endorsement, refresh/AI readiness, usage, KPI flags and
-   upstream/downstream dependencies with sheet/record references.
+   upstream/downstream dependencies with sheet/record references. The user
+   clicks a chart or number and opens its lineage view (see below).
 4. Propose reuse/extend or human review with concrete evidence. If demonstrating
    migration, explain why a legacy asset should migrate, consolidate or retire;
    a backlog candidate is not an approved answer.
@@ -36,6 +37,8 @@ Payoff: "Reuse what exists. Explain what disagrees. Keep people accountable."
 - Search existing assets and shared models before proposing new content.
 - Governance evidence: ownership, endorsement, usage window, model refresh,
   KPI approval/ambiguity, quality and upstream/downstream lineage.
+- Lineage drill-down: click any chart, number or candidate asset to see where
+  it comes from and what depends on it (see "Lineage drill-down").
 - Evidence-backed proposal, required human decision, simulated local application
   and append-only audit timeline. No external systems are modified.
 - Small team-authored scenario set with expected behaviors and source references;
@@ -69,6 +72,33 @@ query/parameters, units, filters, time window and result snapshot. Monthly uniqu
 users cannot be summed into quarterly distinct users. Actual-like and forecast-
 like values must remain distinguished. Explanations cite sheet + record IDs and
 separate source evidence, inference, uncertainty and proposed action.
+
+## Lineage drill-down (P0)
+
+Workbook rule 4: recommendations affecting important reports show upstream
+models and downstream impact. We make this visible on demand.
+
+Every chart, number and candidate asset in the UI is clickable. Clicking opens
+a lineage panel with two parts:
+
+1. **Lineage graph.** Upstream semantic models (`MODEL_TO_MODEL`) → the model
+   behind the asset (`MODEL_TO_ASSET`) → the asset → downstream assets
+   (`ASSET_TO_ASSET`). Each node shows its ID, name, owner, endorsement and,
+   for models, refresh status and AI readiness. Risky nodes (failed refresh,
+   missing/inactive owner, unapproved KPI) are highlighted.
+2. **How it was traced.** The exact `Lineage_Edges` rows used (source_id,
+   target_id, edge_type, relationship), traversal direction and depth, and a
+   note that lineage comes from catalog metadata, not from the AI. For a chart
+   or number: the source sheet and rows, filters, period, units, value_type
+   and the stored query/parameters that produced the value.
+
+Downstream impact summary: how many assets and monthly unique users would be
+affected if the asset or model changed or retired (per month, never summed into
+distinct users). Missing edges are shown as "no lineage recorded", never guessed.
+
+Lineage is traced by deterministic code (`trace_lineage`); the agent may only
+explain the returned graph. The lineage snapshot is stored with each proposal,
+so the audit timeline shows the same graph the approver saw.
 
 ## Governance and approval proposal
 
