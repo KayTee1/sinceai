@@ -1,55 +1,46 @@
 # Requirements
 
-Status: **draft** from our scope idea ([SCOPE](SCOPE.md), D2). Re-check after
-the Bayer briefing before building.
-
-Each requirement links to the brief (CHALLENGE), our scope (SCOPE) or an agreed
-decision (D#). "Must" means the demo fails without it. Everything else is "nice".
+Organizer facts: [CHALLENGE](CHALLENGE.md). Dataset semantics:
+[DATA_SOURCES](DATA_SOURCES.md). This implementation proposal supersedes earlier
+planted-data requirements; final scope remains pending team approval.
 
 | ID | Requirement | Source | Must / nice | How we check it |
 | --- | --- | --- | --- | --- |
-| R1 | Seeded synthetic dataset with all planted problems + `ground_truth.json` | SCOPE P0 | must | Same output every run; planted counts match ground truth |
-| R2 | Intake: question → Reuse / Extend / Build new with score and evidence | CHALLENGE, SCOPE F2 | must | Anna's question returns Extend at ~0.78 with reasons |
-| R3 | Metric conflict explainer on the 4 "net revenue" variants; numbers from SQL | CHALLENGE, SCOPE F3 | must | All 4 detected; gap from executed query; query text stored |
-| R4 | Proposals queue: Approve / Reject / Edit; reject and edit need a reason | CHALLENGE (human oversight), SCOPE | must | Reject without reason is blocked |
-| R5 | Append-only audit log on every proposal and decision + per-asset timeline | SCOPE F4 | must | One row per proposal/decision; timeline renders |
-| R6 | Lease review for one team: Renew / Merge / Retire with evidence; unrenewed archived | SCOPE F1, F2 | must | Cycle review lists due assets; archive sets status, never deletes |
-| R7 | Simulated clock with fast-forward | SCOPE P0 | must | Fast-forward moves date and replays usage |
-| R8 | Gap attribution per definition difference | SCOPE F3 P1 | nice | Parts add up to the total gap |
-| R9 | Promotion ladder; rising star reaches Certified with approval | SCOPE F2 P1 | nice | After fast-forward a promote proposal appears |
-| R10 | Orphan detection and owner reassignment | SCOPE F1 P1 | nice | 10 planted orphans flagged with owner proposal |
-| R11 | Portfolio view with before/after counts | SCOPE P1 | nice | Counts change after cycle review |
-| R12 | Health score breakdown, audit export, cost saved | SCOPE P2 | nice | Only if time remains |
+| R1 | Import provided Pharmaceuticals estate with IDs, types and provenance | B1 §05; W1 START_HERE; proposed SCOPE | must | Sheet counts match DATA_SOURCES; blanks preserved; dates decoded |
+| R2 | Clarify conflicting intent, map canonical KPIs, recommend reuse/extend/new build with evidence | B1 §03–04; W1 rules 1–2 | must | REQ-0001 conflict surfaced; corrected intent drives candidates; no exact score target |
+| R3 | Explain KPI ambiguity with source evidence; never invent formulas or monetary gaps | W1 KPI_Catalog / Data_Dictionary | must | Source KPI IDs/status shown; unsupported numeric reconciliation blocked |
+| R4 | Versioned human approvals before simulated local change; reject/edit require reasons | B1 §06; proposed SCOPE | must | Rejection leaves state unchanged; edits reset approvals; required owners approve same version |
+| R5 | Append-only proposal, decision and execution audit with evidence references | B1 governance/oversight; proposed SCOPE | must | One event per action; timeline includes actor, rationale and evidence snapshot |
+| R6 | Evidence-backed lifecycle/migration review; archive only after approval | B1 §02; W1 rules 4/6/8 | nice | Dependencies and usage visible; candidate labels do not auto-apply |
+| R7 | Simulated clock | Team idea, SCOPE P2 | nice | Only if useful; expiry flags review, never auto-archives |
+| R8 | Optional separate SQL conflict fixture with documented definitions | Team idea, SCOPE P1 | nice | Clearly separate provenance; query/results reproducible; not claimed as pack content |
+| R9 | Promotion ladder | Team idea, SCOPE P2 | nice | Requires approval; no quarterly-distinct count from monthly sums |
+| R10 | Missing/inactive owner detection blocks changes | W1 Owners / rules 3; proposed SCOPE | must | Detect 21 blank asset owners; unresolved approvers prevent execution |
+| R11 | Portfolio before/after | Team idea, SCOPE P1 | nice | Counts reflect applied local changes, not pending proposals |
+| R12 | Health score, export and cost estimates | Team idea, SCOPE P2 | nice | Explain assumptions; no invented savings |
+| R13 | Show model trust/refresh, usage window, quality and lineage | W1 START_HERE / rules 4/5/7/8 | must | Cite model, usage and directed upstream/downstream evidence |
+| R14 | Working workflow and README/architecture note | B1 §07 | must | Demonstrate full workflow; document assumptions, AI, controls and BI integration path |
+| R15 | Use only Pharma scenario; label synthetic values and honor exclusions | W1 START_HERE | must | No cross-division/clinical demo; no actual Bayer performance claims |
 
 ## Demo script
 
-Target 5 minutes per SCOPE; the submission video may need to be shorter
-(unknown). Full beats in [SCOPE](SCOPE.md#demo-script-5-minutes).
-
-1. The pain: portfolio view, 4 revenue definitions, zombie share.
-2. Anna asks; agent asks which decision it supports.
-3. Reuse first: Extend over Build new, with score and evidence.
-4. Conflict explainer: two numbers, the gap, the causes, the proposal.
-5. Presenter rejects a proposal with a reason; it lands in the audit log.
-6. Fast-forward 90 days: rising star promoted; cycle review renew / merge / retire.
-7. Audit timeline for one asset.
-8. Before/after numbers; "Every dashboard must earn its next 90 days."
+See [SCOPE](SCOPE.md#pitch-and-demo): supplied request → clarification → existing
+assets/KPIs/models → governance evidence → human decision → local result/audit.
+60–90 seconds is our target; published limit remains unknown. No lifecycle
+simulation, four planted variants or numeric attribution needed for core demo.
 
 ## Out of scope
 
-- Real Bayer data or systems; all data is synthetic and labelled as such.
-- Real BI tools (we draw simple charts ourselves).
-- Login, SSO, permissions.
-- Production scale and performance.
-- Real compliance certification (we show ALCOA+ / EU AI Act principles only).
+W1 exclusions apply: Crop Science/Consumer Health, clinical/treatment decisions,
+pharmacovigilance, patient profiling, real Bayer systems or actual performance
+claims. No live integration, production auth or certified compliance.
 
-## Assumptions and unknowns
+## Unknowns
 
-| Assumption / unknown | Affects | Who resolves it |
+| Unknown | Affects | Who resolves it |
 | --- | --- | --- |
-| Synthetic data is acceptable (no Bayer data provided) | R1, whole demo | Bayer briefing |
-| Bayer cares about DSO / 90-day cycle fit | F1 pitch angle | Bayer briefing |
-| Required outputs and judging criteria | Priorities | Bayer briefing / organizers |
-| Required or preferred tech (e.g. their BI stack) | Stack | Bayer briefing |
-| IP terms | Submission | Organizers |
-| Video length limit | Demo script | Organizers |
+| IP, source redistribution, external AI processing terms | Data handling / submission | Organizers / Bayer |
+| Video limit and current portal rules | Demo / submission | Organizers |
+| Whether DSO / 90-day review adds value | Optional scope | Bayer |
+| How text/context disagreements should be resolved | Intake behavior | Bayer / user clarification |
+| Final approach, stack, action vocabulary and contract | Implementation | Viet + KayTee |

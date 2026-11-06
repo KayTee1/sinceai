@@ -1,58 +1,44 @@
 # Architecture
 
-Status: **proposed** (D3), from [SCOPE](SCOPE.md#architecture-and-agent-tools).
-Not agreed yet. Keep it as simple as the demo allows.
+Status: proposed (D3/D5). No interface contract approved. Final challenge facts
+and source schema override previous draft assumptions: see CHALLENGE,
+DATA_SOURCES and SCOPE.
 
-## Overview
+## Proposed components
 
-- Stack: Python + FastAPI backend; Next.js (or Streamlit if short on time)
-  frontend; Recharts or Plotly for charts.
-- Components:
-  - Frontend: intake chat, proposals queue, cycle review, audit timeline, portfolio view.
-  - Backend API: one endpoint per screen action.
-  - Agent (Claude + tools): clarifies, calls tools, explains, writes proposals only.
-  - Deterministic services: Matcher, Conflict engine, Lifecycle engine (tiers,
-    leases, sim clock), Audit writer (called by the backend, not the agent).
-  - Storage: metadata store + `sales_orders` warehouse.
-- AI model/provider and why: Claude API with tool use; tool calls map to the
-  services. The LLM never produces numbers.
-- Data storage: one SQLite or DuckDB file; embeddings in memory.
-- Deployment: unknown (localhost for the video, or a public URL?).
+- UI: request clarification, ranked candidates, governance evidence, proposals,
+  simulated human decisions and audit timeline.
+- Backend: metadata retrieval, scoring, lineage, governance, approval executor
+  and automatic audit writer. Model produces explanations/proposals, not numbers.
+- Storage: SQLite or DuckDB, source import preserving workbook IDs/statuses;
+  separate app-owned proposals, approvals, audit and local overlays.
+- Agent: Claude tool use proposed; provider/model and external processing terms
+  not confirmed. Stack: Python/FastAPI with Next.js or Streamlit, not chosen.
+- Data: provided XLSX, no order-level warehouse or executable metric formulas.
+  Raw files stay outside Git; local copies, if needed, go in ignored data/private/.
+- Production path: approved catalog, Power BI/Fabric usage/lineage/model APIs
+  replacing synthetic inputs. No live integration required for prototype.
 
-Agent tools, data model and exact enums: see [SCOPE](SCOPE.md#data-model).
-Keep table names and enums exactly as written there.
+## Contract still to agree
 
-## Interface contract
+Define request intent and conflicts, candidate score components, evidence source
+references, governance risks, proposal versions/required approvers, human
+responses and atomic local execution. Exact JSON, endpoints, supported actions,
+source→app mappings and shared fixture remain TBD by both developers.
 
-Agree on this before both developers start, so the lanes can work in parallel
-(e.g. the UI uses mock responses until the backend is ready). Changing it
-needs both developers to agree.
+Source endorsement, lifecycle labels and migration candidates remain distinct;
+there are no official evaluation labels. Use app-owned decision states rather
+than overwriting imported evidence. Missing/inactive approvers block execution;
+edits require fresh approval. Expiry never auto-archives. See SCOPE for proposed
+semantics; do not treat them as organizer mandates or a frozen API.
 
-```text
-TBD after the briefing: endpoints with example input/output JSON.
-Starting point: the agent tools in SCOPE (search_assets, get_asset, get_metric,
-compare_metrics, run_metric, attribute_gap, get_usage, list_lease_due,
-create_proposal) and the enums in SCOPE's data model.
-```
+## Configuration and run commands
 
-Mock/fixture data lives in: TBD
+TBD after stack approval. Keys belong in ignored .env; only names go in docs.
+No install/run/test commands have been verified because no app exists yet.
 
-## Configuration
+## Demo reset and fallback
 
-Environment variable names only (values go in `.env`, never in Git):
-
-- TBD
-
-## Run commands
-
-Exact, tested commands only.
-
-```sh
-# install:
-# run:
-# test:
-```
-
-## Demo setup
-
-How to reset and run the demo, plus a fallback if an external service fails.
+Proposed: reload immutable source snapshot, clear local decisions/overrides and
+replay a fixed scenario. Distinguish live model explanations from saved fallback
+output. Need to agree implementation and document tested commands later.

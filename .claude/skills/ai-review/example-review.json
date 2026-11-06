@@ -1,0 +1,53 @@
+{
+  "title": "Document upload and extraction",
+  "slug": "feat-T3-upload",
+  "type": "feature",
+  "task": "T3",
+  "branch": "feat/T3-upload",
+  "reviewer": "Claude Code (claude-opus-5-5)",
+  "self_review": false,
+  "date": "2026-11-07T14:30:00+02:00",
+  "verdict": "changes_needed",
+  "summary": "Uploading a PDF and getting the fields back works. Two things need fixing first: a slow AI response crashes the request, and an empty PDF causes an error.",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "high",
+      "file": "api/extract.py",
+      "line": 42,
+      "title": "AI call can hang or crash the request",
+      "problem": "The model is called without a timeout, and its errors aren't caught.",
+      "impact": "If the AI service is slow or busy during the demo, the upload spins forever and then shows an error.",
+      "fix": "Add a 30-second timeout, catch errors, and return a friendly message the UI can show."
+    },
+    {
+      "id": "F2",
+      "severity": "medium",
+      "file": "api/upload.py",
+      "line": 18,
+      "title": "Empty PDF causes an error",
+      "problem": "The code reads the first page without checking that the PDF has any text.",
+      "impact": "Uploading a scanned or empty PDF crashes with a server error.",
+      "fix": "Return 'No readable text in this PDF' when nothing is extracted."
+    },
+    {
+      "id": "F3",
+      "severity": "low",
+      "file": "api/extract.py",
+      "line": 3,
+      "title": "Unused imports",
+      "problem": "Two imports are never used.",
+      "impact": "The linter fails; no effect on the app.",
+      "fix": "Remove the unused imports."
+    }
+  ],
+  "checks": [
+    { "command": "pytest -q", "result": "pass", "notes": "8 tests passed" },
+    { "command": "ruff check .", "result": "fail", "notes": "2 unused imports (F3)" },
+    { "command": "npm run build", "result": "not_run", "notes": "Frontend not changed" }
+  ],
+  "next_steps": [
+    "Fix F1 and F2, then ask for another review",
+    "Add a scanned PDF to the demo samples"
+  ]
+}
