@@ -1,5 +1,10 @@
 # Handoff
 
+- **D22 my team's dashboards (`feat/my-team-dashboards`):** employee picks or
+  inherits a team (domain + region from the viewing-as person) and sees the
+  real catalog dashboards for it; each opens as a wallboard built from its
+  KPI domain and scope (`wallboard.tsx`, `my-dashboards.tsx`). Views land on
+  real assets and feed D21. DSH-* boards removed (D20 superseded).
 - **Now:** master has T14 (#14), T15 (#15), DB-path fix (#16), T5 lifecycle
   (#17), T8 lifecycle UI (#19), usage counts / D17 (#20), T17 build step
   (#21), the F1 demo request / D18 (#22), T18 data separation / D19 + D20

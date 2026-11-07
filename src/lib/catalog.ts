@@ -70,14 +70,15 @@ async function loadEstate() {
       kpi_name: string;
       usage_role: string;
       canonical_metric: string;
+      domain: string;
       definition_status: string;
       approval_status: string;
     }>(`
-      SELECT m.asset_id, m.kpi_id, k.kpi_name, m.usage_role, k.canonical_metric, k.definition_status, k.approval_status
+      SELECT m.asset_id, m.kpi_id, k.kpi_name, m.usage_role, k.canonical_metric, k.domain, k.definition_status, k.approval_status
       FROM Asset_KPI_Map m JOIN KPI_Catalog k ON k.kpi_id = m.kpi_id
       ORDER BY m.asset_id, m.usage_role, m.kpi_id`),
-    rows<{ id: string; name: string; canonicalMetric: string; definitionStatus: string; approvalStatus: string }>(`
-      SELECT kpi_id AS id, kpi_name AS name, canonical_metric AS canonicalMetric,
+    rows<{ id: string; name: string; canonicalMetric: string; domain: string; definitionStatus: string; approvalStatus: string }>(`
+      SELECT kpi_id AS id, kpi_name AS name, canonical_metric AS canonicalMetric, domain,
              definition_status AS definitionStatus, approval_status AS approvalStatus
       FROM KPI_Catalog ORDER BY kpi_id`),
     rows<{
@@ -120,6 +121,7 @@ async function loadEstate() {
       name: k.kpi_name,
       role: k.usage_role,
       canonicalMetric: k.canonical_metric,
+      domain: k.domain,
       definitionStatus: k.definition_status,
       approvalStatus: k.approval_status,
     }),
@@ -214,6 +216,13 @@ export async function getDashboardData(): Promise<DashboardData> {
     ],
   );
 
+  const regionOf = new Map(markets.map((m) => [m.id, m.region]));
+  // D22: an asset's team is the most common domain among its primary KPIs.
+  const primaryDomain = (list: AssetKpi[]) => {
+    const n = new Map<string, number>();
+    for (const k of list.filter((x) => x.role === "primary")) n.set(k.domain, (n.get(k.domain) ?? 0) + 1);
+    return [...n.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))[0]?.[0] ?? null;
+  };
   const assets: AssetSummary[] = assetRows.map((a) => {
     const state = states.get(a.asset_id);
     return {
@@ -238,6 +247,8 @@ export async function getDashboardData(): Promise<DashboardData> {
       estimatedAudience: a.estimated_audience === null ? null : Number(a.estimated_audience),
       kpis: kpis.get(a.asset_id) ?? [],
       signals: assetSignals.get(a.asset_id) ?? [],
+      domain: primaryDomain(kpis.get(a.asset_id) ?? []),
+      region: a.market_scope === "Global" ? "Global" : (regionOf.get(a.market_scope) ?? a.market_scope),
     };
   });
   assets.sort((x, y) => TIER_ORDER[x.tier] - TIER_ORDER[y.tier] || x.name.localeCompare(y.name));
@@ -275,10 +286,13 @@ export async function getDashboardData(): Promise<DashboardData> {
           name: r.kpiName ?? r.kpiId,
           role: "primary",
           canonicalMetric: r.kpiName ?? r.kpiId,
+          domain: "Commercial",
           definitionStatus: "canonical",
           approvalStatus: "approved",
         })),
         signals: [],
+        domain: null,
+        region: i.scope.market,
       },
     ];
   });
