@@ -303,3 +303,22 @@ Alternatives considered: two views (catalog + overview on one page);
 employees see business performance only.
 Agreed by: Viet
 
+D20: Employees see simple team dashboards; managers judge them by views (2026-11-07)
+Status: accepted. Changes D8 (employees no longer browse the asset catalog);
+refines D19.
+Choice and why: employees want to glance at a board and understand the data,
+like the wallboard in the Bayer briefing, not read catalog metadata. Employees
+now see only four team dashboards (Commercial, Market Access, Supply Chain,
+Launch Excellence, matching the KPI catalog domains), built on the business
+facts as wallboards: big KPI tiles (status tiles coloured and labelled) and a
+2x2 chart grid, actual-like rows only, coverage never averaged (D15). The
+boards are app assets (origin "team", Certified, owned by the Global Lead of
+that team, 90-day lease from the clock start). Each employee board open logs
+one usage event; managers see views, distinct viewers, last 30 days and last
+viewed on each board, and the boards' lease reviews use these in-app views as
+evidence for renew or retire. The analytics catalog and estate overview are
+manager-only.
+Alternatives considered: keep the catalog for employees (D8); employees see
+business performance and catalog side by side (D19 as first built).
+Agreed by: Viet
+

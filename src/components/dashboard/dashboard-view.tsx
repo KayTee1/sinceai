@@ -6,7 +6,7 @@ import { int, leaseLabel } from "@/lib/format";
 import { TierBadge } from "./tier-badge";
 import { useLifecycle } from "../lifecycle/lifecycle-context";
 import { AssetDetail } from "./asset-detail";
-import { BusinessView } from "./business-view";
+import { TeamBoards } from "./team-boards";
 import { EstateOverview } from "./estate-overview";
 
 const FILTERS: { id: Tier | "all"; label: string }[] = [
@@ -16,19 +16,18 @@ const FILTERS: { id: Tier | "all"; label: string }[] = [
   { id: "personal", label: "Personal" },
 ];
 
-type Section = "business" | "catalog" | "overview";
+type Section = "teams" | "catalog" | "overview";
 
-// Dashboard tab: business performance (pack facts) is kept apart from the
-// analytics estate (metadata about reports, models, KPIs, usage, governance).
+// Dashboard tab (D20). Employees see only the team dashboards: simple boards on
+// the business facts. Managers also get the analytics catalog (metadata about
+// existing reports) and the estate overview; the two sources are never mixed (D19).
 export function DashboardView({ data, role }: { data: DashboardData; role: Role }) {
-  const [section, setSection] = useState<Section>("business");
-  const active: Section = section === "overview" && role !== "manager" ? "business" : section;
+  const [section, setSection] = useState<Section>("teams");
+  if (role === "employee") return <TeamBoards data={data} role={role} />;
   const sections: { id: Section; label: string; note: string }[] = [
-    { id: "business", label: "Business performance", note: "sales, access, supply, launch" },
+    { id: "teams", label: "Team dashboards", note: "what employees see, with views" },
     { id: "catalog", label: "Analytics catalog", note: "existing reports and dashboards" },
-    ...(role === "manager"
-      ? [{ id: "overview" as const, label: "Estate overview", note: "usage, duplication, governance" }]
-      : []),
+    { id: "overview", label: "Estate overview", note: "usage, duplication, governance" },
   ];
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -42,7 +41,7 @@ export function DashboardView({ data, role }: { data: DashboardData; role: Role 
             type="button"
             onClick={() => setSection(s.id)}
             className={`-mb-px border-b-2 px-3 pb-2 pt-1 text-left ${
-              active === s.id ? "border-blue text-ink" : "border-transparent text-ink-3 hover:text-ink"
+              section === s.id ? "border-blue text-ink" : "border-transparent text-ink-3 hover:text-ink"
             }`}
           >
             <div className="text-sm font-semibold">{s.label}</div>
@@ -50,11 +49,11 @@ export function DashboardView({ data, role }: { data: DashboardData; role: Role 
           </button>
         ))}
       </nav>
-      {role === "manager" && active !== "business" && <BeforeAfter />}
+      {section !== "teams" && <BeforeAfter />}
       <div className="min-h-0 flex-1">
-        {active === "business" && <BusinessView data={data} built={data.assets.filter((a) => a.origin === "app")} />}
-        {active === "catalog" && <CatalogView data={data} role={role} />}
-        {active === "overview" && (
+        {section === "teams" && <TeamBoards data={data} role={role} />}
+        {section === "catalog" && <CatalogView data={data} role={role} />}
+        {section === "overview" && (
           <div className="h-full overflow-y-auto">
             <EstateOverview data={data} />
           </div>

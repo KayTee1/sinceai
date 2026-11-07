@@ -1,9 +1,11 @@
 # Handoff
 
-- **D19 data separation (`feat/T18-data-separation`):** Dashboard tab =
-  Business performance (pack facts; 4 boards + built insights; product /
-  market filters; actual-like vs forecast-like toggle) | Analytics catalog
-  (metadata-only asset pages) | Estate overview (Manager). Loader in
+- **D19 + D20 (`feat/T18-data-separation`, PR #23):** Employees see only
+  team dashboards (Commercial, Market Access, Supply Chain, Launch wallboards
+  on the business facts + built insights). Managers: Team dashboards (with
+  views / viewers / last 30 days per board) | Analytics catalog
+  (metadata-only asset pages) | Estate overview. Team boards are lifecycle
+  assets (`origin = 'team'`, `DSH-*`), seeded insert-or-ignore. Loader in
   `src/lib/catalog.ts` keeps `estate` and `business` apart.
 - **T17 build step (Viet / Claude, merged #21):**
   `src/services/build` turns an analysis that recommends a build into a

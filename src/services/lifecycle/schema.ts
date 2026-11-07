@@ -1,7 +1,8 @@
 // App-owned lifecycle tables. Imported pack tables are never written; these
 // live next to them in the same SQLite file and can be reset for the demo.
 import type { Client } from "@libsql/client";
-import { CLOCK_START, LEASE_DAYS, POLICY_VERSION, TTL_DAYS, seededLeaseEnd } from "./policy";
+import { CLOCK_START, LEASE_DAYS, POLICY_VERSION, TTL_DAYS, addDays, seededLeaseEnd } from "./policy";
+import { TEAM_DASHBOARDS } from "./team-dashboards";
 import type { Tier } from "./types";
 
 const APP_TABLES = [
@@ -65,6 +66,7 @@ export async function ensureLifecycle(db: Client, nowMs = Date.now()): Promise<v
   if (await hasLifecycle(db)) {
     // Already seeded: only add tables introduced since (all CREATE IF NOT EXISTS).
     await db.batch(DDL, "write");
+    await seedTeamDashboards(db);
     return;
   }
   await seed(db, nowMs);
@@ -74,6 +76,23 @@ export async function ensureLifecycle(db: Client, nowMs = Date.now()): Promise<v
 export async function resetLifecycle(db: Client, nowMs = Date.now()): Promise<void> {
   await db.batch(APP_TABLES.map((t) => `DROP TABLE IF EXISTS ${t}`), "write");
   await seed(db, nowMs);
+}
+
+// D20: team dashboards are app assets (origin "team") with a 90-day lease from
+// the clock start, owned by the Global Lead for that team. Insert-or-ignore,
+// so existing databases pick them up without a reset.
+async function seedTeamDashboards(db: Client) {
+  for (const t of TEAM_DASHBOARDS) {
+    const owner = await db.execute({
+      sql: `SELECT owner_id FROM Owners WHERE role = ? AND status = 'active' ORDER BY (scope = 'Global') DESC, owner_id LIMIT 1`,
+      args: [t.ownerRole],
+    });
+    await db.execute({
+      sql: `INSERT OR IGNORE INTO asset_state (asset_id, origin, name, owner_id, tier, status, lease_end, source_endorsement)
+            VALUES (?, 'team', ?, ?, 'certified', 'active', ?, 'certified')`,
+      args: [t.id, t.title, (owner.rows[0]?.owner_id as string | undefined) ?? null, addDays(CLOCK_START, LEASE_DAYS)],
+    });
+  }
 }
 
 async function seed(db: Client, nowMs: number) {
@@ -109,4 +128,5 @@ async function seed(db: Client, nowMs: number) {
     ],
     "write",
   );
+  await seedTeamDashboards(db);
 }

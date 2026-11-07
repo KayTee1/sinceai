@@ -52,6 +52,8 @@ export type LifecycleSnapshot = {
   leaseDue: number;
   pending: PendingProposal[];
   people: Record<string, Person>;
+  appUsage: Record<string, { opens: number; viewers: number; last30: number; lastOpened: string }>;
+  boards: Record<string, { tier: string; status: string; leaseEnd: string | null; ownerId: string | null }>;
   portfolio: {
     before: PortfolioCounts;
     now: PortfolioCounts;
