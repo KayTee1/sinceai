@@ -1,7 +1,7 @@
 "use client";
 
 // T24 (B4): small presentational parts of the Scheduler tab.
-import { useState } from "react";
+import { useId, useState } from "react";
 import type { Finding, SchedulerRun } from "@/services/scheduler/types";
 import {
   assessmentsOf,
@@ -34,7 +34,11 @@ export function StatusPill({ status }: { status: string }) {
 }
 
 export function Notice({ tone, children }: { tone: Tone; children: React.ReactNode }) {
-  return <div className={`rounded-sm px-3 py-2 text-xs ${TONE[tone]}`}>{children}</div>;
+  return (
+    <div role={tone === "bad" ? "alert" : "status"} className={`rounded-sm px-3 py-2 text-xs ${TONE[tone]}`}>
+      {children}
+    </div>
+  );
 }
 
 function Rows({ rows }: { rows: { label: string; value: React.ReactNode }[] }) {
@@ -67,9 +71,14 @@ function ReasonForm({
   const [reason, setReason] = useState("");
   const [touched, setTouched] = useState(false);
   const problem = validateReason(reason);
+  const errorId = useId();
+  const showProblem = touched && !!problem;
   return (
     <div className="mt-2 space-y-1.5">
       <textarea
+        aria-label={placeholder}
+        aria-invalid={showProblem}
+        aria-describedby={showProblem ? errorId : undefined}
         value={reason}
         onChange={(e) => setReason(e.target.value)}
         rows={2}
@@ -77,7 +86,11 @@ function ReasonForm({
         placeholder={placeholder}
         className="w-full resize-none rounded-sm border border-line-strong px-2 py-1.5 text-xs focus:border-blue focus:outline-none"
       />
-      {touched && problem && <p className="text-danger">{problem}</p>}
+      {showProblem && (
+        <p id={errorId} role="alert" className="text-danger">
+          {problem}
+        </p>
+      )}
       <div className="flex justify-end gap-1.5">
         <button type="button" onClick={onCancel} className="px-2 py-1 text-ink-3 hover:text-ink">
           Cancel
@@ -393,8 +406,8 @@ export function FindingCard({
           />
         ) : (
           <div className="mt-2 flex items-center justify-end gap-1.5">
-            <span className="mr-auto text-ink-3" title="Finding-to-proposal is a later branch (B3); not wired here">
-              Proposal from finding: not available yet
+            <span className="mr-auto text-ink-3">
+              Raising a proposal from a finding is switched off until the merge approver fix is reviewed.
             </span>
             <button
               type="button"

@@ -6,7 +6,7 @@
 // abandon actions. Actions are sent as the demo "manager" identity, which the
 // server accepts only with SCHEDULER_DEMO_ACTIONS=1: attribution, not
 // authentication. Approving or rejecting a proposal stays in the Inbox.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Finding, SchedulerRun } from "@/services/scheduler/types";
 import { useLifecycle } from "../lifecycle/lifecycle-context";
 import {
@@ -38,8 +38,13 @@ export function SchedulerView() {
   const [inFlight, setInFlight] = useState<string | null>(null);
   const [flash, setFlash] = useState<Flash>(null);
 
+  // Only the newest load may write state: an older response (e.g. for the
+  // previous status filter) that lands later is dropped.
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     const [o, r, f] = await Promise.all([api.overview(), api.runs(20), api.findings(statusFilter)]);
+    if (seq !== loadSeq.current) return;
     const firstError = [o, r, f].find((x): x is Extract<ApiResult<unknown>, { ok: false }> => !x.ok);
     setLoadError(firstError ? firstError.message : null);
     if (o.ok) setOverview(o.data);
@@ -109,11 +114,15 @@ export function SchedulerView() {
           Scheduled checks over the estate. Findings are observations, not decisions; approve or reject proposals in the
           Inbox. Actions are sent as the demo &ldquo;manager&rdquo; identity (attribution, not authentication).
         </p>
-        <div className="flex flex-wrap gap-1">
+        <div role="tablist" aria-label="Scheduler sections" className="flex flex-wrap gap-1">
           {(["jobs", "findings", "runs"] as Section[]).map((s) => (
             <button
               key={s}
               type="button"
+              role="tab"
+              id={`scheduler-tab-${s}`}
+              aria-selected={section === s}
+              aria-controls="scheduler-panel"
               onClick={() => setSection(s)}
               className={`rounded-sm px-2 py-1 text-xs font-medium ${section === s ? "bg-navy text-white" : "text-ink-2 hover:bg-canvas"}`}
             >
@@ -129,7 +138,12 @@ export function SchedulerView() {
         {loadError && <Notice tone="bad">{loadError}</Notice>}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto bg-canvas p-3">
+      <div
+        id="scheduler-panel"
+        role="tabpanel"
+        aria-labelledby={`scheduler-tab-${section}`}
+        className="min-h-0 flex-1 overflow-y-auto bg-canvas p-3"
+      >
         {loading && !overview ? (
           <p className="p-4 text-center text-xs text-ink-3">Loading scheduler…</p>
         ) : section === "jobs" ? (
@@ -154,12 +168,13 @@ export function SchedulerView() {
           )
         ) : section === "findings" ? (
           <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-1 text-xs">
+            <div role="group" aria-label="Filter findings by status" className="flex flex-wrap items-center gap-1 text-xs">
               <span className="text-ink-3">Status:</span>
               {options.map((s) => (
                 <button
                   key={s}
                   type="button"
+                  aria-pressed={statusFilter === s}
                   onClick={() => setStatusFilter(s)}
                   className={`rounded-sm px-2 py-0.5 font-medium capitalize ${
                     statusFilter === s ? "bg-navy text-white" : "text-ink-2 hover:bg-surface"

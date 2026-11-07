@@ -66,11 +66,15 @@ function AgenticLayout() {
       <aside
         className={`flex shrink-0 flex-col border-l border-line bg-surface ${side === "inbox" ? "w-[380px]" : "w-[46%] min-w-[420px]"}`}
       >
-        <div className="flex shrink-0 gap-1 border-b border-line px-3 py-2">
+        <div role="tablist" aria-label="Agentic side panel" className="flex shrink-0 gap-1 border-b border-line px-3 py-2">
           {AGENTIC_SIDE_TABS.map((s) => (
             <button
               key={s}
               type="button"
+              role="tab"
+              id={`agentic-side-${s}`}
+              aria-selected={side === s}
+              aria-controls="agentic-side-panel"
               onClick={() => setSide(s)}
               className={`rounded-sm px-2.5 py-1 text-xs font-medium ${side === s ? "bg-navy text-white" : "text-ink-2 hover:bg-canvas"}`}
             >
@@ -78,7 +82,7 @@ function AgenticLayout() {
             </button>
           ))}
         </div>
-        <div className="min-h-0 flex-1">{side === "pipeline" ? <PipelineView /> : side === "scheduler" ? <SchedulerView /> : <Inbox />}</div>
+        <div id="agentic-side-panel" role="tabpanel" aria-labelledby={`agentic-side-${side}`} className="min-h-0 flex-1">{side === "pipeline" ? <PipelineView /> : side === "scheduler" ? <SchedulerView /> : <Inbox />}</div>
       </aside>
     </div>
   );
