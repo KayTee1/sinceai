@@ -1,10 +1,10 @@
 # Handoff
 
-- **Now:** T16B is on `feat/T16B-live-orchestrator`, **stacked on PR #18**
-  (T16A, still open and CONFLICTING, head `6f8015e`). Local only: not
-  pushed, no PR. It lacks master's `1f4621a` (D21 auto-renew, #24). Codex
-  reviewed `be5e560` (CHANGES REQUIRED; report in `docs/agent/REVIEW.md`).
-  P1 F2/F3 are fixed locally and **await Codex re-verification**:
+- **Now:** T16A merged to master (#18, squash `97b14ba`, includes D21 #24).
+  T16B (`feat/T16B-live-orchestrator`) has master merged in and is in a PR
+  against master, awaiting Viet's review. Codex reviewed `be5e560` (CHANGES
+  REQUIRED; report in `docs/agent/REVIEW.md`). P1 F2/F3 are fixed in
+  `4e10510` and **verified fixed by Codex**:
   `proposeBuild` now stores a proposal only if the latest user message (from
   the agent execution context) is exactly `Submit a build proposal for <ID>`
   or `... for <ID> with product <P> and market <M>`, the ID equals the call's
@@ -27,7 +27,11 @@
 - **Not verified:** a live run with the Anthropic model (no paid calls).
   Whether Sonnet calls the tools in order, and whether it asks before
   submitting, is untested. The UI was not exercised in a browser.
-- **T16A (PR #18):** Mastra tool adapters over the
+- **D21 auto-renew (`feat/auto-renew-used`, merged #24):** at lease end, used
+  assets (any app view in 90 days, or pack telemetry >= 10 users/month) with
+  an active owner renew automatically; unused ones get a retire proposal;
+  used but ownerless go straight to the steward. Policy `lifecycle-v4`.
+- **T16A (merged #18):** Mastra tool adapters over the
   deterministic services, `src/mastra/tools/steward-tools.ts`
   (`createStewardTools(getDb)` → `analyze-request`, `compute-kpi`,
   `check-kpi-definitions`). They return service results unchanged and re-throw
@@ -112,9 +116,8 @@
   provisional until Viet agrees.
 - **Needs:** `ANTHROPIC_API_KEY` in `.env.local` for any live chat run (none
   done for T16 or T16B).
-- **Next:** Codex re-verifies F2/F3 on T16B. Then reconcile #18 with
-  master, push, and open a PR stacked on #18 (or retarget to master once
-  #18 merges, then merge master for #24). F4 as a small follow-up. Viet
+- **Next:** Viet reviews the T16B PR (his files: `orchestrator.ts`,
+  `chat-view.tsx`, `lifecycle-context.tsx`). F4 as a small follow-up. Viet
   agrees the tool map, prompt, submit-command syntax and
   `build-proposal/v1` view. Fix the discovery issue above with Viet. One
   live chat smoke run of TEAM-REQ-01 (does Sonnet tell the user the exact

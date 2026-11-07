@@ -33,6 +33,7 @@ export const LIFECYCLE_SHEETS: ParsedSheet[] = [
       asset("AST-DEP", "OWN-1", "promoted", "2026-08-10"), // has downstream dependents
       asset("AST-NOOWN", null, "none", "2026-08-10"), // missing owner
       asset("AST-OLD", "OWN-1", "none", "2025-11-15"), // three whole periods -> lease ends 2026-11-10
+      asset("AST-ORPHAN", "OWN-2", "none", "2026-08-10"), // used, but owner inactive -> steward (D21, Rule 8)
     ],
   ),
   sheet("Asset_Usage", ["asset_id", "month", "views", "unique_users"], [
@@ -42,6 +43,7 @@ export const LIFECYCLE_SHEETS: ParsedSheet[] = [
     ...usage("AST-DEP", 3),
     ...usage("AST-NOOWN", 0),
     ...usage("AST-OLD", 40),
+    ...usage("AST-ORPHAN", 50),
   ]),
   sheet("Lineage_Edges", ["source_id", "target_id", "edge_type", "relationship"], [
     ["AST-DEP", "AST-HIGH", "ASSET_TO_ASSET", "embedded / derived"],

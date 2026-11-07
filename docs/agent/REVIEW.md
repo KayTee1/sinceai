@@ -3,12 +3,12 @@
 Open findings only. Independent T16B review, 2026-11-07. References below
 are to `be5e560`. Previous T15 F1 is resolved by merged #22 / D18.
 
-## Status after the implementer's fix (not re-reviewed yet)
+## Status after the implementer's fix
 
 | ID | Severity | State |
 | --- | --- | --- |
-| F2 | P1 | Fixed locally on `feat/T16B-live-orchestrator`: whole-message submit command only. **Awaits Codex re-verification.** |
-| F3 | P1 | Fixed locally on the same commit: command bound to `requestId` and scope; confirmed scope checked against the resolved analysis. **Awaits Codex re-verification.** |
+| F2 | P1 | Fixed in `4e10510`: whole-message submit command only. Verified fixed by Codex. |
+| F3 | P1 | Fixed in `4e10510`: command bound to `requestId` and scope; confirmed scope checked against the resolved analysis. Verified fixed by Codex. |
 | F4 | P2 | Open. Small, independent follow-up (chat-view + lifecycle refresh); not in this fix. |
 | F5 | P2 | Open. Pre-existing T17 `build.ts:149`; separate change with Viet. |
 
