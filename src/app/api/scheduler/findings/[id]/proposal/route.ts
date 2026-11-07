@@ -31,17 +31,18 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 }
 
 // { actor, action: "merge", sourceId (merged away), targetId (kept), expectedFingerprint } -> { created, link, proposal }.
-// DISABLED until B0 and the proposeMerge approver fix (MERGE-APPROVERS) are reviewed and in this branch's base
-// (FINDING_PROPOSALS_ENABLED, services/scheduler/proposals.ts): answers
-// 409 { error, blockedBy: ["B0", "MERGE-APPROVERS"], blockers: [{ id, description }] } before reading the request or touching the database.
+// DISABLED until the proposeMerge approver fix (MERGE-APPROVERS) is reviewed and in this branch's base and Codex
+// has reviewed the module (B0 is already in the base since master 16c868d; FINDING_PROPOSALS_ENABLED,
+// services/scheduler/proposals.ts): answers 409 { error, blockedBy: ["MERGE-APPROVERS", "CODEX-REVIEW"],
+// blockers: [{ id, description }] } before reading the request or touching the database.
 // When enabled: manager only through the demo gate (attribution, not authentication).
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   if (!FINDING_PROPOSALS_ENABLED) {
     return Response.json(
       {
         error:
-          "Raising proposals from findings is switched off until the B0 lifecycle fix and the merge approver fix " +
-          "(MERGE-APPROVERS, proposeMerge) are reviewed and integrated",
+          "Raising proposals from findings is switched off until the merge approver fix " +
+          "(MERGE-APPROVERS, proposeMerge) is integrated and Codex has reviewed it (CODEX-REVIEW)",
         blockedBy: FINDING_PROPOSALS_BLOCKED_BY,
         blockers: FINDING_PROPOSALS_BLOCKERS,
       },

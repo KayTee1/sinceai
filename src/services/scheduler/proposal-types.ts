@@ -84,7 +84,7 @@ export type MergeDirection = { sourceId: string; targetId: string };
 export type DirectionCheck = MergeDirection & { allowed: boolean; reasons: EligibilityReason[]; comparatorPreferred: boolean };
 
 /** Unmet conditions for switching the POST route on (see FINDING_PROPOSALS_ENABLED). */
-export type FindingProposalBlockerId = "B0" | "MERGE-APPROVERS";
+export type FindingProposalBlockerId = "MERGE-APPROVERS" | "CODEX-REVIEW";
 export type FindingProposalBlocker = { id: FindingProposalBlockerId; description: string };
 
 export type FindingProposalPreview = {

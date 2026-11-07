@@ -86,20 +86,22 @@ import { SchedulerError, type OverlapEvidence } from "./types";
 /**
  * Switch for POST /api/scheduler/findings/[id]/proposal. OFF on purpose.
  *
- * Turning it on requires ALL of:
- * 1. B0 (lifecycle: archiving closes the asset's other open proposals so a
- *    later reject cannot reactivate it; decide refuses renew / retire /
- *    promote on an archived asset) independently reviewed AND part of this
- *    branch's base. Without it, approving a merge raised here can archive an
- *    asset that still has another open proposal whose rejection renews it.
- * 2. MERGE-APPROVERS (Codex P1 on src/services/estate/merge.ts, Viet's code):
+ * Already met: B0 (lifecycle: archiving closes the asset's other open
+ * proposals so a later reject cannot reactivate it; decide refuses renew /
+ * retire / promote on an archived asset). It is on master since 16c868d (#36,
+ * Viet; tests/estate.test.ts "proposal_closed") and in this branch's base.
+ *
+ * Turning it on still requires ALL of:
+ * 1. MERGE-APPROVERS (Codex P1 on src/services/estate/merge.ts, Viet's code):
  *    proposeMerge drops a side that has no active approver (inactive owner
  *    and no region steward) and still creates the proposal, so one owner can
  *    approve archiving a dashboard nobody represents. The fix belongs in
  *    proposeMerge (refuse unless both sides have an approver); it is
  *    deliberately NOT duplicated here. It must be reviewed and in this
  *    branch's base.
- * 3. A Codex review of this module with both fixes in place.
+ * 2. CODEX-REVIEW: a Codex review of this module with B0 and MERGE-APPROVERS in place.
+ * Separate, unresolved product policy (not a switch condition; enforced as an
+ * eligibility block): a Personal or Team asset replacing a Certified dashboard.
  * Not configurable from the environment by design; change it in code review.
  * The service functions below are usable (and tested) regardless.
  */
@@ -107,11 +109,11 @@ export const FINDING_PROPOSALS_ENABLED: boolean = false;
 
 /** What the switch waits for, in order. IDs appear in the 409 and preview `blockedBy`. */
 export const FINDING_PROPOSALS_BLOCKERS: readonly FindingProposalBlocker[] = [
-  { id: "B0", description: "Lifecycle: archiving must close the asset's other open proposals (Viet)" },
   {
     id: "MERGE-APPROVERS",
     description: "proposeMerge must refuse when either side has no active approver (inactive owner, no region steward) (Viet)",
   },
+  { id: "CODEX-REVIEW", description: "Codex review of finding proposals with B0 and MERGE-APPROVERS in the base" },
 ];
 export const FINDING_PROPOSALS_BLOCKED_BY: readonly FindingProposalBlockerId[] = FINDING_PROPOSALS_BLOCKERS.map((b) => b.id);
 
