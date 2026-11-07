@@ -13,7 +13,8 @@ import { requireText, withScheduler, withSchedulerAction } from "@/lib/scheduler
 const optional = (v: string | null) => (v && v.trim() ? v.trim() : undefined);
 
 // Read-only eligibility preview. Query (all optional): sourceId, targetId (a merge direction), expectedFingerprint.
-// -> FindingProposalPreview { eligible, reasons[], enabled, blockedBy?, link, links, directions, findingFingerprint, currentFingerprint }
+// -> FindingProposalPreview { eligible, reasons[], enabled, blockedBy?, link, links, directions (each with comparatorPreferred),
+//    comparatorPreferredDirection (comparison evidence only), findingFingerprint, currentFingerprint }
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   await connection();
   const { id } = await ctx.params;

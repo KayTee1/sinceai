@@ -30,6 +30,14 @@ export type FindingProposalLink = {
   actor: string;
   createdAt: string;
   simDate: string;
+  /**
+   * Codex B3-F2: the comparator's preferred direction in the evidence
+   * snapshot, recorded as comparison evidence only. It never authorises
+   * anything and may be the opposite of sourceId -> targetId.
+   */
+  comparatorPreferredDirection: MergeDirection;
+  /** True when the manager's direction is the opposite of comparatorPreferredDirection. */
+  againstComparator: boolean;
   /** Finding fingerprint the proposal was raised on (equal to the re-run comparator's at that moment). */
   fingerprint: string;
   /** The re-run comparator's evidence the backend validated the raise against. */
@@ -63,8 +71,15 @@ export type EligibilityCode =
 
 export type EligibilityReason = { code: EligibilityCode; message: string };
 
-/** One way to merge the finding's pair: `sourceId` merged away into `targetId`. */
-export type DirectionCheck = { sourceId: string; targetId: string; allowed: boolean; reasons: EligibilityReason[] };
+export type MergeDirection = { sourceId: string; targetId: string };
+
+/**
+ * One way to merge the finding's pair: `sourceId` merged away into
+ * `targetId`. `allowed` comes from the checks only; `comparatorPreferred`
+ * (the re-run comparator would merge this way) is comparison evidence and
+ * never makes a direction allowed or blocked.
+ */
+export type DirectionCheck = MergeDirection & { allowed: boolean; reasons: EligibilityReason[]; comparatorPreferred: boolean };
 
 export type FindingProposalPreview = {
   findingId: string;
@@ -81,6 +96,8 @@ export type FindingProposalPreview = {
   currentFingerprint: string | null;
   /** Both directions with their own checks. The comparator's preferred direction is not a recommendation. */
   directions: DirectionCheck[];
+  /** The re-run comparator's preferred direction (comparison evidence only); null when it could not be evaluated. */
+  comparatorPreferredDirection: MergeDirection | null;
   /** The pending link, else the newest link whose proposal row still exists, else null. */
   link: FindingProposalLink | null;
   /** Every link for this finding, oldest first. */

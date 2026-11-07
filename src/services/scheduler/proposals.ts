@@ -37,6 +37,17 @@
 // syncFindingProposals. An interrupted or skipped refresh changes nothing
 // anyone sees.
 //
+// Direction (Codex B3-F2): the manager chooses which asset is merged away
+// (source) and which is kept (target). That choice is what is checked, sent
+// to proposeMerge, recorded on the link and stated in the proposal rationale.
+// The comparator's own preferred direction (suggestMerge keeps the higher
+// tier, then the more used side, for otherwise equal pairs; usage moves with
+// the clock) is recorded separately as comparison evidence
+// (comparatorPreferredDirection, againstComparator) and is never treated as
+// authorisation: a direction is allowed only by the checks below. Note that
+// proposeMerge's own evidence.reason is the comparator's wording and can
+// describe the opposite direction; the rationale says so when it does.
+//
 // Rejection suppression: a rejected or expired proposal blocks a new raise
 // while the finding's fingerprint is the one it was raised on. Only a
 // material evidence change (new fingerprint after a scheduler run) makes it
@@ -57,6 +68,7 @@ import type {
   FindingProposalLink,
   FindingProposalOutcome,
   FindingProposalPreview,
+  MergeDirection,
   RaiseFindingProposalInput,
   RaiseFindingProposalResult,
 } from "./proposal-types";
@@ -131,6 +143,8 @@ async function readLinks(r: Db, findingId?: string): Promise<FindingProposalLink
       sql: `SELECT actor, action, reason, sim_date FROM decisions WHERE proposal_id = ? ORDER BY rowid`,
       args: [x.proposal_id as string],
     });
+    const evidence = JSON.parse(x.evidence as string) as OverlapEvidence;
+    const preferred = preferredOf(evidence)!;
     out.push({
       linkId: x.link_id as string,
       findingId: x.finding_id as string,
@@ -141,8 +155,10 @@ async function readLinks(r: Db, findingId?: string): Promise<FindingProposalLink
       actor: x.actor as string,
       createdAt: x.created_at as string,
       simDate: x.sim_date as string,
+      comparatorPreferredDirection: preferred,
+      againstComparator: preferred.sourceId !== x.source_id || preferred.targetId !== x.target_id,
       fingerprint: x.fingerprint as string,
-      evidence: JSON.parse(x.evidence as string) as OverlapEvidence,
+      evidence,
       outcome: outcomeOf(x.proposal_status as ProposalStatus | null),
       storedOutcome: x.outcome as FindingProposalOutcome,
       outcomeSyncedAt: (x.outcome_synced_at as string | null) ?? null,
@@ -185,8 +201,8 @@ async function evaluate(
   const general: EligibilityReason[] = [];
   const [a, b] = f.assetIds;
   const directions: DirectionCheck[] = [
-    { sourceId: a, targetId: b, allowed: false, reasons: [] },
-    { sourceId: b, targetId: a, allowed: false, reasons: [] },
+    { sourceId: a, targetId: b, allowed: false, reasons: [], comparatorPreferred: false },
+    { sourceId: b, targetId: a, allowed: false, reasons: [], comparatorPreferred: false },
   ];
   let currentFingerprint: string | null = null;
   let current: OverlapEvidence | null = null;
@@ -239,6 +255,7 @@ async function evaluate(
     } else {
       currentFingerprint = obs.fingerprint;
       current = obs.evidence;
+      for (const d of directions) d.comparatorPreferred = d.sourceId === obs.evidence.mergeAway.assetId && d.targetId === obs.evidence.keep.assetId;
       if (obs.fingerprint !== f.fingerprint) {
         general.push(reason("stale_evidence", "The evidence changed since the last scheduler run; run it again before raising a proposal"));
       }
@@ -299,6 +316,9 @@ function verdict(ev: Evaluation, direction?: { sourceId: string; targetId: strin
   return { eligible: ev.general.length === 0 && why.length === 0, reasons: [...ev.general, ...why] };
 }
 
+const preferredOf = (e: OverlapEvidence | null): MergeDirection | null =>
+  e ? { sourceId: e.mergeAway.assetId, targetId: e.keep.assetId } : null;
+
 const normId = (v: unknown) => (typeof v === "string" ? v.trim().toUpperCase() : "");
 
 /**
@@ -329,6 +349,7 @@ export async function previewFindingProposal(
       findingFingerprint: f.fingerprint,
       currentFingerprint: ev.currentFingerprint,
       directions: ev.directions,
+      comparatorPreferredDirection: preferredOf(ev.current),
       link: links.find((l) => l.outcome === "pending") ?? links.filter((l) => l.outcome !== "missing").at(-1) ?? null,
       links,
     };
@@ -426,6 +447,26 @@ export async function raiseFindingProposal(
       if (err instanceof LifecycleError) throw new SchedulerError(`The merge proposal was refused: ${err.message}`, "conflict", { lifecycleCode: err.code });
       throw err;
     }
+    // The proposal must carry exactly the manager's direction (proposeMerge normalises IDs; nothing else may differ).
+    const pe = proposal.evidence as { kind?: string; sourceId?: string; targetId?: string };
+    if (pe.kind !== "merge_pair" || pe.sourceId !== sourceId || pe.targetId !== targetId || proposal.assetIds[0] !== sourceId) {
+      throw new SchedulerError(`${proposal.id} does not record ${sourceId} -> ${targetId}; nothing was raised`, "conflict");
+    }
+
+    // B3-F2: the rationale states the chosen direction and labels the comparator's preference as evidence.
+    const preferred = preferredOf(ev.current)!;
+    const againstComparator = preferred.sourceId !== sourceId || preferred.targetId !== targetId;
+    const directionNote =
+      ` Direction chosen by ${actor} from scheduler finding ${f.findingId}: ${sourceId} is merged into ${targetId}. ` +
+      (againstComparator
+        ? `Comparison evidence only, not an authorisation: the overlap comparator preferred the opposite direction ` +
+          `(${preferred.sourceId} into ${preferred.targetId}); the comparator reason in the evidence describes that direction.`
+        : `Comparison evidence only, not an authorisation: the overlap comparator preferred the same direction.`);
+    const named = await tx.execute({
+      sql: `UPDATE proposals SET rationale = rationale || ? WHERE id = ? AND status = 'open' AND version = 1`,
+      args: [directionNote, proposal.id],
+    });
+    if (named.rowsAffected !== 1) throw new SchedulerError(`${proposal.id} changed during the raise`, "conflict");
 
     const linkId = `FPL-${randomUUID()}`;
     await tx.execute({
@@ -439,7 +480,6 @@ export async function raiseFindingProposal(
       args: [proposal.id, f.findingId],
     });
     if (upd.rowsAffected !== 1) throw new SchedulerError(`Finding ${f.findingId} changed during the raise`, "conflict");
-    const comparatorDirection = { mergeAway: ev.current.mergeAway.assetId, keep: ev.current.keep.assetId };
     await appendAudit(tx, {
       simDate: date,
       actor,
@@ -448,16 +488,18 @@ export async function raiseFindingProposal(
       proposalId: proposal.id,
       policyVersion: POLICY_VERSION,
       rationale:
-        `${actor} raised ${proposal.id} from finding ${f.findingId}: merge ${sourceId} into ${targetId} ` +
-        `(approval needed from ${proposal.requiredApprovers.join(" and ")}).`,
+        `${actor} raised ${proposal.id} from finding ${f.findingId}: merge ${sourceId} into ${targetId}, direction chosen by ${actor} ` +
+        `(approval needed from ${proposal.requiredApprovers.join(" and ")}).` +
+        (againstComparator ? ` The comparator preferred ${preferred.sourceId} into ${preferred.targetId} (comparison evidence only).` : ""),
       evidence: {
         findingId: f.findingId,
         linkId,
         ruleId: f.ruleId,
         fingerprint: f.fingerprint,
-        chosen: { sourceId, targetId },
-        comparatorDirection,
-        followedComparatorDirection: comparatorDirection.mergeAway === sourceId && comparatorDirection.keep === targetId,
+        chosen: { sourceId, targetId, chosenBy: actor },
+        comparatorPreferredDirection: preferred,
+        againstComparator,
+        comparatorRole: "comparison evidence only; not an authorisation",
       },
     });
     return { created: true, linkId, proposalId: proposal.id };

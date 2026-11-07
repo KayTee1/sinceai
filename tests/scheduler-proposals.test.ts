@@ -189,7 +189,7 @@ describe("raising a proposal from a finding", () => {
       ["manager", "scheduler_finding_proposal_raised"],
     ]);
     const ev = JSON.parse(audit.rows[1].evidence as string);
-    assert.deepEqual([ev.findingId, ev.linkId, ev.fingerprint, ev.chosen], [f.findingId, r.link.linkId, f.fingerprint, { sourceId: "AST-2", targetId: "AST-3" }]);
+    assert.deepEqual([ev.findingId, ev.linkId, ev.fingerprint, ev.chosen], [f.findingId, r.link.linkId, f.fingerprint, { sourceId: "AST-2", targetId: "AST-3", chosenBy: "manager" }]);
 
     // The scheduler ignores its own audit row; the merge_proposed row is not a watched change.
     const next = await run();
@@ -271,6 +271,76 @@ describe("raising a proposal from a finding", () => {
     const pv = await previewFindingProposal(db, { findingId: f.findingId });
     assert.equal(pv.eligible, false);
     assert.match(pv.reasons.find((r) => r.code === "asset_under_review")!.message, new RegExp(retire.id));
+  });
+});
+
+/**
+ * Simulated: the comparator prefers keeping AST-2 (as suggestMerge does for an otherwise equal pair
+ * by tier, then usage). Direction is not part of the fingerprint, so the finding stays current.
+ */
+const prefersAst2: Comparator = async (d, input, date) => {
+  const r = await suggestMerge(d, input, date);
+  for (const s of r.suggestions) if (s.mergeAway.assetId === "AST-2" && s.keep.assetId === "AST-3") [s.mergeAway, s.keep] = [s.keep, s.mergeAway];
+  return r;
+};
+
+describe("direction evidence (Codex B3-F2)", () => {
+  it("agreeing direction: recorded on the link, the proposal and the audit; the comparator is labelled as evidence", async () => {
+    const f = await betavexFinding();
+    const pv = await previewFindingProposal(db, { findingId: f.findingId });
+    assert.deepEqual(pv.comparatorPreferredDirection, { sourceId: "AST-2", targetId: "AST-3" });
+    assert.deepEqual(pv.directions.map((d) => [d.sourceId, d.comparatorPreferred]), [["AST-2", true], ["AST-3", false]]);
+
+    const r = await raise(f);
+    assert.deepEqual([r.link.sourceId, r.link.targetId, r.link.againstComparator], ["AST-2", "AST-3", false]);
+    assert.deepEqual(r.link.comparatorPreferredDirection, { sourceId: "AST-2", targetId: "AST-3" });
+    const ev = r.proposal.evidence as { sourceId: string; targetId: string };
+    assert.deepEqual([ev.sourceId, ev.targetId, r.proposal.assetIds], ["AST-2", "AST-3", ["AST-2"]]);
+    assert.match(r.proposal.rationale, /^Merge AST-2 .* into AST-3 /);
+    assert.match(r.proposal.rationale, /Direction chosen by manager from scheduler finding FND-[^:]+: AST-2 is merged into AST-3\./);
+    assert.match(r.proposal.rationale, /Comparison evidence only, not an authorisation: the overlap comparator preferred the same direction\./);
+    const audit = await db.execute({
+      sql: `SELECT evidence FROM audit_log WHERE action = 'scheduler_finding_proposal_raised' AND proposal_id = ?`,
+      args: [r.proposal.id],
+    });
+    const a = JSON.parse(audit.rows[0].evidence as string);
+    assert.deepEqual([a.chosen, a.comparatorPreferredDirection, a.againstComparator], [
+      { sourceId: "AST-2", targetId: "AST-3", chosenBy: "manager" },
+      { sourceId: "AST-2", targetId: "AST-3" },
+      false,
+    ]);
+  });
+
+  it("opposing direction: the manager's choice is what is proposed; the comparator's preference is flagged, and it authorises nothing", async () => {
+    const f = await betavexFinding();
+    const pv = await previewFindingProposal(db, { findingId: f.findingId }, { compare: prefersAst2 });
+    assert.equal(pv.currentFingerprint, f.fingerprint, "direction is not material");
+    assert.deepEqual(pv.comparatorPreferredDirection, { sourceId: "AST-3", targetId: "AST-2" });
+    assert.deepEqual(
+      pv.directions.map((d) => [d.sourceId, d.targetId, d.comparatorPreferred, d.allowed, d.reasons.map((x) => x.code)]),
+      [
+        ["AST-2", "AST-3", false, true, []],
+        ["AST-3", "AST-2", true, false, ["target_does_not_cover_scope"]],
+      ],
+      "the comparator's preferred direction is still refused by the checks",
+    );
+    await refused(raise(f, { sourceId: "AST-3", targetId: "AST-2" }, db, prefersAst2), "target_does_not_cover_scope");
+
+    const r = await raise(f, {}, db, prefersAst2);
+    assert.deepEqual([r.link.sourceId, r.link.targetId, r.link.againstComparator], ["AST-2", "AST-3", true]);
+    assert.deepEqual(r.link.comparatorPreferredDirection, { sourceId: "AST-3", targetId: "AST-2" });
+    const ev = r.proposal.evidence as { sourceId: string; targetId: string };
+    assert.deepEqual([ev.sourceId, ev.targetId, r.proposal.assetIds], ["AST-2", "AST-3", ["AST-2"]]);
+    assert.match(r.proposal.rationale, /Direction chosen by manager from scheduler finding FND-[^:]+: AST-2 is merged into AST-3\./);
+    assert.match(r.proposal.rationale, /the overlap comparator preferred the opposite direction \(AST-3 into AST-2\)/);
+    const shownLink = (await listFindingProposals(db, f.findingId))[0];
+    assert.deepEqual([shownLink.againstComparator, shownLink.comparatorPreferredDirection], [true, { sourceId: "AST-3", targetId: "AST-2" }]);
+    const audit = await db.execute({
+      sql: `SELECT rationale, evidence FROM audit_log WHERE action = 'scheduler_finding_proposal_raised' AND proposal_id = ?`,
+      args: [r.proposal.id],
+    });
+    assert.match(audit.rows[0].rationale as string, /direction chosen by manager.*comparator preferred AST-3 into AST-2 \(comparison evidence only\)/);
+    assert.equal(JSON.parse(audit.rows[0].evidence as string).againstComparator, true);
   });
 });
 
