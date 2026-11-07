@@ -7,8 +7,11 @@
   steward (D16: silence never archives), owner / steward decisions (reject
   needs a reason), restore, Temporary 30-day TTL and promotion to
   Personal, append-only audit (DB triggers). Dashboard reads tier, lease and
-  status from it. API routes per the contract; no UI controls yet (inbox,
-  clock panel, timeline are next).
+  status from it. API routes per the contract.
+- **T8 lifecycle UI (`feat/T8-lifecycle-ui`, stacked on #17):** Manager clock
+  bar (run / pause, +1 / +30 / +90 days, next event, counts, reset demo),
+  approval inbox beside the chat (acting-as picker, evidence, reject needs a
+  reason), per-asset timeline with Restore on the Dashboard tab.
 - **Now:** T14 merged (#14, squash `1162fcd`). T15 is draft PR #15
   (`feat/T15-kpi-computation`). Codex review fixes applied (F2 provenance,
   F4 handoff, month validation, F5 as proposed D15); awaiting Codex

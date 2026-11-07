@@ -45,7 +45,7 @@ on it and telling the other developer before starting.
 | T5 | Platform services: lifecycle engine, policy, semantic layer, clock/scheduler, audit, lineage | Viet / Claude (lifecycle part) | feat/T5-lifecycle | src/services/lifecycle/, src/app/api/ | T4 | Transitions, TTL, lease review, archive/restore covered by tests | review (lifecycle, clock, audit, API done; merge proposals, reassign_owner and lineage not included) |
 | T6 | Mastra agents + workflow with approval pause; step event stream | TBD (Lane A) | feat/T6-agents | src/mastra/ | T4, contract | REQ-0001 run emits step events; build path creates a Temporary insight | todo |
 | T7 | UI shell: tabs, role toggle, Dashboard tab, lineage panel | Viet / Claude | feat/initial-ui-mastra | src/app, src/components | Contract fixtures | Employee sees only Dashboard; lineage opens on click | doing (shell, dashboard, chat done; lineage panel todo) |
-| T8 | Agentic Chat view, Pipeline view, approval inbox, clock control | TBD (Lane B) | feat/T8-agentic-ui | app/ | Contract fixtures | Both views show the same run; reject needs a reason | todo |
+| T8 | Agentic Chat view, Pipeline view, approval inbox, clock control | Viet / Claude (inbox, clock, timeline) | feat/T8-lifecycle-ui | src/components/lifecycle/ | T5 (#17) | Both views show the same run; reject needs a reason | doing (approval inbox, clock bar, audit timeline + restore done; Pipeline view and run approvals todo) |
 | T9 | README / architecture note, demo script, video | TBD | feat/T9-docs-demo | README.md, docs/ | T5–T8 | R18 met; video recorded | todo |
 
 ## Build order (D14)
