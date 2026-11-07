@@ -19,10 +19,18 @@ import readXlsxFile from "read-excel-file/node";
 import { importWorkbook, type ParsedSheet } from "../src/db/import-workbook";
 import { openDb } from "../src/db/open";
 import { ORCHESTRATOR_INSTRUCTIONS, createOrchestratorTools } from "../src/mastra/agents/orchestrator-config";
+import { WHERE_TO_FIND, type BuildStatusView } from "../src/mastra/tools/build-status-tools";
 import { MISSING_REQUEST_SOURCE, authorizeSubmission, buildProposalView, parseSubmitCommand, type BuildProposalView } from "../src/mastra/tools/build-tools";
 import { analysisView, isToolValidationError, type AnalysisView } from "../src/mastra/tools/steward-views";
 import { decideBuild, getInsight } from "../src/services/build";
-import { getAssetState, getProposal, listPendingProposals, resetLifecycle, type BuildEvidence } from "../src/services/lifecycle";
+import {
+  getAssetState,
+  getProposal,
+  listPendingProposals,
+  processDue,
+  resetLifecycle,
+  type BuildEvidence,
+} from "../src/services/lifecycle";
 import { analyzeRequest } from "../src/services/steward/analyze";
 import { TEAM_REQUEST_SHEET } from "../src/services/steward/team-requests";
 import { FACT_SHEETS } from "./fixtures/facts";
@@ -112,11 +120,11 @@ async function storedBuildProposals() {
 }
 
 describe("production tool map", () => {
-  it("exposes the governed steward tools and propose-build, and no approval or register tool", () => {
-    assert.deepEqual(Object.keys(tools).sort(), ["analyzeRequest", "checkKpiDefinitions", "computeKpi", "proposeBuild"]);
+  it("exposes the governed steward tools, propose-build and read-only build status, and no approval or register tool", () => {
+    assert.deepEqual(Object.keys(tools).sort(), ["analyzeRequest", "checkKpiDefinitions", "computeKpi", "getBuildStatus", "proposeBuild"]);
     assert.deepEqual(
       Object.values(tools).map((t) => (t as { id: string }).id).sort(),
-      ["analyze-request", "check-kpi-definitions", "compute-kpi", "propose-build"],
+      ["analyze-request", "check-kpi-definitions", "compute-kpi", "get-build-status", "propose-build"],
     );
     for (const name of Object.keys(tools)) assert.doesNotMatch(name, /approve|reject|decide|register/i);
   });
@@ -126,6 +134,8 @@ describe("production tool map", () => {
     const system = JSON.stringify((prompts[0] as { role: string }[]).filter((m) => m.role === "system"));
     assert.match(system, /Call proposeBuild only when the user's latest message is exactly that command/);
     assert.match(system, /You cannot approve, reject or register anything/);
+    assert.match(system, /Never call proposeBuild to check status/);
+    assert.match(system, /not a generated BI dashboard/);
   });
 });
 
@@ -543,5 +553,114 @@ describe("TEAM-REQ-01 on the Bayer pack through the live orchestrator (local)", 
     assert.ok(p.proposal.requiredApprovers.length > 0);
     assert.ok(!p.proposal.requiredApprovers.includes(p.proposal.requesterId));
     assert.equal(await getInsight(packDb, p.proposal.insightId!), null);
+  });
+});
+
+// T21: persisted build status through the live orchestrator. The status tool
+// is read-only; questions about status never store anything, and approval and
+// lifecycle (archived after TTL expiry) are reported as separate facts.
+describe("build status through the live orchestrator (T21)", () => {
+  const PRP = "PRP-INS-TEAM-REQ-01-1";
+  const INS = "INS-TEAM-REQ-01-1";
+  const status = (id: string, by: "request" | "proposal" | "insight", key: string) => ({ id, name: "getBuildStatus", input: { by, id: key } });
+
+  async function appState(): Promise<string> {
+    const out: Record<string, unknown> = {};
+    for (const t of ["app_clock", "asset_state", "proposals", "decisions", "audit_log", "archive_snapshots", "usage_events", "insights"]) {
+      out[t] = (await db.execute(`SELECT * FROM ${t} ORDER BY rowid`)).rows;
+    }
+    return JSON.stringify(out);
+  }
+
+  /** Submitted in chat, approved by the Lead, and (optionally) archived when its 30-day TTL ends. */
+  async function builtAndExpired(expire: boolean) {
+    await turn("Submit a build proposal for TEAM-REQ-01.", [{ toolCalls: [propose("c1", "TEAM-REQ-01")] }, { text: "ok" }]);
+    await decideBuild(db, { proposalId: PRP, actor: "OWN-NL", action: "approve" }, DAY);
+    if (!expire) return;
+    // The fixture has no Asset_Usage: keep pack leases out of the window so only the TTL falls due.
+    await db.execute(`UPDATE asset_state SET lease_end = '2099-01-01' WHERE origin = 'pack'`);
+    assert.equal(await processDue(db, "2026-12-03"), 1);
+  }
+
+  it("answers 'has it been approved?' from storage when nothing exists, storing nothing", async () => {
+    const before = await appState();
+    const { byCall, prompts } = await turn("Has TEAM-REQ-01 been approved?", [
+      { toolCalls: [status("c1", "request", "TEAM-REQ-01")] },
+      { text: "No build proposal exists for TEAM-REQ-01." },
+    ]);
+    const v = byCall.c1.output as BuildStatusView;
+    assert.deepEqual([v.view, v.found, v.builds], ["build-status/v1", false, []]);
+    assert.deepEqual(toolResults(prompts[1]).c1, { type: "json", value: v });
+    assert.equal(await appState(), before);
+  });
+
+  it("reports approved and archived as separate facts for an expired insight", async () => {
+    await builtAndExpired(true);
+    const before = await appState();
+    const { byCall, prompts } = await turn("Is INS-TEAM-REQ-01-1 still active?", [
+      { toolCalls: [status("c1", "insight", INS)] },
+      { text: "Approved, built, then archived after its TTL." },
+    ]);
+    const v = byCall.c1.output as BuildStatusView;
+    assert.deepEqual(toolResults(prompts[1]).c1, { type: "json", value: v });
+    const [b] = v.builds;
+    assert.deepEqual([b.proposal.id, b.proposal.status, b.decision?.actor], [PRP, "approved", "OWN-NL"]);
+    assert.deepEqual([b.insight.built, b.lifecycle.status, b.lifecycle.lastEvent?.action], [true, "archived", "ttl_expired"]);
+    assert.deepEqual(b.request, { sourceSheet: TEAM_REQUEST_SHEET, teamAuthored: true });
+    assert.match(b.facts[0], /^Approval: PRP-INS-TEAM-REQ-01-1 was approved by OWN-NL/);
+    assert.match(b.facts[2], /^Lifecycle: INS-TEAM-REQ-01-1 is archived/);
+    assert.deepEqual(v.whereToFind, WHERE_TO_FIND);
+    assert.ok(v.whereToFind.some((w) => /no dashboard URL/i.test(w)));
+    assert.equal(await appState(), before);
+  });
+
+  it("the analysis keeps recommending; status comes from the status tool, and the analysis claims nothing about builds", async () => {
+    await builtAndExpired(false);
+    const { byCall } = await turn("Show me the build status of TEAM-REQ-01.", [
+      { toolCalls: [analyze("c1", "TEAM-REQ-01"), status("c2", "request", "TEAM-REQ-01")] },
+      { text: "ok" },
+    ]);
+    const a = byCall.c1.output as AnalysisView;
+    assert.equal(a.recommendation.kind, "build_proposal");
+    assert.ok(!a.recommendation.rationale.some((r) => /nothing has been built/i.test(r)));
+    assert.ok(a.recommendation.rationale.some((r) => /does not check existing build proposals or built insights/.test(r)));
+    const v = byCall.c2.output as BuildStatusView;
+    assert.deepEqual([v.summary.approved, v.summary.built, v.summary.active], [1, 1, 1]);
+  });
+
+  for (const text of [
+    "What happened to proposal PRP-INS-TEAM-REQ-01-1?",
+    "Don't submit a build proposal for TEAM-REQ-01.",
+    "If I submitted a build proposal for TEAM-REQ-01, would it create a duplicate?",
+  ]) {
+    it(`a status or hypothetical question cannot write even if the model calls propose-build: "${text}"`, async () => {
+      await builtAndExpired(true);
+      const before = await appState();
+      const { byCall } = await turn(text, [{ toolCalls: [propose("c1", "TEAM-REQ-01")] }, { text: "ok" }]);
+      assert.equal((byCall.c1.output as BuildProposalView).status, "intent_required");
+      assert.equal(await appState(), before);
+    });
+  }
+
+  it("an explicit resubmission after an approved, archived build stores nothing and reports already_built", async () => {
+    await builtAndExpired(true);
+    const before = await appState();
+    const { byCall, prompts } = await turn("Submit a build proposal for TEAM-REQ-01.", [
+      { toolCalls: [propose("c1", "TEAM-REQ-01")] },
+      { text: "Already built; it is archived." },
+    ]);
+    const v = byCall.c1.output as Stored;
+    assert.equal(v.status, "already_built");
+    assert.deepEqual(toolResults(prompts[1]).c1, { type: "json", value: v });
+    assert.deepEqual([v.proposal.id, v.proposal.status], [PRP, "approved"]);
+    assert.deepEqual([v.build?.proposal.status, v.build?.lifecycle.status], ["approved", "archived"]);
+    assert.match(v.next, /^No new proposal was stored/);
+    assert.match(v.next, /can be restored/);
+    assert.equal(await appState(), before);
+  });
+
+  it("returns the validation object for a malformed status call", async () => {
+    const { byCall } = await turn("Status?", [{ toolCalls: [{ id: "c1", name: "getBuildStatus", input: { by: "bogus", id: "" } }] }, { text: "ok" }]);
+    assert.ok(isToolValidationError(byCall.c1.output));
   });
 });

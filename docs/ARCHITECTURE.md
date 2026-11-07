@@ -214,14 +214,16 @@ the snapshot stored per proposal version (contract §6), not a recompute.
 (`ORCHESTRATOR_INSTRUCTIONS`) and governed tool map
 (`createOrchestratorTools(getDb)`); `orchestrator.ts` binds them to the
 server DB and adds `search-assets`. Production tools: `analyzeRequest`,
-`computeKpi`, `checkKpiDefinitions`, `proposeBuild`, `searchAssets`.
+`computeKpi`, `checkKpiDefinitions`, `proposeBuild`, `getBuildStatus` (T21),
+`searchAssets`.
 `get-business-request` and `find-kpi-definitions` left the map (still
 exported in `catalog-tools.ts`): `analyzeRequest` loads the request, and the
 LIKE-based KPI check conflated Net Sales with Net Sales Growth.
 
 | Tool (id / key) | Input | Calls | Output (model and UI) |
 | --- | --- | --- | --- |
-| `propose-build` / `proposeBuild` | `requestId`, optional `answer {product, market}` | `proposeBuild` (T17) at the lifecycle clock date (`ensureLifecycle` + `tick`, as `POST /api/builds`) | `build-proposal/v1`: `proposed` / `already_proposed` (proposal ID, insight ID, scope, KPIs, gaps, requester, approvers, request source label, `knownIssues`), `not_proposed` (recommendation, rationale), or `intent_required` (`reason`: `no_command` / `request_mismatch` / `scope_mismatch`, message with the accepted syntax) |
+| `propose-build` / `proposeBuild` | `requestId`, optional `answer {product, market}` | `proposeBuild` (T17) at the lifecycle clock date (`ensureLifecycle` + `tick`, as `POST /api/builds`) | `build-proposal/v1`: `proposed` / `already_proposed` / `already_built` (proposal ID, insight ID, scope, KPIs, gaps, requester, approvers, request source label, `knownIssues`; `already_built` adds `build`, the stored status record), `not_proposed` (recommendation, rationale), or `intent_required` (`reason`: `no_command` / `request_mismatch` / `scope_mismatch`, message with the accepted syntax) |
+| `get-build-status` / `getBuildStatus` | `by` (`request` / `proposal` / `insight`), `id` | `getBuildStatus` (T21), read-only, no tick | `build-status/v1`: `found`, every matching build proposal (oldest first) with status, recorded decision (action, actor, date, reason), insight (built?, name, scope, request, proposal, owner, built on/by, KPI IDs with computed/total markets, no values), lifecycle (status, tier, TTL/lease end, previous tier, last lifecycle event), `facts` lines, `summary` counts, stored `clockDate`, `notes`, `whereToFind` |
 
 Governance of `propose-build`:
 
@@ -263,6 +265,30 @@ Governance of `propose-build`:
   without one. The chat view labels the request from that stored evidence,
   never from the ID; a missing sheet shows as `unknown` with a `knownIssues`
   entry. The inbox still labels `TEAM-` IDs by prefix (display only).
+
+Build status and duplicates (T21):
+
+- `src/services/build/status.ts` reads `proposals`, `decisions`, `insights`,
+  `asset_state` and `audit_log` in one read-only transaction. No clock tick,
+  so state is as of the last processed tick. Approval (proposal status and
+  decision) and lifecycle (asset status) are separate fields: an approved
+  build whose Temporary TTL expired reports `approved` and `archived`.
+- `analyzeRequest` never reads that state; its `build_proposal` rationale says
+  so instead of claiming nothing has been built. The prompt sends status
+  questions to `getBuildStatus` and has the agent check it before offering a
+  submission.
+- `proposeBuild` checks for a pending or approved `build_temporary` proposal
+  with the same request ID, product and market inside its write transaction
+  (queued per client). Pending → `already_proposed`; approved, whatever the
+  insight's lifecycle state → `already_built`. Nothing is stored either way.
+  A rejection still allows a new proposal (`INS-<request>-<n+1>`). Different
+  scopes of one request are separate. No schema change.
+- Open policy: whether an archived (expired) build may be rebuilt as a new
+  proposal. Not agreed, so it is refused; restore (D13/D14) is the existing
+  path.
+- Visibility: the chat has no identity and is manager-only; the status view
+  exposes nothing beyond the inbox, Dashboard and timeline. No per-user rule
+  for build status is defined.
 
 Chat UI: step labels and summaries for the new tools; when a
 `propose-build` output is `proposed`, the chat calls the lifecycle context's

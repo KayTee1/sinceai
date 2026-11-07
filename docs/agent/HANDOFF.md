@@ -1,5 +1,15 @@
 # Handoff
 
+- **T21 build status (`feat/T21-build-status`, local, not pushed):** read-only
+  `getBuildStatus` (service `src/services/build/status.ts`, Mastra tool
+  `get-build-status`) reports proposal status, decision, built insight and
+  lifecycle separately (approved can be archived). `proposeBuild` returns
+  `already_built` for an approved build of the same request + scope and stores
+  nothing; the check runs inside the write transaction, queued per client.
+  `analyzeRequest` no longer says "nothing has been built". **Open policy:**
+  rebuild after TTL expiry is refused (restore is the path) until agreed.
+  **Known risk:** concurrent writers from different code paths can still hit
+  SQLITE_BUSY (no busy timeout). Awaits independent Codex review.
 - **New direction (D24, both developers; not implemented):** after T16B and
   the current golden path, plan T19's additional team-authored, LLM-generated
   synthetic estate scenarios (KPI forks, duplicate/overlapping assets, stale
