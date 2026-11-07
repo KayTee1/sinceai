@@ -2,7 +2,7 @@
 // in chat ("Use this"). It counts as an app use of that asset by the requester
 // and is audited. No approver is needed (D14).
 import type { Client } from "@libsql/client";
-import { LifecycleError, POLICY_VERSION, appendAudit, recordUsage } from "../lifecycle";
+import { LifecycleError, POLICY_VERSION, appendAudit, getAssetState, recordUsage } from "../lifecycle";
 import { analyzeRequest } from "../steward/analyze";
 import type { Scope } from "../steward/types";
 import { mappedRequester } from "./build";
@@ -35,6 +35,10 @@ export async function confirmReuse(
   const candidate = analysis.candidates.find((c) => c.assetId === input.assetId);
   if (!candidate) {
     throw new LifecycleError(`${input.assetId} is not a reuse candidate for ${analysis.request.id}; nothing was logged`, "invalid");
+  }
+  // Discovery reads the imported catalog only; an archived asset must be restored first (T22).
+  if ((await getAssetState(db, candidate.assetId))?.status === "archived") {
+    throw new LifecycleError(`${candidate.assetId} is archived; restore it before reusing it. Nothing was logged.`, "invalid");
   }
   // Business_Requests has no requester (D12): same labelled mapping as a build.
   const requesterId = await mappedRequester(db, scope.market);

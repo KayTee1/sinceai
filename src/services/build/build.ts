@@ -6,6 +6,7 @@
 // come only from computeKpiByMarket over source rows (Rule 2); the LLM never
 // produces them. Nothing is built without an approved proposal (Rule 1).
 import type { Client } from "@libsql/client";
+import { checkDuplicate, type DuplicateCheck } from "../estate";
 import {
   LifecycleError,
   POLICY_VERSION,
@@ -52,7 +53,9 @@ export type Insight = {
 export type ProposeBuildResult =
   | { status: "proposed"; proposal: Proposal }
   | { status: "already_proposed"; proposal: Proposal }
-  | { status: "not_proposed"; recommendation: string; rationale: string[] };
+  | { status: "not_proposed"; recommendation: string; rationale: string[] }
+  /** T22: the estate already covers it (active or app-built asset, archived asset, or another waiting build). */
+  | { status: "duplicate"; duplicate: DuplicateCheck };
 
 /** Region a scope's market belongs to: a region name, a market ID's region, or Global. */
 async function scopeRegion(db: Client, market: string): Promise<string> {
@@ -109,6 +112,14 @@ export async function proposeBuild(
     args: [requestId, scope.product, scope.market],
   });
   if (pending.rows[0]) return { status: "already_proposed", proposal: (await getProposal(db, pending.rows[0].id as string))! };
+
+  // T22 duplicate gate: discovery reads only the imported catalog, so also
+  // check app-built insights, archived assets and builds waiting under another
+  // request before anything new is proposed.
+  const duplicate = await checkDuplicate(db, { scope, kpiIds: analysis.computability.map((c) => c.kpiId) });
+  if (duplicate.verdict === "reuse" || duplicate.verdict === "restore" || duplicate.verdict === "pending") {
+    return { status: "duplicate", duplicate };
+  }
 
   let requesterId = input.requesterId?.trim() || null;
   const requesterSource: BuildEvidence["requesterSource"] = requesterId ? "given" : "team_mapping";

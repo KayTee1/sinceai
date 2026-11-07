@@ -17,6 +17,7 @@ import {
   LifecycleError,
   type AssetState,
   type Db,
+  type MergeEvidence,
   type Proposal,
   type PromoteEvidence,
   type ProposalStatus,
@@ -292,6 +293,76 @@ async function openLeaseReview(tx: Db, assetId: string, date: string) {
   });
 }
 
+/**
+ * T22: a retire proposal before the lease ends, asked for by a person in chat
+ * (e.g. "AST-0330 duplicates AST-0135"). Same evidence and rules as a lease
+ * review: the owner decides within the review window, then it escalates to the
+ * region's steward (D16); without an active owner it goes to the steward at
+ * once (Rule 8). Rejecting it keeps the asset and renews its lease (D14).
+ */
+export async function proposeRetire(
+  db: Client,
+  input: { assetId: string; reason: string; requestedBy?: string },
+  date: string,
+): Promise<Proposal> {
+  const reason = input.reason.trim();
+  if (!reason) throw new LifecycleError("A retire proposal needs a reason", "invalid");
+  const tx = await db.transaction("write");
+  try {
+    const state = await getAssetState(tx, input.assetId);
+    if (!state) throw new LifecycleError(`Unknown asset ${input.assetId}`, "not_found");
+    if (state.status === "archived") throw new LifecycleError(`${input.assetId} is already archived`, "invalid");
+    const open = await tx.execute({
+      sql: `SELECT id FROM proposals WHERE status IN ('open', 'escalated') AND json_extract(asset_ids, '$[0]') = ?`,
+      args: [input.assetId],
+    });
+    if (open.rows[0]) {
+      throw new LifecycleError(`${input.assetId} already has an open proposal (${open.rows[0].id as string})`, "invalid");
+    }
+    const evidence = await buildEvidence(tx, state, date);
+    const ownerActive = evidence.ownerStatus === "active";
+    const steward = ownerActive ? null : await regionSteward(tx, state.ownerId);
+    const id = `PRP-RETIRE-${input.assetId}-${date}`;
+    const rationale =
+      `Retire requested in chat${input.requestedBy ? ` by ${input.requestedBy}` : ""}: ${reason} ` +
+      `Usage: ${usageText(evidence)}. ` +
+      (ownerActive
+        ? `The owner decides within ${REVIEW_WINDOW_DAYS} days; then it escalates to the data steward.`
+        : `The owner is ${evidence.ownerStatus}, so the data steward decides.`);
+    await tx.execute({
+      sql: `INSERT INTO proposals (id, version, type, asset_ids, rationale, evidence, required_approvers, status, created_on, due_on)
+            VALUES (?, 1, 'retire', ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        id,
+        JSON.stringify([input.assetId]),
+        rationale,
+        JSON.stringify(evidence),
+        JSON.stringify(ownerActive ? [state.ownerId] : steward ? [steward] : []),
+        ownerActive ? "open" : "escalated",
+        date,
+        ownerActive ? addDays(date, REVIEW_WINDOW_DAYS) : null,
+      ],
+    });
+    await appendAudit(tx, {
+      simDate: date,
+      actor: input.requestedBy ?? "steward",
+      action: "retire_proposed",
+      assetId: input.assetId,
+      proposalId: id,
+      policyVersion: POLICY_VERSION,
+      rationale,
+      evidence,
+    });
+    await tx.commit();
+    return (await getProposal(db, id))!;
+  } catch (err) {
+    await tx.rollback();
+    throw err;
+  } finally {
+    tx.close();
+  }
+}
+
 // Region data steward who takes over overdue reviews (D14: a team is an owner
 // region; Global covers Asia Pacific, which has no active steward).
 export async function regionSteward(tx: Db, ownerId: string | null): Promise<string | null> {
@@ -355,6 +426,77 @@ async function archiveAsset(tx: Db, assetId: string, date: string) {
   });
 }
 
+/**
+ * T22 merge decision. Every required approver (both owners, or a steward in
+ * place of an inactive owner) must approve; one rejection closes it and
+ * nothing changes. The last approval re-checks that both sides are still
+ * there and the target is active, then archives the source with a redirect
+ * to the target (restorable, D14).
+ */
+async function decideMergeTx(tx: Db, p: Proposal, input: DecisionInput, reason: string, date: string): Promise<null> {
+  const ev = p.evidence as MergeEvidence;
+  if (ev.kind !== "merge_pair") {
+    throw new LifecycleError(`${p.id} was written by another version of the app (no merge pair); reset the lifecycle to clear it`, "invalid");
+  }
+  if (input.action === "reject") {
+    await recordDecision(tx, p, input, reason, date);
+    await appendAudit(tx, {
+      simDate: date,
+      actor: input.actor,
+      action: "merge_rejected",
+      assetId: ev.sourceId,
+      proposalId: p.id,
+      policyVersion: POLICY_VERSION,
+      rationale: `Merge of ${ev.sourceId} into ${ev.targetId} rejected: ${reason} Both dashboards stay as they are.`,
+    });
+    return null;
+  }
+  if (ev.approvals.includes(input.actor)) throw new LifecycleError(`${input.actor} has already approved ${p.id}`, "invalid");
+  const approvals = [...ev.approvals, input.actor];
+  const waiting = p.requiredApprovers.filter((a) => !approvals.includes(a));
+  await tx.execute({
+    sql: `UPDATE proposals SET evidence = ? WHERE id = ?`,
+    args: [JSON.stringify({ ...ev, approvals }), p.id],
+  });
+  if (waiting.length > 0) {
+    await tx.execute({
+      sql: `INSERT INTO decisions (proposal_id, version, actor, action, reason, sim_date, created_at) VALUES (?, ?, ?, 'approve', ?, ?, ?)`,
+      args: [p.id, p.version, input.actor, reason || null, date, new Date().toISOString()],
+    });
+    await appendAudit(tx, {
+      simDate: date,
+      actor: input.actor,
+      action: "merge_approved_partly",
+      assetId: ev.sourceId,
+      proposalId: p.id,
+      policyVersion: POLICY_VERSION,
+      rationale: `${input.actor} approved merging ${ev.sourceId} into ${ev.targetId}; still waiting for ${waiting.join(", ")}.`,
+    });
+    return null;
+  }
+
+  const [source, target] = [await getAssetState(tx, ev.sourceId), await getAssetState(tx, ev.targetId)];
+  if (!source || source.status === "archived") throw new LifecycleError(`${ev.sourceId} is ${source ? "already archived" : "unknown"}`, "invalid");
+  if (!target || target.status !== "active") {
+    throw new LifecycleError(`${ev.targetId} is ${target?.status ?? "unknown"}; the merge needs an active target (D14)`, "invalid");
+  }
+  await recordDecision(tx, p, input, reason, date);
+  await archiveAsset(tx, ev.sourceId, date);
+  await appendAudit(tx, {
+    simDate: date,
+    actor: input.actor,
+    action: "merged",
+    assetId: ev.sourceId,
+    proposalId: p.id,
+    policyVersion: POLICY_VERSION,
+    rationale:
+      `Merged into ${ev.targetId} (${ev.targetName}) after approval by ${approvals.join(" and ")}; archived (restorable). ` +
+      `Users${ev.downstreamAssets.length ? ` and ${ev.downstreamAssets.length} downstream asset(s)` : ""} redirect to ${ev.targetId}.`,
+    evidence: { redirectTo: ev.targetId, downstreamAssets: ev.downstreamAssets },
+  });
+  return null;
+}
+
 // ---------- human actions ----------
 
 export type DecisionInput = {
@@ -412,6 +554,11 @@ export async function decide(db: Client, input: DecisionInput, date: string): Pr
     const { p, reason } = await validateDecision(tx, input);
     if (p.type === "build_temporary") {
       throw new LifecycleError("Build proposals are decided by the build service (decideBuild)", "invalid");
+    }
+    if (p.type === "merge") {
+      const result = await decideMergeTx(tx, p, input, reason, date);
+      await tx.commit();
+      return result ?? (await getProposal(db, p.id))!;
     }
 
     const assetId = p.assetIds[0];
