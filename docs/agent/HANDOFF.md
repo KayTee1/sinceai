@@ -1,22 +1,24 @@
 # Handoff
 
-- **T25 / B1 scheduler core (`feat/T24-scheduler-core`, KayTee / Claude,
-  awaiting Codex re-review):** backend only. `src/services/scheduler` +
-  `/api/scheduler/*`: manual incremental run over audit-log changes since
-  the checkpoint, rule `active_overlap` (`overlap-v2`, suggestMerge both
-  directions, `merge` verdict only), findings (open / dismissed, reason
-  audited, fingerprint dedupe), run history, abandon for crash recovery.
-  HTTP writes need `SCHEDULER_DEMO_ACTIONS=1` (demo `manager`, not auth;
-  gate checked before any DB access). Reset drops `scheduler_*` with
-  `audit_log` (three lines in lifecycle `APP_TABLES`, needs Viet's OK;
-  D25 proposed). Codex review of `9cea0ed` fixed: F1 (scheduler writes on
-  own short-lived `libsql` connections; libsql 0.5 keeps a BUSY
-  statement's lock until it is re-run or GC'd, so a failed COMMIT is
-  drained by re-running it; see `scheduler/db.ts`), F2 (tier in the
-  fingerprint), C4 (failure outcome read from stored state), C3, C2 (one
-  comparison per asset per run). Still true for the rest of the app: any
-  statement on the shared client that fails busy poisons that pooled
-  connection. Next: Codex re-review; then Scheduler tab UI and Mode 3.
+- **T25 governance scheduler (`integrate/T24-scheduler`, KayTee / Claude,
+  not pushed, awaiting Codex re-review):** master `16c868d` + B1 core +
+  B2 periodic + B3 proposals from findings + B4 Scheduler tab (Agentic:
+  Pipeline | Scheduler | Inbox). Codex fixes: B2-F1 finding-writing jobs
+  serialised by a unique index at claim (409); B2-F2 current evidence
+  refreshed, `dismissed_evidence` kept; B3-F1 proposal outcome derived on
+  read from `proposals`; B3-F2 manager's direction recorded, comparator
+  preference is evidence only; B3-F4 Personal/Team replacing Certified
+  blocked (policy open). **Proposal POST stays disabled** (409, blockedBy
+  `MERGE-APPROVERS`, `CODEX-REVIEW`). B0 is in the base (master
+  `16c868d`, #36). **Open P1 (Viet, `estate/merge.ts`):** `proposeMerge`
+  drops a side with no active approver and still creates the proposal;
+  `tests/scheduler-integration.test.ts` has it as a `todo` repro. Viet
+  also needs to OK the reset-list lines and the rationale sentence B3
+  appends. Checks: 329 tests (328 pass, 1 todo), tsc, lint, `next build`;
+  browser smoke on a disposable DB at 1440 and 390 px (header and clock
+  bar overflow on phones, pre-existing). Next: Codex re-review of B2, B3,
+  integration; Viet's MERGE-APPROVERS fix; Certified-replacement policy
+  decision; then PRs B1 -> B2 -> B3 -> B4.
 - **New direction (D24, both developers; not implemented):** after T16B and
   the current golden path, plan T19's additional team-authored, LLM-generated
   synthetic estate scenarios (KPI forks, duplicate/overlapping assets, stale

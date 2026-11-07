@@ -414,9 +414,14 @@ Alternative: regenerating scenarios each demo; reviewed fixtures are preferred
 for repeatability.
 Agreed by: KayTee + Viet (direction only, confirmed by the user)
 
-D25: Governance scheduler core: incremental runs and findings (2026-11-07)
-Status: proposed (KayTee, T25/B1). The reset-list change in
-`src/services/lifecycle/schema.ts` needs Viet's agreement (his area; B0 is his).
+D25: Governance scheduler: incremental and periodic runs, findings, proposals from findings (2026-11-07)
+Status: proposed (KayTee, T25 B1-B4 on `integrate/T24-scheduler`; awaiting
+Codex re-review). Needs Viet's agreement on: the reset-list lines in
+`src/services/lifecycle/schema.ts`; the MERGE-APPROVERS fix in
+`src/services/estate/merge.ts` (his code); the sentence B3 appends to
+`proposals.rationale` when a proposal is raised from a finding. B0
+(archiving closes other open proposals; no decision on an archived asset)
+is Viet's and is on master since `16c868d` (#36).
 Choice and why:
 - Scheduler runs, checkpoints and findings live in their own tables
   (`scheduler_*`), apart from request pipeline `runs` and from `proposals`.
@@ -484,9 +489,32 @@ Choice and why:
   other GET routes. Operators can use the CLI.
 - The scheduler does not tick the clock (ticking writes lifecycle state); it
   evaluates at the stored clock date.
-Not covered (later): Mode 3 reassessment (incl. closing findings whose overlap
-is gone), clock/cron triggers, Scheduler UI, finding-to-proposal promotion,
-external catalog changes (imported tables are read-only; nothing to observe).
+- Mode 3 (B2, job `periodic_reassessment`, manual trigger only): re-checks
+  open and dismissed findings with the same rule; a finding whose overlap no
+  longer holds is `resolved` (with a reason), one replaced by a new pair is
+  `superseded`; pending proposals that rest on changed findings are reported
+  (`staleProposals`, relation `linked` / `same_pair` / `shares_asset`),
+  never changed.
+- Proposals from findings (B3): a manager picks the direction (source merged
+  into target); the backend re-validates both assets, scope, KPIs, tier and
+  open proposals, re-runs the comparator, and calls `proposeMerge`
+  unchanged. Link table `scheduler_finding_proposals` keeps actor,
+  direction, fingerprint and an evidence snapshot. The outcome shown for a
+  finding (pending / approved / rejected / expired) is derived on every
+  read from the lifecycle `proposals` row (Codex B3-F1); a stored outcome
+  is a cache only, and a missing row (reset) is never shown as pending. The
+  comparator's preferred direction is recorded as comparison evidence,
+  never as authorisation (B3-F2). A Personal or Team asset replacing a
+  Certified dashboard is blocked as an unresolved product policy (B3-F4).
+- The POST that raises a proposal is hard-disabled
+  (`FINDING_PROPOSALS_ENABLED = false`, 409 `blockedBy`
+  `["MERGE-APPROVERS", "CODEX-REVIEW"]`) until `proposeMerge` refuses a
+  merge where either side has no active approver (Codex P1, Viet's code;
+  not duplicated in the scheduler) and Codex has reviewed the module. No
+  UI control raises proposals.
+Not covered (later): clock/cron triggers, a full-estate sweep, external
+catalog changes (imported tables are read-only; nothing to observe), merge
+expiry/escalation (merge proposals have no due date).
 History (Codex C1): a finding keeps only its latest evidence (and, while
 dismissed, the evidence it was dismissed on); earlier observations are not
 reconstructible. B3 must snapshot the evidence a proposal is made from.
