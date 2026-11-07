@@ -74,6 +74,12 @@ export type RunSummary = {
 };
 
 export type RunError = {
+  /**
+   * evaluation_failed: comparing the estate failed. commit_failed: anything
+   * between evaluation and the end of the commit transaction failed (the
+   * transaction rolled back; nothing of the run was written). abandoned: a
+   * manager recovered the run by hand.
+   */
   code: "evaluation_failed" | "commit_failed" | "abandoned";
   stage: "evaluate" | "commit" | "recovery";
   message: string;
@@ -113,10 +119,10 @@ export type OverlapSide = {
   appOpens90d: number;
 };
 
-/** What a finding's identity and "material change" are judged on: scope and KPIs of both assets, and the verdict. */
+/** What a finding's "material change" is judged on: the verdict and, per asset, scope, KPIs and governance tier (overlap.ts fingerprintOf). */
 export type OverlapBasis = {
   verdict: "merge";
-  assets: { assetId: string; product: string; market: string; kpiIds: string[] }[];
+  assets: { assetId: string; product: string; market: string; tier: string; kpiIds: string[] }[];
 };
 
 export type OverlapEvidence = {

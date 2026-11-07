@@ -13,6 +13,9 @@
 //   window start (compare-and-set), and writes findings via `apply`. Any
 //   failure rolls all of it back.
 // - failRun: marks a running run failed; a no-op if it is no longer running.
+// - settleFailure: records an evaluation or commit failure and reports what
+//   is actually stored afterwards (failed, abandoned, reset, or still running
+//   because recording the failure failed too). It never guesses.
 // - abandonRun: recovery after a crash. No automatic stale timeout: the
 //   prototype has no heartbeat to tell a crashed run from a slow one, so a
 //   manager abandons it explicitly (audited). A run that was in fact still
@@ -20,7 +23,7 @@
 import { randomUUID } from "node:crypto";
 import type { Client, Transaction } from "@libsql/client";
 import { POLICY_VERSION, appendAudit, readClock } from "../lifecycle";
-import { writeOne, writeTx } from "./db";
+import { writeTx } from "./db";
 import { ensureScheduler } from "./schema";
 import {
   SchedulerError,
@@ -146,11 +149,64 @@ export async function commitRun(
 
 /** Records a failure. Returns false (and changes nothing) if the run is not running. Never moves the checkpoint. */
 export async function failRun(db: Client, runId: string, error: Omit<RunError, "at">, nowIso = new Date().toISOString()): Promise<boolean> {
-  const r = await writeOne(db, {
-    sql: `UPDATE scheduler_runs SET status = 'failed', completed_at = ?, error = ? WHERE run_id = ? AND status = 'running'`,
-    args: [nowIso, JSON.stringify({ ...error, at: nowIso }), runId],
-  });
+  const r = await writeTx(db, (tx) =>
+    tx.execute({
+      sql: `UPDATE scheduler_runs SET status = 'failed', completed_at = ?, error = ? WHERE run_id = ? AND status = 'running'`,
+      args: [nowIso, JSON.stringify({ ...error, at: nowIso }), runId],
+    }),
+  );
   return r.rowsAffected === 1;
+}
+
+const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+/**
+ * After an evaluation or commit failure: records it on the run (checkpoint
+ * untouched), then reports what is actually stored, never a guess.
+ * - recorded: returns the run (status failed, `error` = this failure).
+ * - the run row is gone (scheduler reset while it ran): conflict "reset".
+ * - abandoned by a manager meanwhile: conflict "abandoned".
+ * - still running because recording failed too (e.g. the lock stayed
+ *   taken), or its state cannot be read: conflict "unrecorded" with the
+ *   recording error and the stored status; abandon the run to recover.
+ * - otherwise (already succeeded because the commit had landed and only a
+ *   later read failed, or failed for another reason): returns it as stored.
+ * `detail.runId` and `detail.failure` (the original failure) are always set.
+ */
+export async function settleFailure(db: Client, run: SchedulerRun, failure: Omit<RunError, "at">): Promise<SchedulerRun> {
+  let recorded = false;
+  let recordingError: string | undefined;
+  try {
+    recorded = await failRun(db, run.runId, failure);
+  } catch (err) {
+    recordingError = messageOf(err);
+  }
+  const stored = await getRun(db, run.runId).catch(() => undefined);
+  const base = { runId: run.runId, failure, ...(recordingError ? { recordingError } : {}) };
+  const what = `${failure.stage}: ${failure.message}`;
+  if (stored === null) {
+    throw new SchedulerError(`Run ${run.runId} no longer exists: the scheduler was reset while it ran (${what}). Nothing of it was committed.`, "conflict", {
+      ...base,
+      outcome: "reset",
+    });
+  }
+  if (stored?.status === "failed" && stored.error?.code === "abandoned") {
+    throw new SchedulerError(
+      `Run ${run.runId} was abandoned by ${stored.error.actor ?? "a manager"} while it ran (${what}). Nothing of it was committed.`,
+      "conflict",
+      { ...base, outcome: "abandoned" },
+    );
+  }
+  if (stored === undefined || (stored.status === "running" && !recorded)) {
+    const status = stored?.status ?? "unknown";
+    throw new SchedulerError(
+      `Run ${run.runId} failed (${what}), and recording that failure also failed (${recordingError ?? "the run was not updated"}). ` +
+        `Stored status: ${status}. Its checkpoint did not move${status === "running" ? "; abandon the run to recover" : ""}.`,
+      "conflict",
+      { ...base, outcome: "unrecorded", runStatus: status },
+    );
+  }
+  return stored;
 }
 
 /** Manual recovery for a run left running by a crash (audited). Its later commit, if any, is refused. */

@@ -1,18 +1,22 @@
 # Handoff
 
 - **T24 / B1 scheduler core (`feat/T24-scheduler-core`, KayTee / Claude,
-  review):** backend only. `src/services/scheduler` + `/api/scheduler/*`:
-  manual incremental run over audit-log changes since the checkpoint, rule
-  `active_overlap` (suggestMerge, both directions, `merge` verdict only),
-  findings (open / dismissed, reason audited, fingerprint dedupe), run history,
-  abandon for crash recovery. HTTP writes need `SCHEDULER_DEMO_ACTIONS=1`
-  (demo `manager`, not auth). Reset drops `scheduler_*` with `audit_log`
-  (one-line change in lifecycle `APP_TABLES`, needs Viet's OK; D25 proposed).
-  Found: libsql 0.5 keeps a read lock after a statement fails with
-  SQLITE_BUSY until GC, so later commits fail; scheduler writes are
-  serialized in-process. The rest of the app can still hit this when two
-  write transactions overlap. Next: Codex review; Scheduler tab UI and Mode 3
-  reassessment are later branches.
+  awaiting Codex re-review):** backend only. `src/services/scheduler` +
+  `/api/scheduler/*`: manual incremental run over audit-log changes since
+  the checkpoint, rule `active_overlap` (`overlap-v2`, suggestMerge both
+  directions, `merge` verdict only), findings (open / dismissed, reason
+  audited, fingerprint dedupe), run history, abandon for crash recovery.
+  HTTP writes need `SCHEDULER_DEMO_ACTIONS=1` (demo `manager`, not auth;
+  gate checked before any DB access). Reset drops `scheduler_*` with
+  `audit_log` (three lines in lifecycle `APP_TABLES`, needs Viet's OK;
+  D25 proposed). Codex review of `9cea0ed` fixed: F1 (scheduler writes on
+  own short-lived `libsql` connections; libsql 0.5 keeps a BUSY
+  statement's lock until it is re-run or GC'd, so a failed COMMIT is
+  drained by re-running it; see `scheduler/db.ts`), F2 (tier in the
+  fingerprint), C4 (failure outcome read from stored state), C3, C2 (one
+  comparison per asset per run). Still true for the rest of the app: any
+  statement on the shared client that fails busy poisons that pooled
+  connection. Next: Codex re-review; then Scheduler tab UI and Mode 3.
 - **New direction (D24, both developers; not implemented):** after T16B and
   the current golden path, plan T19's additional team-authored, LLM-generated
   synthetic estate scenarios (KPI forks, duplicate/overlapping assets, stale

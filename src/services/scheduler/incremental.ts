@@ -17,12 +17,13 @@
 // external catalog changes have no change record to read.
 import type { Client } from "@libsql/client";
 import { readClock } from "../lifecycle";
+import { suggestMerge } from "../estate";
+import { withReadClient } from "./db";
 import { emptyCounts, applyObservations } from "./findings";
 import { OVERLAP_RULE, assessAsset, loadRunEstate, type Comparator, type Observation } from "./overlap";
-import { claimRun, commitRun, failRun, getRun } from "./runs";
+import { claimRun, commitRun, settleFailure } from "./runs";
 import { ensureScheduler } from "./schema";
 import {
-  SchedulerError,
   type AssetAssessment,
   type ChangeTrigger,
   type ChangeWindow,
@@ -78,6 +79,23 @@ export async function readChanges(db: Client, window: ChangeWindow) {
   return { eventsRead: r.rows.length, relevantEvents: relevant, ignoredSchedulerEvents: schedulerEvents, byAsset };
 }
 
+/**
+ * One comparison per asset per run (C2): a changed asset's own comparison and
+ * the reverse comparisons of the assets it covers can ask about the same
+ * asset more than once; the answer cannot change within one evaluation, so
+ * it is reused. Matching itself is suggestMerge's, unchanged. Each distinct
+ * comparison still loads the estate inside suggestMerge (follow-up).
+ */
+function memoized(compare: Comparator): Comparator {
+  const seen = new Map<string, ReturnType<Comparator>>();
+  return (db, input, date) => {
+    const key = `${input.assetId}|${input.limit ?? ""}|${date}`;
+    let r = seen.get(key);
+    if (!r) seen.set(key, (r = compare(db, input, date)));
+    return r;
+  };
+}
+
 /** Read-only evaluation of one claimed run. */
 export async function evaluate(
   db: Client,
@@ -90,8 +108,9 @@ export async function evaluate(
   if (changes.byAsset.size > 0) {
     // The estate is read only when something changed: no sweep on an empty window.
     const estate = await loadRunEstate(db);
+    const memo = memoized(compare ?? suggestMerge);
     for (const [assetId, triggers] of changes.byAsset) {
-      const r = await assessAsset(db, { assetId, triggers, estate, date: run.simDate, compare });
+      const r = await assessAsset(db, { assetId, triggers, estate, date: run.simDate, compare: memo });
       assessments.push(r.assessment);
       // The same pair seen from both changed assets is one observation (the first one keeps its triggers).
       for (const o of r.observations) if (!observations.has(o.dedupKey)) observations.set(o.dedupKey, o);
@@ -119,11 +138,16 @@ export type RunOptions = {
 };
 
 /**
- * Manually triggered incremental run: claim, evaluate (no transaction held),
- * commit findings and checkpoint together. A failure is recorded on the run
- * and leaves the checkpoint and findings untouched. Returns the finished run
- * (succeeded or failed); throws SchedulerError("conflict") when another run
- * is in progress or this run was abandoned or reset before it could commit.
+ * Manually triggered incremental run: claim, evaluate (no transaction held,
+ * on a scheduler-owned read client), commit findings and checkpoint together.
+ * A failure leaves the checkpoint and findings untouched and is recorded on
+ * the run: returns the finished run (succeeded, or failed with
+ * `error.code` evaluation_failed / commit_failed). Throws
+ * SchedulerError("conflict") when another run is in progress, the database
+ * stayed locked at claim time, or the failure could not be settled as a
+ * failed run (abandoned, reset, or the failure itself could not be recorded;
+ * `detail.outcome`, `detail.runId` and `detail.failure` say which). See
+ * runs.ts settleFailure.
  */
 export async function runIncremental(db: Client, opts: RunOptions): Promise<SchedulerRun> {
   await ensureScheduler(db);
@@ -138,10 +162,9 @@ export async function runIncremental(db: Client, opts: RunOptions): Promise<Sche
 
   let result: Awaited<ReturnType<typeof evaluate>>;
   try {
-    result = await evaluate(db, run, opts.compare);
+    result = await withReadClient(db, (reader) => evaluate(reader, run, opts.compare));
   } catch (err) {
-    await failRun(db, run.runId, { code: "evaluation_failed", stage: "evaluate", message: errorMessage(err) });
-    return (await getRun(db, run.runId)) ?? run;
+    return settleFailure(db, run, { code: "evaluation_failed", stage: "evaluate", message: errorMessage(err) });
   }
 
   try {
@@ -159,12 +182,7 @@ export async function runIncremental(db: Client, opts: RunOptions): Promise<Sche
       nowIso,
     );
   } catch (err) {
-    const recorded = await failRun(db, run.runId, { code: "commit_failed", stage: "commit", message: errorMessage(err) }).catch(() => false);
-    if (!recorded) {
-      // Abandoned, or the scheduler tables were reset under the run: nothing of it was committed.
-      throw err instanceof SchedulerError ? err : new SchedulerError(errorMessage(err), "conflict");
-    }
-    return (await getRun(db, run.runId)) ?? run;
+    return settleFailure(db, run, { code: "commit_failed", stage: "commit", message: errorMessage(err) });
   }
 }
 

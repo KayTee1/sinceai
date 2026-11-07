@@ -1,8 +1,8 @@
 import { connection } from "next/server";
 import { db } from "@/db/client";
-import { authorizeDemoAction, countRuns, listRuns, runIncremental } from "@/services/scheduler";
+import { countRuns, listRuns, runIncremental } from "@/services/scheduler";
 import { body } from "@/lib/lifecycle-server";
-import { withScheduler } from "@/lib/scheduler-server";
+import { withScheduler, withSchedulerAction } from "@/lib/scheduler-server";
 
 // Recent scheduler runs, newest first (?limit=, default 20).
 export async function GET(req: Request) {
@@ -15,5 +15,5 @@ export async function GET(req: Request) {
 // 200 with the finished run (succeeded or failed); 409 while another run is in progress.
 export async function POST(req: Request) {
   const b = await body(req);
-  return withScheduler(async () => ({ run: await runIncremental(db(), { actor: authorizeDemoAction(b.actor) }) }));
+  return withSchedulerAction(b.actor, async (actor) => ({ run: await runIncremental(db(), { actor }) }));
 }

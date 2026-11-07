@@ -426,19 +426,43 @@ Choice and why:
   transaction, so no lower ID can commit later). Watched actions:
   `temporary_registered`, `insight_built`, `restored`, `promoted`;
   `scheduler_*` rows are ignored. No change, no estate read.
-- Rule `active_overlap` (`overlap-v1`) reuses `suggestMerge` unchanged, in both
+- Rule `active_overlap` (`overlap-v2`) reuses `suggestMerge` unchanged, in both
   directions (the changed asset as covered or covering side). Only its
   `merge` verdict becomes a finding; `keep_both` / `partial` are counted.
   A finding is not a proposal and never merges, archives or changes KPIs.
 - Findings: one row per rule + asset pair; `open` or `dismissed`. Dismiss
-  needs a reason and is audited. Fingerprint = both assets' scope and KPI
-  sets + verdict (usage and merge direction excluded: they move with the
-  clock). Same fingerprint: open stays open, dismissed stays dismissed;
-  new fingerprint on a dismissed finding reopens it (audited).
+  needs a reason and is audited. Fingerprint (material evidence) = verdict
+  + per asset: scope, KPI set and governance tier. Tier is material
+  (Codex F2): it is the governed standing, `suggestMerge` ranks by it, and
+  a dismissal of an overlap with a Temporary insight says nothing once it
+  is Personal or Team. Excluded (evidence only): usage counts and merge
+  direction (move with the clock), name, lease/TTL dates, owner (no in-app
+  transfer; revisit when B3 routes findings to owners), active vs
+  lease_due. Same fingerprint: open stays open, dismissed stays
+  dismissed; new fingerprint on a dismissed finding reopens it (audited).
+  `overlap-v1` findings (local demo DBs only; B1 is unmerged) reopen once
+  on their next observation because the basis changed.
 - Concurrency: one running run per job (partial unique index); claim,
   read-only evaluation, and one commit transaction that marks the run
   succeeded and moves the checkpoint by compare-and-set together with the
   findings. Failures are recorded and never move the checkpoint.
+- Database access (Codex F1): libsql 0.5 keeps the lock of a statement that
+  failed with SQLITE_BUSY until that statement is run again or
+  garbage-collected, and @libsql/client puts the connection back in its
+  pool; a failed COMMIT then blocks every writer. Scheduler writes
+  therefore use their own short-lived `libsql` connection per attempt
+  (BEGIN IMMEDIATE, `cache_spill` off, closed afterwards); a busy BEGIN
+  holds nothing and is retried asynchronously on a new connection; a
+  failed COMMIT is rolled back and that COMMIT statement is run once more
+  so it releases its lock at once. Evaluation reads use a scheduler-owned
+  client closed after the run. The app's shared client is never written
+  through or closed by the scheduler. `libsql` (already installed under
+  @libsql/client) is now a direct dependency.
+- Failure reporting (Codex C4): after an evaluation or commit failure the
+  run is marked failed if possible, then the stored state decides what is
+  reported: failed run; conflict `abandoned`; conflict `reset`; or conflict
+  `unrecorded` (recording failed too, the run stays running, abandon it).
+  The original failure and run ID are always in the error detail.
 - Crash recovery: no automatic stale-run timeout (no heartbeat to tell a dead
   run from a slow one). A manager abandons a stuck run with a reason
   (audited); a late commit of that run is refused.
@@ -446,13 +470,17 @@ Choice and why:
   no checkpoint, run or finding outlives the audit IDs and assets it points at.
 - HTTP writes (run, dismiss, abandon) are off unless the server sets
   `SCHEDULER_DEMO_ACTIONS=1`, then accept only the demo `manager` actor. This
-  is attribution, not authentication (no auth in the prototype). Reads are
-  open like other GET routes. Operators can use the CLI.
+  is attribution, not authentication (no auth in the prototype). The gate
+  is checked before any database access (Codex C3). Reads are open like
+  other GET routes. Operators can use the CLI.
 - The scheduler does not tick the clock (ticking writes lifecycle state); it
   evaluates at the stored clock date.
 Not covered (later): Mode 3 reassessment (incl. closing findings whose overlap
 is gone), clock/cron triggers, Scheduler UI, finding-to-proposal promotion,
 external catalog changes (imported tables are read-only; nothing to observe).
+History (Codex C1): a finding keeps only its latest evidence (and, while
+dismissed, the evidence it was dismissed on); earlier observations are not
+reconstructible. B3 must snapshot the evidence a proposal is made from.
 Alternatives considered: reusing `runs`/`run_events` (request-specific);
 timestamp-based reset detection (not reliable); a stale-run timeout (no
 evidence for any value); persisting `keep_both`/`partial` overlaps as findings

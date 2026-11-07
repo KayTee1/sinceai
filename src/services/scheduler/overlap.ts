@@ -18,7 +18,8 @@ import { loadEstate, suggestMerge, type EstateAsset, type MergeSide, type MergeS
 import { scopeFit } from "../steward/discovery";
 import type { AssetAssessment, ChangeTrigger, OverlapBasis, OverlapEvidence, OverlapSide, RuleRef } from "./types";
 
-export const OVERLAP_RULE: RuleRef = { ruleId: "active_overlap", version: "overlap-v1" };
+// overlap-v2 (T24 F2): the fingerprint basis includes each asset's governance tier.
+export const OVERLAP_RULE: RuleRef = { ruleId: "active_overlap", version: "overlap-v2" };
 
 /** Same signature as suggestMerge; tests inject failures through it. */
 export type Comparator = (db: Client, input: { assetId: string; limit?: number }, date: string) => Promise<MergeSuggestions>;
@@ -47,19 +48,35 @@ function side(s: MergeSide): OverlapSide {
   };
 }
 
-export function basisOf(s: { mergeAway: { assetId: string; product: string; market: string; kpiIds: string[] }; keep: typeof s.mergeAway }): OverlapBasis {
+type BasisSide = { assetId: string; product: string; market: string; tier: string; kpiIds: string[] };
+
+export function basisOf(s: { mergeAway: BasisSide; keep: BasisSide }): OverlapBasis {
   return {
     verdict: "merge",
     assets: [s.mergeAway, s.keep]
-      .map((a) => ({ assetId: a.assetId, product: a.product, market: a.market, kpiIds: [...new Set(a.kpiIds)].sort() }))
+      .map((a) => ({ assetId: a.assetId, product: a.product, market: a.market, tier: a.tier, kpiIds: [...new Set(a.kpiIds)].sort() }))
       .sort((x, y) => x.assetId.localeCompare(y.assetId)),
   };
 }
 
 /**
- * Material change = a change in either asset's scope or KPI set, or in the
- * verdict. Usage numbers and which side suggestMerge would keep move with the
- * clock, so they are stored as evidence but not fingerprinted.
+ * Material change = a change in the verdict or, for either asset, in its
+ * scope (product, market), its KPI set or its governance tier.
+ *
+ * Tier is material: it is the asset's governed standing (Temporary,
+ * Personal, Team, certified), suggestMerge ranks the sides by it, and a
+ * dismissal of an overlap with a Temporary insight ("a one-off") says
+ * nothing about the same overlap once that insight is Personal or Team.
+ *
+ * Not material, stored as evidence only:
+ * - usage (pack users, app opens in 90 days): moves with the clock, and
+ *   which side suggestMerge keeps moves with it for otherwise equal pairs;
+ * - name, lease and TTL dates: renewals and renames do not change the
+ *   overlap;
+ * - owner: ownership cannot change in the app today and does not change the
+ *   overlap; revisit when findings are routed to owners (B3);
+ * - lifecycle status: an archived asset is not compared at all, and
+ *   active / lease_due are both in the active estate.
  */
 export const fingerprintOf = (b: OverlapBasis) => createHash("sha256").update(JSON.stringify(b)).digest("hex");
 

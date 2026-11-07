@@ -285,13 +285,19 @@ read-only catalog tools), `src/db` (SQLite client, import).
 - `GET /api/scheduler/runs?limit=` and `GET /api/scheduler/runs/[id]`: run
   history with window, assessments per changed asset, finding counts, error.
 - `POST /api/scheduler/runs` `{ actor }`: run now; 200 with the finished run
-  (succeeded or failed), 409 while another runs.
+  (succeeded, or failed with `error.code` `evaluation_failed` /
+  `commit_failed`), 409 while another runs or the database stayed locked,
+  and 409 with `outcome` `abandoned` / `reset` / `unrecorded`, `runId` and
+  the original `failure` when the failure could not be settled as a failed
+  run (`unrecorded`: the run is still running; abandon it).
 - `POST /api/scheduler/runs/[id]/abandon` `{ actor, reason }`: recovery.
 - `GET /api/scheduler/findings?status=&assetId=&limit=`,
   `GET /api/scheduler/findings/[id]`,
   `POST /api/scheduler/findings/[id]/dismiss` `{ actor, reason }`.
 
-POST routes need `SCHEDULER_DEMO_ACTIONS=1` and `actor: "manager"`.
+POST routes need `SCHEDULER_DEMO_ACTIONS=1` and `actor: "manager"`; the
+check runs before any database access. Scheduler writes use their own
+short-lived `libsql` connections, never the shared client (D25).
 Operator CLI: `npx tsx src/services/scheduler/cli.ts status | run <actor> |
 findings | dismiss <id> <actor> <reason> | abandon <id> <actor> <reason>`.
 
