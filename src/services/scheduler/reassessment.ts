@@ -60,7 +60,7 @@ export const PERIODIC_JOB: JobDescriptor = {
   title: "Periodic reassessment",
   description:
     "Re-checks open and dismissed findings against the current estate with the same merge rule. Resolves findings whose overlap no longer holds, refreshes changed evidence, and reports pending proposals that rest on changed evidence. Never proposes, merges, archives or changes proposals.",
-  triggers: ["manual"],
+  triggers: ["manual", "simulated_clock"],
   rules: [OVERLAP_RULE],
   watchedActions: [],
   limitations: REASSESSMENT_LIMITATIONS,

@@ -22,6 +22,7 @@ const APP_TABLES = [
   "scheduler_checkpoints",
   "scheduler_findings",
   "scheduler_finding_proposals",
+  "scheduler_sim_state",
 ];
 
 const DDL = [

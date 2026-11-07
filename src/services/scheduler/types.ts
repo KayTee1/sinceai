@@ -1,11 +1,14 @@
 // T24: governance scheduler contracts. Two jobs: incremental overlap
 // (Mode 2, B1) and periodic reassessment of known findings (Mode 3, B2).
-// Clock / cron triggers are later branches.
+// B5 (T26): both can also be triggered by the simulated clock (simulated.ts). No cron.
 import type { MergeVerdict } from "../estate";
 
 export type SchedulerMode = "incremental" | "reassessment";
-/** Manual only. Simulated-clock and cron triggers are later branches. */
-export type TriggerSource = "manual";
+/**
+ * manual: a person started the run. simulated_clock: B5 (T26) ran it because
+ * it was due at the stored simulated date (simulated.ts). There is no cron.
+ */
+export type TriggerSource = "manual" | "simulated_clock";
 export type JobId = "incremental_overlap" | "periodic_reassessment";
 export type RunStatus = "running" | "succeeded" | "failed";
 /**

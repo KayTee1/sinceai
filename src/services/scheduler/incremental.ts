@@ -30,6 +30,7 @@ import {
   type JobDescriptor,
   type RunSummary,
   type SchedulerRun,
+  type TriggerSource,
 } from "./types";
 
 export const WATCHED_ACTIONS = ["temporary_registered", "insight_built", "restored", "promoted"] as const;
@@ -47,7 +48,7 @@ export const INCREMENTAL_JOB: JobDescriptor = {
   title: "Incremental overlap check",
   description:
     "Checks assets built, restored or promoted since the last run for overlap with active assets, using the estate's merge rules. Records findings; never proposes, merges or archives.",
-  triggers: ["manual"],
+  triggers: ["manual", "simulated_clock"],
   rules: [OVERLAP_RULE],
   watchedActions: [...WATCHED_ACTIONS],
   limitations: LIMITATIONS,
@@ -131,6 +132,8 @@ export async function evaluate(
 
 export type RunOptions = {
   actor: string;
+  /** Default manual. simulated_clock only from simulated.ts. */
+  trigger?: TriggerSource;
   /** Tests only: replaces suggestMerge. */
   compare?: Comparator;
   /** Tests only: called between evaluation and commit. */
@@ -156,7 +159,7 @@ export async function runIncremental(db: Client, opts: RunOptions): Promise<Sche
   const run = await claimRun(db, {
     jobId: INCREMENTAL_JOB.jobId,
     mode: INCREMENTAL_JOB.mode,
-    trigger: "manual",
+    trigger: opts.trigger ?? "manual",
     actor: opts.actor,
     rules: INCREMENTAL_JOB.rules,
   });

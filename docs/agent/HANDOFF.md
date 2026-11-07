@@ -1,5 +1,23 @@
 # Handoff
 
+- **T26 B5 simulated-time scheduler (`feat/T26-scheduler-simulated-time`,
+  KayTee / Claude, not merged; D26 proposed):** `src/services/scheduler/simulated.ts`
+  `runSimulatedTriggers` runs the jobs due at the STORED simulated date
+  (incremental: watched audit rows after the checkpoint; periodic:
+  `reassessmentDue()`), in that order, through the unchanged
+  `runIncremental` / `runReassessment` with trigger `simulated_clock`
+  (actor `simulated-clock`). Called after manager clock actions only with
+  `SCHEDULER_SIM_TRIGGER=1` + `SCHEDULER_DEMO_ACTIONS=1`
+  (`app/api/clock/shared.ts`, Viet's file, additive) and by "Check due jobs"
+  (`POST /api/scheduler/simulated`). Never ticks the clock; off by default.
+  Same date again -> `already_processed`; a failed run is retried at the next
+  trigger; a running finding writer -> `deferred`. Optional demo cadence
+  `SCHEDULER_SIM_REASSESS_DAYS` (unset = none). Scheduler tab: "Simulated
+  clock" card (sim date, due now, last evaluated day / decision / run) and
+  run rows say "triggered by the simulated clock". Real-pack demo path:
+  reset, +90d, approve the AST-0323 retire proposal (OWN-008) in the Inbox,
+  Restore AST-0323 on the Dashboard, +1d -> finding AST-0323 / AST-0015.
+  Viet to review the clock-route hook and reset-list line.
 - **T25 governance scheduler (`integrate/T24-scheduler` -> one PR to master, KayTee / Claude):**
   master `16c868d` + B1 core +
   B2 periodic + B3 proposals from findings + B4 Scheduler tab (Agentic:
@@ -24,7 +42,7 @@
   browser smoke on a disposable DB at 1440 and 390 px (header and clock
   bar overflow on phones, pre-existing). Next: Viet's review of the
   approver fix; Codex review of B3 (CODEX-REVIEW); Certified-replacement
-  policy decision; then enable B3. B5 not started.
+  policy decision; then enable B3. B5: see T26 above.
 - **New direction (D24, both developers; not implemented):** after T16B and
   the current golden path, plan T19's additional team-authored, LLM-generated
   synthetic estate scenarios (KPI forks, duplicate/overlapping assets, stale
