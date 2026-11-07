@@ -252,3 +252,19 @@ version lifecycle-v2.
 Alternatives considered: archive on silence (D9); renew on silence; archive
 only silent retire proposals.
 Agreed by: Viet
+
+D17: Team use of a Temporary insight proposes Team (2026-11-07)
+Status: accepted. Refines D13/D14 (Temporary -> Personal stays owner-only).
+Choice and why: under the original rule only the owner's repeat use saved a
+Temporary insight, so one that colleagues relied on was still archived after
+30 days. Now, once 3 or more distinct people in the owner's region (the team,
+D14) have opened it in the app, a promote proposal goes to the active Leads in
+that region, excluding the owner (no self-approval; the region's data steward
+if no other Lead). The 30-day expiry is held while it waits; approval makes it
+Team with a 90-day lease and the owner unchanged; rejection lets the expiry
+resume. The owner's own repeat use still promotes to Personal automatically.
+Policy version lifecycle-v3.
+Alternatives considered: owner-only (original rule); any repeat use promotes
+to Personal.
+Agreed by: Viet
+

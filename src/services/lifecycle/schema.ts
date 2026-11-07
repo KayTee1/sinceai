@@ -38,7 +38,7 @@ const DDL = [
 ];
 
 // Initial tier mapping is a team assumption (SCOPE, Data).
-const TIER_BY_ENDORSEMENT: Record<string, Tier> = { certified: "certified", promoted: "team", none: "personal" };
+export const TIER_BY_ENDORSEMENT: Record<string, Tier> = { certified: "certified", promoted: "team", none: "personal" };
 
 export async function hasLifecycle(db: Client): Promise<boolean> {
   const r = await db.execute(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'app_clock'`);

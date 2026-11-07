@@ -28,7 +28,18 @@ export type ReviewEvidence = {
   source: { sheet: string; ids: string[] }[];
 };
 
-export type ProposalType = "renew" | "retire";
+/** Why a Temporary insight is proposed for Team (D17). */
+export type PromoteEvidence = {
+  kind: "team_use";
+  region: string;
+  /** Distinct people in the owner's region who opened it in the app. */
+  users: string[];
+  threshold: number;
+  ttlEnd: string | null;
+  source: { sheet: string; ids: string[] }[];
+};
+
+export type ProposalType = "renew" | "retire" | "promote";
 export type ProposalStatus = "open" | "escalated" | "approved" | "rejected" | "expired";
 
 export type Proposal = {
@@ -37,7 +48,7 @@ export type Proposal = {
   type: ProposalType;
   assetIds: string[];
   rationale: string;
-  evidence: ReviewEvidence;
+  evidence: ReviewEvidence | PromoteEvidence;
   requiredApprovers: string[];
   status: ProposalStatus;
   createdOn: string;

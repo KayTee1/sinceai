@@ -34,6 +34,7 @@ stateDiagram-v2
   Question --> Certified: certified asset already answers it (reuse)
   Question --> Temporary: nothing fits (approved build)
   Temporary --> Personal: used again by owner
+  Temporary --> Team: 3+ people in the owner's region use it, a Lead approves (D17)
   Temporary --> Archived: TTL 30 days expires
   Personal --> Team: 3+ users in team, approved
   Team --> Certified: cross-team use + steward approval

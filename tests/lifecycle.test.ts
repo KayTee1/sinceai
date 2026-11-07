@@ -10,6 +10,7 @@ import { openDb } from "../src/db/open";
 import {
   controlClock,
   decide,
+  getPortfolioCounts,
   getAssetAudit,
   getAssetState,
   listPendingProposals,
@@ -20,6 +21,7 @@ import {
   restore,
   seededLeaseEnd,
   tick,
+  type ReviewEvidence,
 } from "../src/services/lifecycle";
 import { LIFECYCLE_EXPECTED, LIFECYCLE_SHEETS } from "./fixtures/lifecycle";
 
@@ -68,7 +70,7 @@ describe("lease review", () => {
     assert.equal(p.type, "retire");
     assert.equal(p.dueOn, "2026-11-22");
     assert.deepEqual(p.requiredApprovers, ["OWN-1"]);
-    assert.equal(p.evidence.avgMonthlyUsers, 2);
+    assert.equal((p.evidence as ReviewEvidence).avgMonthlyUsers, 2);
     assert.equal((await getAssetState(db, "AST-LOW"))?.status, "lease_due");
   });
 
@@ -79,7 +81,7 @@ describe("lease review", () => {
     }
     const audit = await getAssetAudit(db, "AST-LOW");
     const escalated = audit.find((a) => a.action === "review_escalated");
-    assert.deepEqual([escalated?.actor, escalated?.policyVersion, escalated?.simDate], ["policy", "lifecycle-v2", "2026-11-22"]);
+    assert.deepEqual([escalated?.actor, escalated?.policyVersion, escalated?.simDate], ["policy", "lifecycle-v3", "2026-11-22"]);
     assert.ok(!audit.some((a) => a.action.startsWith("archived")));
 
     const byAsset = new Map((await listPendingProposals(db)).map((p) => [p.assetIds[0], p]));
@@ -147,6 +149,33 @@ describe("temporary insights", () => {
     assert.deepEqual(await actions("INS-1"), ["temporary_registered", "ttl_expired", "restored"]);
   });
 
+  it("used by 3+ people in the owner's region: Team proposal, expiry held (D17)", async () => {
+    await registerTemporary(db, { assetId: "INS-3", name: "EMEA view", ownerId: "OWN-1", approvedBy: "OWN-L" }, "2026-11-01");
+    for (const u of ["OWN-3", "OWN-S"]) await recordUsage(db, { assetId: "INS-3", userId: u }, "2026-11-05");
+    assert.equal((await listPendingProposals(db)).filter((p) => p.type === "promote").length, 0); // 2 < 3
+    await recordUsage(db, { assetId: "INS-3", userId: "OWN-L" }, "2026-11-06");
+    const p = (await listPendingProposals(db)).find((x) => x.type === "promote")!;
+    assert.deepEqual(p.requiredApprovers, ["OWN-L"]); // active Lead in EMEA
+    await recordUsage(db, { assetId: "INS-3", userId: "OWN-G" }, "2026-11-07"); // no duplicate proposal
+    assert.equal((await listPendingProposals(db)).filter((x) => x.type === "promote").length, 1);
+
+    await advance(40); // past the 30-day TTL, but the proposal holds it
+    assert.equal((await getAssetState(db, "INS-3"))?.status, "active");
+    await decide(db, { proposalId: p.id, actor: "OWN-L", action: "approve" }, "2026-12-11");
+    const s = await getAssetState(db, "INS-3");
+    assert.deepEqual([s?.tier, s?.ttlEnd, s?.leaseEnd, s?.ownerId], ["team", null, "2027-03-11", "OWN-1"]);
+  });
+
+  it("a rejected Team proposal lets the 30-day expiry resume (D17)", async () => {
+    await registerTemporary(db, { assetId: "INS-4", name: "EMEA view", ownerId: "OWN-1", approvedBy: "OWN-L" }, "2026-11-01");
+    for (const u of ["OWN-3", "OWN-S", "OWN-L"]) await recordUsage(db, { assetId: "INS-4", userId: u }, "2026-11-05");
+    const p = (await listPendingProposals(db)).find((x) => x.type === "promote")!;
+    await advance(40);
+    await decide(db, { proposalId: p.id, actor: "OWN-L", action: "reject", reason: "One-off question" }, "2026-12-11");
+    await advance(1);
+    assert.equal((await getAssetState(db, "INS-4"))?.status, "archived");
+  });
+
   it("become Personal when the owner uses them again (D14)", async () => {
     await registerTemporary(db, { assetId: "INS-2", name: "EMEA check", ownerId: "OWN-1", approvedBy: "OWN-3" }, "2026-11-01");
     await recordUsage(db, { assetId: "INS-2", userId: "OWN-3" }, "2026-11-02");
@@ -179,3 +208,22 @@ describe("clock and audit", () => {
     assert.deepEqual([pack.rows[0].endorsement, pack.rows[0].lifecycle_status], ["none", "active"]);
   });
 });
+
+describe("portfolio counts", () => {
+  it("compares the seeded state with now and counts applied changes", async () => {
+    const start = await getPortfolioCounts(db);
+    assert.deepEqual(start.before, start.now);
+    assert.deepEqual(start.before, { certified: 1, team: 1, personal: 4, temporary: 0, archived: 0, underReview: 0 });
+
+    await advance(7); // AST-LOW review opens
+    const p = (await listPendingProposals(db)).find((x) => x.assetIds[0] === "AST-LOW")!;
+    await decide(db, { proposalId: p.id, actor: "OWN-1", action: "approve" }, "2026-11-08");
+    await registerTemporary(db, { assetId: "INS-9", name: "Check", ownerId: "OWN-1", approvedBy: "OWN-3" }, "2026-11-08");
+
+    const c = await getPortfolioCounts(db);
+    assert.deepEqual(c.before, start.before);
+    assert.deepEqual([c.now.personal, c.now.archived, c.now.temporary], [3, 1, 1]);
+    assert.deepEqual([c.changes.retired, c.changes.built], [1, 1]);
+  });
+});
+

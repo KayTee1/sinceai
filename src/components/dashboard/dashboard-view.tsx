@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { AssetSummary, DashboardData, Role, Tier } from "@/lib/types";
 import { int, leaseLabel } from "@/lib/format";
 import { TierBadge } from "./tier-badge";
+import { useLifecycle } from "../lifecycle/lifecycle-context";
 import { AssetDetail } from "./asset-detail";
 
 const FILTERS: { id: Tier | "all"; label: string }[] = [
@@ -17,6 +18,7 @@ export function DashboardView({ data, role }: { data: DashboardData; role: Role 
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Tier | "all">("all");
   const [selectedId, setSelectedId] = useState(data.assets[0]?.id);
+  const { logOpen } = useLifecycle();
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -31,7 +33,7 @@ export function DashboardView({ data, role }: { data: DashboardData; role: Role 
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {role === "manager" && <PortfolioStrip assets={data.assets} />}
+      {role === "manager" && <BeforeAfter />}
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-[340px] shrink-0 flex-col border-r border-line bg-surface">
           <div className="space-y-3 border-b border-line p-4">
@@ -65,7 +67,16 @@ export function DashboardView({ data, role }: { data: DashboardData; role: Role 
           </div>
           <ul className="min-h-0 flex-1 overflow-y-auto">
             {visible.map((a) => (
-              <AssetRow key={a.id} asset={a} active={a.id === selected?.id} onSelect={() => setSelectedId(a.id)} />
+              <AssetRow
+                key={a.id}
+                asset={a}
+                active={a.id === selected?.id}
+                onSelect={() => {
+                  setSelectedId(a.id);
+                  // Only employee opens are logged, so manager browsing does not inflate usage.
+                  if (role === "employee" && a.id !== selected?.id) logOpen(a.id);
+                }}
+              />
             ))}
             {visible.length === 0 && <li className="p-4 text-sm text-ink-3">No dashboards match.</li>}
           </ul>
@@ -114,27 +125,57 @@ function AssetRow({ asset, active, onSelect }: { asset: AssetSummary; active: bo
   );
 }
 
-function PortfolioStrip({ assets }: { assets: AssetSummary[] }) {
-  const count = (fn: (a: AssetSummary) => boolean) => assets.filter(fn).length;
-  const items = [
-    { label: "Assets in catalog", value: assets.length },
-    { label: "Certified", value: count((a) => a.tier === "certified") },
-    { label: "Team", value: count((a) => a.tier === "team") },
-    { label: "Personal", value: count((a) => a.tier === "personal") },
-    { label: "Flagged retire (source)", value: count((a) => a.lifecycleStatus === "candidate_retire") },
-    { label: "Owner inactive or missing", value: count((a) => !a.ownerActive) },
+function BeforeAfter() {
+  const { data } = useLifecycle();
+  if (!data) return <div className="h-[58px] shrink-0 border-b border-line bg-surface" />;
+  const { before, now, changes } = data.portfolio;
+  const rows: { label: string; key: keyof typeof now }[] = [
+    { label: "Certified", key: "certified" },
+    { label: "Team", key: "team" },
+    { label: "Personal", key: "personal" },
+    { label: "Temporary", key: "temporary" },
+    { label: "Archived", key: "archived" },
+    { label: "Under review", key: "underReview" },
   ];
+  const active = (c: typeof now) => c.certified + c.team + c.personal + c.temporary;
+  const applied = (Object.entries(changes) as [string, number][]).filter(([, n]) => n > 0);
+
   return (
-    <div className="flex shrink-0 divide-x divide-line border-b border-line bg-surface">
-      <div className="flex items-center px-5">
-        <span className="label">Portfolio</span>
+    <div className="flex shrink-0 items-stretch divide-x divide-line border-b border-line bg-surface">
+      <div className="flex flex-col justify-center px-5">
+        <span className="label">Since reset</span>
+        <span className="text-[11px] text-ink-3">before → now</span>
       </div>
-      {items.map((i) => (
-        <div key={i.label} className="px-5 py-2.5">
-          <div className="tabular text-lg font-semibold leading-tight">{int(i.value)}</div>
-          <div className="text-[11px] text-ink-3">{i.label}</div>
-        </div>
+      <Delta label="Active assets" from={active(before)} to={active(now)} />
+      {rows.map((r) => (
+        <Delta key={r.key} label={r.label} from={before[r.key]} to={now[r.key]} />
       ))}
+      <div className="flex min-w-0 flex-1 flex-col justify-center px-5 text-[11px] text-ink-3">
+        <span className="label">Applied changes</span>
+        <span className="truncate">
+          {applied.length ? applied.map(([k, n]) => `${n} ${k}`).join(" · ") : "None yet. Advance the clock."}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function Delta({ label, from, to }: { label: string; from: number; to: number }) {
+  const d = to - from;
+  return (
+    <div className="px-4 py-2.5">
+      <div className="tabular flex items-baseline gap-1.5 leading-tight">
+        <span className="text-lg font-semibold">{int(to)}</span>
+        {d !== 0 && (
+          <span className="text-xs font-medium text-ink-2">
+            {d > 0 ? "+" : "−"}
+            {int(Math.abs(d))}
+          </span>
+        )}
+      </div>
+      <div className="text-[11px] text-ink-3">
+        {label} <span className="tabular">(was {int(from)})</span>
+      </div>
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { formatDate } from "@/lib/format";
 import { useLifecycle, type PendingProposal } from "./lifecycle-context";
 
-type Filter = "all" | "escalated" | "retire" | "renew";
+type Filter = "all" | "escalated" | "retire" | "renew" | "promote";
 
 // Approval inbox (Manager). Approval follows each proposal's required approvers
 // (Rule 11), so every card offers only its own approvers to decide as (D12).
@@ -26,10 +26,11 @@ export function Inbox() {
           <span className="tabular text-xs text-ink-3">{data.pending.length} waiting</span>
         </div>
         <p className="text-xs text-ink-3">
-          You decide as one of each card&apos;s approvers: the owner, or the data steward once escalated.
+          You decide as one of each card&apos;s approvers: the owner (lease reviews), a team Lead (promotions), or the
+          data steward once escalated.
         </p>
         <div className="flex gap-1">
-          {(["all", "escalated", "retire", "renew"] as Filter[]).map((f) => (
+          {(["all", "escalated", "retire", "renew", "promote"] as Filter[]).map((f) => (
             <button
               key={f}
               type="button"
@@ -87,7 +88,11 @@ function ProposalCard({ p }: { p: PendingProposal }) {
           <div className="flex items-center gap-1.5">
             <span
               className={`rounded-sm px-1.5 py-px text-[10px] font-bold uppercase tracking-wide ${
-                p.type === "retire" ? "bg-[#fdf3e6] text-warn" : "bg-[#e6f4fc] text-[#00609a]"
+                p.type === "retire"
+                  ? "bg-[#fdf3e6] text-warn"
+                  : p.type === "promote"
+                    ? "bg-[#eef7e4] text-green-deep"
+                    : "bg-[#e6f4fc] text-[#00609a]"
               }`}
             >
               {p.type}
@@ -106,20 +111,35 @@ function ProposalCard({ p }: { p: PendingProposal }) {
         </span>
       </div>
 
-      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-0.5 text-ink-2">
-        <dt className="text-ink-3">Monthly users</dt>
-        <dd className="tabular">
-          {ev.avgMonthlyUsers ?? "unknown"} avg · {ev.usageMonths.length} mo
-        </dd>
-        <dt className="text-ink-3">App opens (90d)</dt>
-        <dd className="tabular">{ev.appOpens90d}</dd>
-        <dt className="text-ink-3">Owner</dt>
-        <dd className={ev.ownerStatus === "active" ? "" : "text-warn"}>{ev.ownerStatus}</dd>
-        <dt className="text-ink-3">Downstream</dt>
-        <dd className={ev.downstreamAssets.length ? "text-warn" : ""}>
-          {ev.downstreamAssets.length ? ev.downstreamAssets.join(", ") : "none"}
-        </dd>
-      </dl>
+      {"kind" in ev ? (
+        <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-0.5 text-ink-2">
+          <dt className="text-ink-3">Used by ({ev.region})</dt>
+          <dd>
+            {ev.users.length} people · threshold {ev.threshold}
+          </dd>
+          <dt className="text-ink-3">Who</dt>
+          <dd className="truncate" title={ev.users.map((u) => people[u]?.name ?? u).join(", ")}>
+            {ev.users.map((u) => people[u]?.name ?? u).join(", ")}
+          </dd>
+          <dt className="text-ink-3">30-day expiry</dt>
+          <dd className="text-warn">on hold{ev.ttlEnd ? ` (was ${formatDate(ev.ttlEnd)})` : ""}</dd>
+        </dl>
+      ) : (
+        <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-0.5 text-ink-2">
+          <dt className="text-ink-3">Monthly users</dt>
+          <dd className="tabular">
+            {ev.avgMonthlyUsers ?? "unknown"} avg · {ev.usageMonths.length} mo
+          </dd>
+          <dt className="text-ink-3">App opens (90d)</dt>
+          <dd className="tabular">{ev.appOpens90d}</dd>
+          <dt className="text-ink-3">Owner</dt>
+          <dd className={ev.ownerStatus === "active" ? "" : "text-warn"}>{ev.ownerStatus}</dd>
+          <dt className="text-ink-3">Downstream</dt>
+          <dd className={ev.downstreamAssets.length ? "text-warn" : ""}>
+            {ev.downstreamAssets.length ? ev.downstreamAssets.join(", ") : "none"}
+          </dd>
+        </dl>
+      )}
 
       <div className="mt-2 flex flex-wrap items-center gap-1">
         <span className="text-ink-3">{eligible.length > 1 ? "Decide as:" : "Decides:"}</span>
@@ -151,7 +171,13 @@ function ProposalCard({ p }: { p: PendingProposal }) {
             onChange={(e) => setReason(e.target.value)}
             rows={2}
             autoFocus
-            placeholder={p.type === "retire" ? "Why keep it? (renews the lease)" : "Why not renew? (retires it)"}
+            placeholder={
+              p.type === "retire"
+                ? "Why keep it? (renews the lease)"
+                : p.type === "promote"
+                  ? "Why not promote? (expiry resumes)"
+                  : "Why not renew? (retires it)"
+            }
             className="w-full resize-none rounded-sm border border-line-strong px-2 py-1.5 text-xs focus:border-blue focus:outline-none"
           />
           <div className="flex justify-end gap-1.5">

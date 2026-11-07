@@ -1,6 +1,12 @@
 import { connection } from "next/server";
 import { db } from "@/db/client";
-import { getRecentAudit, listAssetStates, listPendingProposals, nextDueEvent } from "@/services/lifecycle";
+import {
+  getPortfolioCounts,
+  getRecentAudit,
+  listAssetStates,
+  listPendingProposals,
+  nextDueEvent,
+} from "@/services/lifecycle";
 import { withLifecycle } from "@/lib/lifecycle-server";
 
 // Clock, inbox, state counts and latest audit rows in one read for the UI,
@@ -9,13 +15,14 @@ export async function GET() {
   await connection();
   return withLifecycle(async (clock) => {
     const client = db();
-    const [states, pending, next, audit, assetNames, owners] = await Promise.all([
+    const [states, pending, next, audit, assetNames, owners, portfolio] = await Promise.all([
       listAssetStates(client),
       listPendingProposals(client),
       nextDueEvent(client),
       getRecentAudit(client, 30),
       client.execute(`SELECT asset_id, asset_name FROM Analytics_Assets`),
       client.execute(`SELECT owner_id, owner_name, role, scope, status FROM Owners`),
+      getPortfolioCounts(client),
     ]);
     const counts: Record<string, number> = {};
     for (const s of states) {
@@ -32,6 +39,7 @@ export async function GET() {
       leaseDue: states.filter((s) => s.status === "lease_due").length,
       pending: pending.map((p) => ({ ...p, assetNames: p.assetIds.map((id) => names[id] ?? id) })),
       audit,
+      portfolio,
       people: Object.fromEntries(
         owners.rows.map((o) => [
           o.owner_id as string,
