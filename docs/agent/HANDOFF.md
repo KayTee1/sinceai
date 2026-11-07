@@ -25,12 +25,11 @@
 - **Now:** master has T14 (#14), T15 (#15), DB-path fix (#16), T5 lifecycle
   (#17), T8 lifecycle UI (#19), usage counts / D17 (#20), T17 build step
   (#21), the F1 demo request / D18 (#22), T18 data separation / D19 + D20
-  (#23) and D21 auto-renew (#24). T16 is PR #18
-  (`feat/T16-mastra-steward-integration`), approved by Viet. It is synced
-  with master at `1f4621a` (D21 / `lifecycle-v4`) and includes the T16A
-  request source label. Codex review fixes are applied: the
-  compact view keeps the complete reuse match, and the provenance note is
-  honest. Mastra tool adapters over the
+  (#23), D21 auto-renew (#24), T16 / T16A steward tool adapters (#18),
+  D22 team catalog dashboards (#25) and D23 telemetry window (#27). Open:
+  T16B live orchestrator (PR #28) and the F5 build provenance fix (PR #29).
+  T16 (#18) includes the T16A request source label; the compact view keeps
+  the complete reuse match. Mastra tool adapters over the
   deterministic services, `src/mastra/tools/steward-tools.ts`
   (`createStewardTools(getDb)` → `analyze-request`, `compute-kpi`,
   `check-kpi-definitions`). They return service results unchanged and re-throw
@@ -40,18 +39,20 @@
   orchestrator yet:** the tool map and prompt change is a proposal for Viet,
   `docs/agent/T16-orchestrator-proposal.md`. The orchestrator on master has
   only `get-business-request`, `search-assets` and `find-kpi-definitions`.
-  The live wiring is T16B (`feat/T16B-live-orchestrator`, stacked on #18).
+  The live wiring is T16B (`feat/T16B-live-orchestrator`, PR #28, open).
 - **D21 auto-renew (`feat/auto-renew-used`, merged #24):** at lease end, used
   assets (any app view in 90 days, or pack telemetry >= 10 users/month) with
   an active owner renew automatically; unused ones get a retire proposal;
   used but ownerless go straight to the steward. Policy `lifecycle-v4`.
-- **D19 + D20 (`feat/T18-data-separation`, merged #23):** Employees see only
-  team dashboards (Commercial, Market Access, Supply Chain, Launch wallboards
-  on the business facts + built insights). Managers: Team dashboards (with
-  views / viewers / last 30 days per board) | Analytics catalog
-  (metadata-only asset pages) | Estate overview. Team boards are lifecycle
-  assets (`origin = 'team'`, `DSH-*`), seeded insert-or-ignore. Loader in
-  `src/lib/catalog.ts` keeps `estate` and `business` apart.
+- **D19 + D20 (`feat/T18-data-separation`, merged #23; D20 boards superseded
+  by D22):** Managers: Team dashboards | Analytics catalog (metadata-only
+  asset pages) | Estate overview. Loader in `src/lib/catalog.ts` keeps
+  `estate` and `business` apart (D19, still current). Historical: #23 seeded
+  four invented team boards as lifecycle assets (`origin = 'team'`,
+  `DSH-*`). Since D22 (#25) they are no longer seeded, and `ensureLifecycle`
+  removes them from older databases (app rows only; audit log untouched).
+  Employees and the manager Team dashboards section now show real catalog
+  dashboards (D22 bullet above).
 - **T17 build step (Viet / Claude, merged #21):**
   `src/services/build` turns an analysis that recommends a build into a
   `build_temporary` proposal (Leads in the requester's region, never the
@@ -89,13 +90,12 @@
      found. Both sides are now on master, so this is live. It needs a
      contract decision with Viet: exclude `archived`, include app-built
      assets, and use app tier instead of `endorsement`; in discovery or via a
-     lifecycle query. Add regression tests. The D20 team boards (`DSH-*`,
-     `origin = 'team'`) are also only in `asset_state`, so discovery does not
-     see them either.
+     lifecycle query. Add regression tests.
   2. Build-service provenance (T17 owner, not T16):
      `src/services/build/build.ts:149` hardcodes
      `{ sheet: "Business_Requests" }`, so a TEAM-REQ-01 build proposal cites
-     the Bayer sheet instead of `Team_Requests (team-authored)`.
+     the Bayer sheet instead of `Team_Requests (team-authored)`. Fix is
+     F5, open as PR #29 (Viet to review); not on master yet.
   3. Fixed (T16A, `597b79b`): the `analyze-request` view now keeps
      `request.sourceSheet` and `request.teamAuthored` (no row), so
      TEAM-REQ-01 stays labelled team-authored in model and UI output.
@@ -114,14 +114,18 @@
   `insufficient_data`. `forecast_variance_pct` matches
   (net − forecast) / forecast × 100 on the 870 non-zero-forecast rows; the
   110 zero-forecast rows have a blank value.
-- **Decisions:** D12–D15 are proposed and await agreement. D16–D18 are
-  accepted. T16 adds no decision; the view shapes and tool contracts are
+- **Decisions:** D12–D15 are proposed and await agreement. D16–D23 are
+  accepted (D22 supersedes D20's team boards). D24 is accepted as direction
+  only. T16 adds no decision; the view shapes and tool contracts are
   provisional until Viet agrees.
 - **Needs:** `ANTHROPIC_API_KEY` in `.env.local` for any live chat run (none
   done for T16).
-- **Next:** Viet reviews PR #18. Then fix the discovery issue above with
-  Viet, and wire the steward tools plus a build-proposal tool
-  (`proposeBuild`) into the orchestrator.
+- **Next:** independent review of T16B (PR #28: steward tools plus a
+  build-proposal tool wired into the orchestrator) and Viet's review of F5
+  (PR #29). Once F5 merges, PR #28 needs the follow-up listed in PR #29
+  (provenance assertion, `BUILD_SOURCE_DEFECT` warning, stored provenance in
+  the build-proposal view). Then fix the discovery issue above with Viet.
+  T19 (D24) planning comes after T16B and the golden path.
 - **Open:** one agent vs. three (D11/R17); free-text requests have no
   governed entry point; IP / external AI terms (more catalog data reaches
   Anthropic once wired); meaning of `value_type` per row vs. per column;
