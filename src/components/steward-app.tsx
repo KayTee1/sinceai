@@ -59,12 +59,15 @@ function AgenticLayout() {
   const { data } = useLifecycle();
   const waiting = data?.pending.length ?? 0;
   return (
-    <div className="flex h-full">
-      <div className="min-w-0 flex-1">
+    // Below md the chat and side panel stack (each keeps a usable height and
+    // the page scrolls) instead of the panel's min width squeezing the chat
+    // to nothing; ChatView stays mounted either way.
+    <div className="flex h-full flex-col overflow-y-auto md:flex-row md:overflow-hidden">
+      <div className="h-[70vh] min-w-0 shrink-0 md:h-auto md:flex-1 md:shrink">
         <ChatView />
       </div>
       <aside
-        className={`flex shrink-0 flex-col border-l border-line bg-surface ${side === "inbox" ? "w-[380px]" : "w-[46%] min-w-[420px]"}`}
+        className={`flex h-[85vh] w-full shrink-0 flex-col border-t border-line bg-surface md:h-auto md:border-l md:border-t-0 ${side === "inbox" ? "md:w-[380px]" : "md:w-[46%] md:min-w-[420px]"}`}
       >
         <div role="tablist" aria-label="Agentic side panel" className="flex shrink-0 gap-1 border-b border-line px-3 py-2">
           {AGENTIC_SIDE_TABS.map((s) => (
