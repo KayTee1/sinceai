@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Standalone cinematic demo (own package and checks).
+    "demo/**",
   ]),
 ]);
 
