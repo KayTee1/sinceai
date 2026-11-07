@@ -1,4 +1,6 @@
-// Result shapes of the deterministic steward services (T14).
+// Result shapes of the deterministic steward services (T14, T15).
+import type { KpiComputability } from "../semantic/types";
+
 // PROVISIONAL: not yet agreed with the frontend lane (Viet); D13/D14 details
 // are still proposed. Change only together with the consumer.
 
@@ -87,6 +89,12 @@ export type StewardAnalysis = {
   candidates: ReuseCandidate[];
   /** Empty until discovery runs (clarification needed or no metric named). */
   metricCoverage: MetricCoverage[];
+  /**
+   * Read-only check that each requested approved KPI can be computed for the
+   * resolved scope (T15, D14 mapping, provisional). Empty until discovery runs
+   * or while a metric lacks a single approved KPI. Not an approval or a build.
+   */
+  computability: KpiComputability[];
   recommendation: { kind: RecommendationKind; rationale: string[]; evidence: SourceRef[] };
   /** Labels for team-authored inputs used in this analysis. */
   assumptions: string[];

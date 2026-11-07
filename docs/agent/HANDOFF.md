@@ -1,32 +1,35 @@
 # Handoff
 
-- **Now:** PR #12 (`feat/initial-ui-mastra`, T4 + T7) is the first app code.
-  Next.js 16 app with Bayer-style shell: Agentic | Dashboard tabs, Employee /
-  Manager toggle (Agentic locked for Employee, D8). Dashboard tab lists all 360
-  assets (tier from endorsement, lease end = sim date + 90 days) with charts
-  from `Product_Market_Monthly` and `Asset_Usage`. Agentic tab = chat with one
-  Mastra agent (`orchestrator`, Claude Sonnet) using three read-only tools:
-  business request lookup, asset keyword search, KPI definition / conflict
-  check. Docs side: D12 (clock, acting-as approvals), D13 (lifecycle gaps) and
-  proposed D14 (Codex MVP review gaps) are merged (#10, #11, #13).
-- **Data:** `npm run db:import` reads `data/private/pack.xlsx` into
-  `data/private/steward.db` (both ignored). Counts match DATA_SOURCES.
-- **Decisions:** lifecycle is P0 with logged, restorable auto-archive on
-  silence (D9, D13). Lineage limits (D6, D10). Stack: TypeScript, Next.js +
-  Mastra + SQLite (D7). UI tabs and roles (D8). P0 agents: Orchestrator,
-  Discovery, Conflict detector (D11). Proposed D14: team-authored computable
-  KPI mapping; requester confirms reuse candidates; teams = owner regions, any
-  active Lead approves builds; region data steward reassigns owners (Global
-  covers Asia Pacific); rejecting retire renews; restored Temporary gets a
-  fresh 30-day TTL; golden path first (PLAN Build order); test set T13.
-- **Needs:** `ANTHROPIC_API_KEY` in `.env.local`; chat not yet run end to end
-  against the model (tools verified directly against SQLite).
-- **Next:** Viet reviews D12–D14 (they change the contract; the scaffold's
-  lease end = sim date + 90 days and team derivation should be checked against
-  them); agree the contract (ARCHITECTURE) and lanes (PLAN). Then lineage
-  panel, usage logging on open, step-event stream + approval pause (T6),
-  Pipeline view, golden path.
-- **Open:** IP / external AI processing terms (ask Bayer Sat: catalog rows go
-  to Anthropic via the agent); embeddings provider; video limit; whether Bayer
-  values the DSO framing (term not yet defined in our docs); KPI column
-  meanings to confirm at import (T4).
+- **Now:** T14 merged (#14, squash `1162fcd`, Codex approved F1–F3). T15 on
+  `feat/T15-kpi-computation`, uncommitted, awaiting KayTee's review.
+  `src/services/semantic` computes KPI-001, KPI-004, KPI-042 and KPI-027
+  from `Product_Market_Monthly` under the D14 mapping (`d14-mapping.ts`,
+  provisional). Statuses: computed / unsupported / insufficient_data, with
+  units, filters, the query and source rows. `analyzeRequest` adds
+  `computability` (computable / incomplete / insufficient_data / unsupported,
+  with per-market values and reasons) and proposes a build only if every
+  requested approved KPI computes for every requested market (probe: latest
+  month, actual-like).
+- **Data facts found in T15:** one row per product × market × month;
+  `value_type` labels the row and alternates within a series, so only 211
+  of 882 month-to-month pairs are actual-like in both months. Growth is often
+  `insufficient_data`; that is intended (no mixing). 11 product–market series
+  are all zeros (growth undefined). `forecast_variance_pct` equals
+  (net − forecast) / forecast × 100 on every row, which supports the D14
+  KPI-042 mapping.
+- **Decisions:** as before (D6–D14; D12–D14 await Viet). T15 rules, ours,
+  to confirm with Viet: default `value_type` actual-like; never blend value
+  types or drop mismatched cells from an aggregate; coverage % not
+  aggregated (no weights in the pack); a KPI that is not computable in every
+  requested market blocks a build.
+- **Needs:** `ANTHROPIC_API_KEY` in `.env.local`; local checks need
+  `data/private/pack.xlsx` and `PACK_XLSX=data/private/pack.xlsx npm test`.
+- **Next:** KayTee reviews T15, then PR and independent review. Viet agrees
+  D12–D14, the StewardAnalysis/KpiResult shapes and lanes. Then expose
+  computation to the chat tools (Viet's Mastra files, coordinate), build step
+  for a Temporary insight, lineage panel, step events + approval pause (T6).
+- **Open:** meaning of `value_type` per row vs. per column (does a
+  forecast-like row's `net_sales` hold a forecast?); remaining D14 KPIs
+  (014, 016, 020, 006, 054) return unsupported with reasons; IP / external AI
+  terms (catalog rows go to Anthropic via the agent); embeddings provider;
+  video limit; DSO framing.

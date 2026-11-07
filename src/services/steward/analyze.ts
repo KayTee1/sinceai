@@ -13,9 +13,17 @@
 //    (absence of results is not a gap).
 // 6. insufficient_evidence: every metric's approved KPI is mapped by some
 //    asset, but not by one asset (review the partial candidates).
-// 7. build_proposal: at least one metric's approved KPI is mapped by no
-//    in-scope asset (a positive, per-metric coverage gap).
+// 7. insufficient_evidence: a gap exists, but some approved KPI is not
+//    computable for every requested market (not in the computable mapping,
+//    or missing/unusable rows in some or all markets), so a build could not
+//    deliver it (SCOPE: builds use the computable
+//    KPI mapping only).
+// 8. build_proposal: at least one metric's approved KPI is mapped by no
+//    in-scope asset (a positive, per-metric coverage gap), and every approved
+//    KPI is computable for every requested market. This is a proposal for a human to
+//    approve; nothing is built here.
 import type { Client } from "@libsql/client";
+import { checkComputability } from "../semantic/computability";
 import { discoverCandidates } from "./discovery";
 import { checkKpis, loadKpis } from "./kpis";
 import { clarify, loadRequest, loadVocabulary, requestSource } from "./requests";
@@ -27,6 +35,7 @@ export const ASSUMPTIONS = [
   "Candidate score weights and recommendation rules are ours (discovery.ts, analyze.ts).",
   "Asset_KPI_Map is treated as the catalog's record of which KPIs an asset shows; its completeness is not verified.",
   "All values are synthetic challenge data, not actual Bayer performance.",
+  "KPI computability uses the team-authored D14 mapping (proposed, pending agreement); it is probed per market at the latest month on actual-like rows only.",
 ];
 
 export class RequestNotFoundError extends Error {}
@@ -70,7 +79,7 @@ export async function analyzeRequest(
     kpiChecks,
     assumptions: ASSUMPTIONS,
   };
-  const noDiscovery = { candidates: [], metricCoverage: [] };
+  const noDiscovery = { candidates: [], metricCoverage: [], computability: [] };
 
   if (clarification.needed || !clarification.resolved) {
     return {
@@ -108,10 +117,22 @@ export async function analyzeRequest(
     kpis,
     opts,
   );
+  // An unresolved definition blocks both governed reuse and build.
+  const unapproved = kpiChecks.filter((k) => !k.approved).map((k) => k.canonicalMetric);
+  const computability =
+    unapproved.length > 0
+      ? []
+      : await checkComputability(
+          db,
+          kpiChecks.map((k) => ({ kpiId: k.approved!.id, canonicalMetric: k.canonicalMetric })),
+          scope,
+          vocab,
+        );
   const result = (kind: StewardAnalysis["recommendation"]["kind"], rationale: string[], evidence: SourceRef[]): StewardAnalysis => ({
     ...base,
     candidates,
     metricCoverage,
+    computability,
     recommendation: { kind, rationale: [...rationale, ...conflicts], evidence: [reqRef, ...evidence, ...kpiRefs] },
   });
   const perMetric = metricCoverage.map(
@@ -124,8 +145,6 @@ export async function analyzeRequest(
         : "no single approved KPI"),
   );
 
-  // An unresolved definition blocks both governed reuse and build.
-  const unapproved = kpiChecks.filter((k) => !k.approved).map((k) => k.canonicalMetric);
   if (unapproved.length > 0) {
     return result(
       "insufficient_evidence",
@@ -173,13 +192,30 @@ export async function analyzeRequest(
     );
   }
 
+  const gapText = `Checked the KPI mappings of ${inScopeCount} asset(s) covering ${scopeText}; no asset maps the approved KPI for: ${uncovered.map((m) => `${m.canonicalMetric} (${m.approvedKpiId})`).join(", ")}.`;
+  const perKpi = computability.map((c) => `${c.kpiId} (${c.canonicalMetric}): ${c.status}. ${c.reasons.join(" ")}`);
+  const notComputable = computability.filter((c) => c.status !== "computable");
+  if (notComputable.length > 0) {
+    return result(
+      "insufficient_evidence",
+      [
+        gapText,
+        `A build cannot deliver ${notComputable.map((c) => `${c.kpiId} (${c.status})`).join(", ")} for every requested market in ${scopeText}, so no build is proposed.`,
+        ...perKpi,
+        "Partial candidates are listed; the requester may still prefer one of them.",
+      ],
+      candidates.map((c) => c.source),
+    );
+  }
+
   return result(
     "build_proposal",
     [
-      `Checked the KPI mappings of ${inScopeCount} asset(s) covering ${scopeText}; no asset maps the approved KPI for: ${uncovered.map((m) => `${m.canonicalMetric} (${m.approvedKpiId})`).join(", ")}.`,
+      gapText,
       ...perMetric,
       `A build would use only approved KPIs: ${kpiChecks.map((k) => k.approved!.id).join(", ")}.`,
-      "Not yet checked: whether these KPIs are computable from the pack (D14 mapping, next milestone).",
+      ...perKpi,
+      "Computability was checked read-only; this proposal still needs approval, and nothing has been built.",
       "Partial candidates are listed; the requester may still prefer one of them.",
     ],
     candidates.map((c) => c.source),

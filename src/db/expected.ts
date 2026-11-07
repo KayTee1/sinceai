@@ -28,7 +28,8 @@ export const EXPECTED_ROW_COUNTS: Record<string, number> = {
 };
 
 // Columns read by current SQL queries over the imported tables, by consumer:
-// S = src/services/steward, A = src/lib/catalog.ts (dashboard),
+// S = src/services/steward, K = src/services/semantic (KPI computation),
+// A = src/lib/catalog.ts (dashboard),
 // M = src/mastra/tools/catalog-tools.ts. Names match DATA_SOURCES. The
 // importer rejects a workbook where any of these is missing or renamed.
 export const REQUIRED_COLUMNS: Record<string, string[]> = {
@@ -39,7 +40,7 @@ export const REQUIRED_COLUMNS: Record<string, string[]> = {
   Markets: ["market_id", "market_name", "region"], // S, A
   Owners: ["owner_id", "owner_name", "status"], // S, A, M
   KPI_Catalog: [
-    "kpi_id", "kpi_name", "canonical_metric", "unit", "definition_status", "approval_status", // S, M
+    "kpi_id", "kpi_name", "canonical_metric", "unit", "definition_status", "approval_status", // S, K, M
     "description", // M
   ],
   Semantic_Models: ["model_id", "refresh_status"], // S
@@ -52,8 +53,9 @@ export const REQUIRED_COLUMNS: Record<string, string[]> = {
   Asset_Usage: ["asset_id", "month", "views", "unique_users"], // A
   Product_Market_Monthly: [
     "product_id", "market_id", "month", "net_sales_m_eur_syn", "forecast_m_eur_syn",
-    "market_access_coverage_pct_syn", "otif_pct_syn", // A
-    "value_type", // kept so actual-like and forecast-like rows stay distinguishable (DATA_SOURCES)
+    "market_access_coverage_pct_syn", // A, K
+    "otif_pct_syn", // A
+    "value_type", // K; kept so actual-like and forecast-like rows stay distinguishable (DATA_SOURCES)
   ],
 };
 
