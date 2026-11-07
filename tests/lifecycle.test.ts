@@ -10,6 +10,7 @@ import { openDb } from "../src/db/open";
 import {
   controlClock,
   decide,
+  getPortfolioCounts,
   getAssetAudit,
   getAssetState,
   listPendingProposals,
@@ -179,3 +180,22 @@ describe("clock and audit", () => {
     assert.deepEqual([pack.rows[0].endorsement, pack.rows[0].lifecycle_status], ["none", "active"]);
   });
 });
+
+describe("portfolio counts", () => {
+  it("compares the seeded state with now and counts applied changes", async () => {
+    const start = await getPortfolioCounts(db);
+    assert.deepEqual(start.before, start.now);
+    assert.deepEqual(start.before, { certified: 1, team: 1, personal: 4, temporary: 0, archived: 0, underReview: 0 });
+
+    await advance(7); // AST-LOW review opens
+    const p = (await listPendingProposals(db)).find((x) => x.assetIds[0] === "AST-LOW")!;
+    await decide(db, { proposalId: p.id, actor: "OWN-1", action: "approve" }, "2026-11-08");
+    await registerTemporary(db, { assetId: "INS-9", name: "Check", ownerId: "OWN-1", approvedBy: "OWN-3" }, "2026-11-08");
+
+    const c = await getPortfolioCounts(db);
+    assert.deepEqual(c.before, start.before);
+    assert.deepEqual([c.now.personal, c.now.archived, c.now.temporary], [3, 1, 1]);
+    assert.deepEqual([c.changes.retired, c.changes.built], [1, 1]);
+  });
+});
+

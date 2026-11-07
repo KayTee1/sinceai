@@ -1,5 +1,10 @@
 # Handoff
 
+- **Usage + counts (Viet / Claude, `feat/T7-usage-counts`):** Employee
+  "viewing as" picker (D13); opening a dashboard logs an app open for that
+  person (manager browsing is not logged). Manager before/after panel on the
+  Dashboard tab: seeded state at reset vs now, plus applied changes from the
+  audit log. KPI conflicts detected vs resolved are not in the panel yet.
 - **T5 lifecycle (Viet / Claude, PR from `feat/T5-lifecycle`):**
   `src/services/lifecycle` runs D12–D14: clock (1 day = 1 s, pause / resume /
   advance / next event), seeded per-asset leases, lease review (renew or

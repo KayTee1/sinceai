@@ -25,7 +25,7 @@ export function StewardApp({ data }: { data: DashboardData }) {
           <Brand />
           <TabSwitch value={activeTab} onChange={setTab} agenticLocked={role === "employee"} />
           <div className="flex items-center justify-end gap-4">
-            <SimDate fallback={data.clockDate} />
+            {role === "employee" ? <ViewerPicker /> : <SimDate fallback={data.clockDate} />}
             <RoleSwitch value={role} onChange={setRole} />
           </div>
         </header>
@@ -145,5 +145,30 @@ function LockIcon() {
       <rect x="2" y="5.5" width="8" height="5.5" rx="1" fill="currentColor" />
       <path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
     </svg>
+  );
+}
+
+// Employee identity for usage logging (D13). Opens count for this person.
+function ViewerPicker() {
+  const { data, viewer, setViewer } = useLifecycle();
+  if (!data) return null;
+  const people = Object.entries(data.people)
+    .filter(([, p]) => p.active)
+    .sort(([, a], [, b]) => a.name.localeCompare(b.name));
+  return (
+    <label className="flex items-center gap-2 text-xs text-white/60">
+      Viewing as
+      <select
+        value={viewer}
+        onChange={(e) => setViewer(e.target.value)}
+        className="max-w-[180px] rounded-sm border border-white/20 bg-white/10 px-2 py-1 text-xs text-white focus:outline-none"
+      >
+        {people.map(([id, p]) => (
+          <option key={id} value={id} className="text-ink">
+            {p.name} · {p.region}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

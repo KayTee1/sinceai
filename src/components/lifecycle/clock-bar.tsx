@@ -10,7 +10,7 @@ export function ClockBar() {
   const [confirmReset, setConfirmReset] = useState(false);
   if (!data) return <div className="h-11 shrink-0 border-b border-line bg-surface" />;
 
-  const { clock, nextDue, counts, leaseDue, pending } = data;
+  const { clock, nextDue, leaseDue, pending } = data;
   const escalated = pending.filter((p) => p.status === "escalated").length;
 
   return (
@@ -71,11 +71,6 @@ export function ClockBar() {
             {error}
           </span>
         )}
-        <Count label="Certified" value={counts.certified} />
-        <Count label="Team" value={counts.team} />
-        <Count label="Personal" value={counts.personal} />
-        <Count label="Temporary" value={counts.temporary} />
-        <Count label="Archived" value={counts.archived} />
         <Count label="Under review" value={leaseDue} warn={leaseDue > 0} />
         {escalated > 0 && <Count label="Escalated" value={escalated} warn />}
         <button

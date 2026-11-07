@@ -31,6 +31,23 @@ export type LifecycleSnapshot = {
   leaseDue: number;
   pending: PendingProposal[];
   people: Record<string, Person>;
+  portfolio: {
+    before: PortfolioCounts;
+    now: PortfolioCounts;
+    changes: Record<
+      "renewed" | "retired" | "restored" | "escalated" | "expired" | "promoted" | "built" | "rejected",
+      number
+    >;
+  };
+};
+
+export type PortfolioCounts = {
+  certified: number;
+  team: number;
+  personal: number;
+  temporary: number;
+  archived: number;
+  underReview: number;
 };
 
 type Ctx = {
@@ -38,7 +55,14 @@ type Ctx = {
   error: string | null;
   busy: boolean;
   /** POSTs to a lifecycle route, then refreshes the snapshot and the server-rendered dashboard. */
-  post: (url: string, body?: object) => Promise<boolean>;
+  post: (
+    url: string,
+    body?: object,
+  ) => Promise<boolean>; /** Employee identity whose dashboard opens are logged (D13). */
+  viewer: string;
+  setViewer: (id: string) => void;
+  /** Logs one app open for the current viewer; silent, no page refresh. */
+  logOpen: (assetId: string) => void;
 };
 
 const LifecycleContext = createContext<Ctx | null>(null);
@@ -55,6 +79,7 @@ export function LifecycleProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const lastDate = useRef<string | null>(null);
+  const [viewer, setViewer] = useState("");
 
   const load = useCallback(async () => {
     const res = await fetch("/api/lifecycle", { cache: "no-store" });
@@ -106,6 +131,31 @@ export function LifecycleProvider({ children }: { children: React.ReactNode }) {
     [load, router],
   );
 
-  const value = useMemo(() => ({ data, error, busy, post }), [data, error, busy, post]);
+  // Until someone is picked, the first active person (by name) is the viewer.
+  const viewerId = useMemo(() => {
+    if (viewer || !data) return viewer;
+    const active = Object.entries(data.people).filter(([, p]) => p.active);
+    active.sort(([, a], [, b]) => a.name.localeCompare(b.name));
+    return active[0]?.[0] ?? "";
+  }, [viewer, data]);
+
+  const logOpen = useCallback(
+    (assetId: string) => {
+      if (!viewerId) return;
+      fetch("/api/usage", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ assetId, viewerId }),
+      })
+        .then(() => load())
+        .catch(() => undefined);
+    },
+    [viewerId, load],
+  );
+
+  const value = useMemo(
+    () => ({ data, error, busy, post, viewer: viewerId, setViewer, logOpen }),
+    [data, error, busy, post, viewerId, logOpen],
+  );
   return <LifecycleContext.Provider value={value}>{children}</LifecycleContext.Provider>;
 }
