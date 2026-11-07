@@ -19,6 +19,8 @@ export async function runChat(opts: {
   tools: Record<string, unknown>;
   script: ScriptStep[];
   messages: UIMessage[];
+  /** Defaults to "test"; pass the production prompt to run the live orchestrator's instructions. */
+  instructions?: string;
 }): Promise<{ prompts: unknown[][]; chunks: UIMessageChunk[]; assistant: UIMessage | undefined }> {
   const prompts: unknown[][] = [];
   let step = 0;
@@ -38,7 +40,7 @@ export async function runChat(opts: {
   });
   // Mastra's model type expects doGenerate to return a stream result; the agent
   // loop only calls doStream, so the AI SDK mock is cast here (tests only).
-  const agent = new Agent({ id: "test-agent", name: "test-agent", instructions: "test", model: model as never, tools: opts.tools as never });
+  const agent = new Agent({ id: "test-agent", name: "test-agent", instructions: opts.instructions ?? "test", model: model as never, tools: opts.tools as never });
   const mastra = new Mastra({ agents: { testAgent: agent }, logger: false });
   const stream = (await handleChatStream({
     mastra,

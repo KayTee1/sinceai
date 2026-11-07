@@ -27,19 +27,40 @@
   (#21), the F1 demo request / D18 (#22), T18 data separation / D19 + D20
   (#23), D21 auto-renew (#24), T16 / T16A steward tool adapters (#18),
   D22 team catalog dashboards (#25) and D23 telemetry window (#27). Open:
-  T16B live orchestrator (PR #28) and the F5 build provenance fix (PR #29).
-  T16 (#18) includes the T16A request source label; the compact view keeps
-  the complete reuse match. Mastra tool adapters over the
+  T16B live orchestrator (PR #28; Viet with Claude takes over, agreed with
+  KayTee; master merged in up to T19 `1409a31`) and the F5 build provenance fix (PR #29).
+- **T16B (PR #28):** Codex reviewed `be5e560` (CHANGES
+  REQUIRED; report in `docs/agent/REVIEW.md`). P1 F2/F3 are fixed in
+  `4e10510` and **verified fixed by Codex**:
+  `proposeBuild` now stores a proposal only if the latest user message (from
+  the agent execution context) is exactly `Submit a build proposal for <ID>`
+  or `... for <ID> with product <P> and market <M>`, the ID equals the call's
+  `requestId`, and the call's `answer` equals the confirmed scope (both ways),
+  which must also be the analysis's resolved scope. Everything else returns
+  `intent_required` with a `reason` and stores nothing. Contract in
+  `docs/ARCHITECTURE.md`; tests in `tests/orchestrator.test.ts`
+  ("submission authorization"). Open: F4 (P2, inbox refresh recovery,
+  Viet's files) and F5 (P2, T17 `build.ts:149` provenance, with Viet).
+  The live orchestrator uses the deterministic
+  services: `analyzeRequest`, `computeKpi`, `checkKpiDefinitions`,
+  `proposeBuild` (`src/mastra/tools/build-tools.ts`) and `searchAssets`.
+  Prompt and tools are in `src/mastra/agents/orchestrator-config.ts`, so
+  `tests/orchestrator.test.ts` runs the production prompt and tools on a
+  mock model and a disposable DB. There is no requester input (D12 mapping)
+  and no approve tool. Chat UI: step labels and summaries; a stored proposal
+  calls `refresh()` in the lifecycle context. Viet's files touched:
+  `orchestrator.ts`, `chat-view.tsx`, `lifecycle-context.tsx`. He needs to
+  review these.
+- **Not verified:** a live run with the Anthropic model (no paid calls).
+  Whether Sonnet calls the tools in order, and whether it asks before
+  submitting, is untested. The UI was not exercised in a browser.
+- **T16A (merged #18):** Mastra tool adapters over the
   deterministic services, `src/mastra/tools/steward-tools.ts`
   (`createStewardTools(getDb)` → `analyze-request`, `compute-kpi`,
   `check-kpi-definitions`). They return service results unchanged and re-throw
   service errors. Model and chat UI both get compact views
   (`steward-views.ts`) without structured provenance (diagnostic reasons may
-  still name a workbook row). **Not wired into the
-  orchestrator yet:** the tool map and prompt change is a proposal for Viet,
-  `docs/agent/T16-orchestrator-proposal.md`. The orchestrator on master has
-  only `get-business-request`, `search-assets` and `find-kpi-definitions`.
-  The live wiring is T16B (`feat/T16B-live-orchestrator`, PR #28, open).
+  still name a workbook row).
 - **D21 auto-renew (`feat/auto-renew-used`, merged #24):** at lease end, used
   assets (any app view in 90 days, or pack telemetry >= 10 users/month) with
   an active owner renew automatically; unused ones get a retire proposal;
@@ -59,8 +80,8 @@
   requester). Approval computes each KPI per market with `computeKpiByMarket`
   (unchanged), stores values + provenance in `insights` and registers a
   Temporary asset. The Dashboard lists built insights first; clicking a value
-  shows formula, filters, query and source rows. `POST /api/builds` is the
-  entry point for the T16 agent tool (not yet exposed as a tool).
+  shows formula, filters, query and source rows. `POST /api/builds` stays the
+  HTTP entry point; T16B's `proposeBuild` tool calls the same service.
 - **F1 resolved (D18, merged #22):** the demo build trigger is TEAM-REQ-01
   (team-authored, labelled), "Net sales and forecast variance for Xarelto in
   North America". It reaches build_proposal on the real pack (local test).
@@ -94,8 +115,12 @@
   2. Build-service provenance (T17 owner, not T16):
      `src/services/build/build.ts:149` hardcodes
      `{ sheet: "Business_Requests" }`, so a TEAM-REQ-01 build proposal cites
-     the Bayer sheet instead of `Team_Requests (team-authored)`. Fix is
-     F5, open as PR #29 (Viet to review); not on master yet.
+     the Bayer sheet instead of `Team_Requests (team-authored)`. Live since
+     T16B: a chat-submitted TEAM-REQ-01 proposal stores that wrong source in
+     its evidence and `build_proposed` audit row. The chat view labels the
+     request correctly and lists the defect in `knownIssues`; the inbox
+     labels `TEAM-` IDs by prefix. Fix is F5, open as
+     PR #29 (Viet to review); not on master yet.
   3. Fixed (T16A, `597b79b`): the `analyze-request` view now keeps
      `request.sourceSheet` and `request.teamAuthored` (no row), so
      TEAM-REQ-01 stays labelled team-authored in model and UI output.
@@ -104,7 +129,7 @@
   Mastra also keeps the model output in `providerOptions.mastra.modelOutput`,
   so the browser message is ~25 KB. Whether that copy reaches the provider is
   unverified (no live run).
-- **Tests:** `tests/steward-tools.test.ts`, `tests/build.test.ts`,
+- **Tests:** `tests/orchestrator.test.ts` (T16B), `tests/steward-tools.test.ts`, `tests/build.test.ts`,
   `tests/lifecycle.test.ts`, `tests/team-requests.test.ts`. Local workbook
   checks: `PACK_XLSX=data/private/pack.xlsx npm test`.
 - **Local DB needs a rebuild:** databases imported before #14 lack
@@ -119,7 +144,7 @@
   only. T16 adds no decision; the view shapes and tool contracts are
   provisional until Viet agrees.
 - **Needs:** `ANTHROPIC_API_KEY` in `.env.local` for any live chat run (none
-  done for T16).
+  done for T16 or T16B).
 - **Next:** Viet reviews T16B (PR #28: steward tools plus a build-proposal
   tool wired into the orchestrator) and F5 (PR #29); both are open. Codex's
   independent review of T16B and its verification of the P1 authorization
@@ -128,6 +153,9 @@
   (provenance assertion, `BUILD_SOURCE_DEFECT` warning, stored provenance in
   the build-proposal view). Then fix the discovery issue above with Viet.
   T19 (D24) planning comes after T16B and the golden path.
+- **MVP limit:** chat history is client-supplied, not authenticated server
+  state; the latest user message is trusted as typed by the person at the
+  keyboard. The command syntax is English-only and strict by design.
 - **Open:** one agent vs. three (D11/R17); free-text requests have no
   governed entry point; IP / external AI terms (more catalog data reaches
   Anthropic once wired); meaning of `value_type` per row vs. per column;

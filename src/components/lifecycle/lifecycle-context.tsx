@@ -85,6 +85,8 @@ type Ctx = {
   setViewer: (id: string) => void;
   /** Logs one app open for the current viewer; silent, no page refresh. */
   logOpen: (assetId: string) => void;
+  /** Re-reads the snapshot (inbox, counts) after a change made elsewhere, e.g. a chat build proposal. */
+  refresh: () => void;
 };
 
 const LifecycleContext = createContext<Ctx | null>(null);
@@ -175,9 +177,13 @@ export function LifecycleProvider({ children }: { children: React.ReactNode }) {
     [viewerId, load],
   );
 
+  const refresh = useCallback(() => {
+    load().catch((e) => setError(e.message));
+  }, [load]);
+
   const value = useMemo(
-    () => ({ data, error, busy, post, viewer: viewerId, setViewer, logOpen }),
-    [data, error, busy, post, viewerId, logOpen],
+    () => ({ data, error, busy, post, viewer: viewerId, setViewer, logOpen, refresh }),
+    [data, error, busy, post, viewerId, logOpen, refresh],
   );
   return <LifecycleContext.Provider value={value}>{children}</LifecycleContext.Provider>;
 }
