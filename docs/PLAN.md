@@ -50,6 +50,12 @@ on it and telling the other developer before starting.
 | T7 | UI shell: tabs, role toggle, Dashboard tab, lineage panel | Viet / Claude | feat/initial-ui-mastra | src/app, src/components | Contract fixtures | Employee sees only Dashboard; lineage opens on click | doing (shell, dashboard, chat done; lineage panel todo) |
 | T8 | Agentic Chat view, Pipeline view, approval inbox, clock control | Viet / Claude (inbox, clock, timeline) | feat/T8-lifecycle-ui | src/components/lifecycle/ | T5 (#17) | Both views show the same run; reject needs a reason | doing (approval inbox, clock bar, audit timeline + restore done; Pipeline view and run approvals todo) |
 | T9 | README / architecture note, demo script, video | TBD | feat/T9-docs-demo | README.md, docs/ | T5–T8 | R18 met; video recorded | todo |
+| T19 | Plan, then implement reviewed LLM-generated synthetic estate scenarios (D24) | TBD | TBD | TBD (design first) | T16B and current golden-path integration complete; implementation design approved | Original pack preserved; generated records labelled team-authored/LLM-generated throughout; reviewed deterministic fixtures with known outcomes evaluated by real validation/governance; evidence-backed recommendations, required human decisions and measurable before/after demonstrated | todo (future; implementation not assigned) |
+
+D24 sets direction only. T19 follows T16B and the current golden path; schema,
+seed workflow, detection methods, UI, owner, schedule and dataset size remain
+undecided. T13's evaluation work can inform the fixture expectations. Existing
+task states and T16A/T16B/T17 contracts are not changed by this planning item.
 
 ## Build order (D14)
 

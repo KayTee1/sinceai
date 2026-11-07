@@ -314,6 +314,30 @@ see the full graph. Each proposal stores its lineage snapshot for the audit.
 - Warehouse integration, live BI telemetry and query costs are future
   capabilities (production path), not available in the pack.
 
+## Planned synthetic analytics sprawl demo (D24; not implemented)
+
+After T16B and the current golden path, plan an expanded estate alongside the
+unchanged Bayer-provided synthetic workbook and imported records. Additional
+records must be labelled **team-authored, LLM-generated synthetic data**, with
+distinct provenance throughout analysis, recommendations, audit and UI. This
+is separate from D18's TEAM-REQ-01 and does not replace T16/T17 contracts.
+
+Candidate scenarios: forked KPI formulas, filters or meanings; duplicate or
+near-duplicate dashboards; overlapping assets; unapproved or misleading
+definitions; stale or underused products; ownership and lineage inconsistencies.
+A fork can be legitimate; do not assume every difference is a defect. Prefer
+one-time LLM authoring followed by human review and deterministic fixtures with
+known expected outcomes. Existing deterministic validation and governance must
+evaluate them, without hardcoded successful detection or LLM authorization.
+
+The intended demonstration is a labelled augmented estate -> explain detected
+duplication/conflicts -> evidence-backed reuse, consolidation, canonicalization
+or retirement recommendations -> human-governed decisions and required
+lifecycle transitions -> measurable before/after improvement. Detection and
+resolution of every scenario are not claimed. Approved actions must preserve
+source records and audit history, never silently delete them. Schema, seeding,
+detection methods, UI, owner, schedule and dataset size remain undecided (T19).
+
 ## Demo story (target ~3 min; portal limit unknown)
 
 1. **Employee:** clean dashboard list; open a certified Nubeqa dashboard; click a
