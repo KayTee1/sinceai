@@ -7,6 +7,8 @@ import type { Client } from "@libsql/client";
 import { createBuildTools } from "../tools/build-tools";
 import { createEstateTools } from "../tools/estate-tools";
 import { createInboxTools } from "../tools/inbox-tools";
+import { createPipelineTools } from "../tools/pipeline-tools";
+import type { Summarize } from "../workflows/request-pipeline";
 import { createStewardTools } from "../tools/steward-tools";
 
 export const ORCHESTRATOR_INSTRUCTIONS = `
@@ -29,10 +31,12 @@ How you talk:
   what a card shows in full: no tables, no long lists of candidates, KPIs or coverage. Point to the card instead.
 
 Stored business requests (an ID such as REQ-0001 or TEAM-REQ-01):
-1. Always call analyzeRequest. It is the authoritative, deterministic analysis. Do not rebuild
-   its steps with other tools and never override its result.
-2. If recommendation.kind is "clarify", ask clarification.question in one sentence; the options appear as
-   buttons. When the user picks one, call analyzeRequest again with that option's exact product and market
+1. Always call runRequestPipeline. It runs the governed pipeline (shown live in the Pipeline view) and returns the
+   authoritative, deterministic analysis (field analysis, same as analyzeRequest) plus an estate duplicate check
+   and where the run waits. Do not rebuild its steps with other tools and never override its result. Use
+   analyzeRequest only to re-read an analysis without starting a run.
+2. If analysis.recommendation.kind is "clarify", ask clarification.question in one sentence; the options appear as
+   buttons. When the user picks one, call runRequestPipeline again with that option's exact product and market
    as answer. Do not guess the scope.
 3. recommendation.kind is the decision. Explain it briefly. Name KPI conflicts from kpiChecks (approved KPI
    vs. variants) and computation limits from computability (unsupported, insufficient_data, incomplete markets).
@@ -56,10 +60,10 @@ Stored business requests (an ID such as REQ-0001 or TEAM-REQ-01):
 
 New dashboards and duplicates:
 - When the user asks for a new dashboard or insight in their own words, ask for the product and market if they did
-  not name them, then call draftRequest with their question, then analyzeRequest with the returned DRAFT-nnn ID and
+  not name them, then call draftRequest with their question, then runRequestPipeline with the returned DRAFT-nnn ID and
   follow the rules above. Say it is a request drafted in chat, not a Bayer request.
-- Before telling the user to submit a build, call checkDuplicate for the request. If its verdict is reuse, pending or
-  restore, do not suggest a build: point to the active asset, the waiting proposal, or the archived asset (call
+- runRequestPipeline already includes the estate duplicate check (field duplicate). If its verdict is reuse,
+  pending or restore, do not suggest a build: point to the active asset, the waiting proposal, or the archived asset (call
   prepareRestore so the user gets a Restore button). proposeBuild also refuses duplicates and returns "duplicate".
 - "Is there something archived like this?": listArchived. To bring one back: prepareRestore. You never restore
   anything yourself; a person clicks Restore.
@@ -116,7 +120,7 @@ Rules:
  */
 export function createOrchestratorTools(
   getDb: () => Client,
-  opts: { today?: (db: Client) => Promise<string>; sync?: (db: Client) => Promise<void> } = {},
+  opts: { today?: (db: Client) => Promise<string>; sync?: (db: Client) => Promise<void>; summarize?: Summarize } = {},
 ) {
   const steward = createStewardTools(getDb);
   const build = createBuildTools(getDb, opts);
@@ -131,7 +135,9 @@ export function createOrchestratorTools(
           }
         : undefined,
   });
+  const pipeline = createPipelineTools(getDb, { today: opts.today, summarize: opts.summarize });
   return {
+    runRequestPipeline: pipeline.runRequestPipeline,
     analyzeRequest: steward.analyzeRequest,
     computeKpi: steward.computeKpi,
     checkKpiDefinitions: steward.checkKpiDefinitions,

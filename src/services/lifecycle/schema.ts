@@ -14,6 +14,8 @@ const APP_TABLES = [
   "usage_events",
   "insights",
   "chat_requests",
+  "runs",
+  "run_events",
 ];
 
 const DDL = [
@@ -52,6 +54,13 @@ const DDL = [
   `CREATE TABLE IF NOT EXISTS chat_requests (
      request_id TEXT PRIMARY KEY, request_date TEXT NOT NULL, product_context TEXT NOT NULL,
      market_context TEXT NOT NULL, request_text TEXT NOT NULL, created_on TEXT NOT NULL)`,
+  // T23: request pipeline runs and their step events (ARCHITECTURE contract 1).
+  `CREATE TABLE IF NOT EXISTS runs (
+     run_id TEXT PRIMARY KEY, request_id TEXT NOT NULL, scope TEXT, path TEXT, status TEXT NOT NULL,
+     proposal_id TEXT, asset_id TEXT, created_on TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS run_events (
+     id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL, step TEXT NOT NULL, agent TEXT NOT NULL,
+     status TEXT NOT NULL, summary TEXT NOT NULL, evidence TEXT NOT NULL, ts TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS usage_events (
      asset_id TEXT NOT NULL, user_id TEXT NOT NULL, sim_date TEXT NOT NULL, origin TEXT NOT NULL)`,
 ];

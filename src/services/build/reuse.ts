@@ -3,6 +3,7 @@
 // and is audited. No approver is needed (D14).
 import type { Client } from "@libsql/client";
 import { LifecycleError, POLICY_VERSION, appendAudit, getAssetState, recordUsage } from "../lifecycle";
+import { onReuseConfirmed } from "../pipeline";
 import { analyzeRequest } from "../steward/analyze";
 import type { Scope } from "../steward/types";
 import { mappedRequester } from "./build";
@@ -54,5 +55,6 @@ export async function confirmReuse(
     rationale: `${requesterId} (team mapping) confirmed ${candidate.assetId} answers ${analysis.request.id} for ${scope.product} · ${scope.market}; logged as an app use.`,
     evidence: { requestId: analysis.request.id, scope, requesterSource: "team_mapping" },
   });
+  await onReuseConfirmed(db, { requestId: analysis.request.id, assetId: candidate.assetId, requesterId });
   return { requestId: analysis.request.id, assetId: candidate.assetId, requesterId, requesterSource: "team_mapping", date };
 }
