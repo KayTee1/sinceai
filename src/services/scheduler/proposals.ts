@@ -5,7 +5,8 @@
 // re-runs the comparator, re-checks both assets and the chosen direction,
 // and only then calls the existing proposeMerge (estate/merge.ts) as is: its
 // D14 checks, its two-owner required approvers (an inactive owner replaced by
-// the region's steward) and its merge_proposed audit row. The proposal then
+// the region's steward; see MERGE-APPROVERS below for the known gap when
+// there is no steward either) and its merge_proposed audit row. The proposal then
 // waits in the existing Inbox and is decided there by the lifecycle engine.
 // Nothing here approves, archives, changes KPI definitions or creates a
 // proposal on its own: detection is not permission.
@@ -64,6 +65,8 @@ import { OVERLAP_RULE, assessAsset, type Comparator } from "./overlap";
 import type {
   DirectionCheck,
   EligibilityReason,
+  FindingProposalBlocker,
+  FindingProposalBlockerId,
   FindingProposalAction,
   FindingProposalLink,
   FindingProposalOutcome,
@@ -84,12 +87,28 @@ import { SchedulerError, type OverlapEvidence } from "./types";
  *    promote on an archived asset) independently reviewed AND part of this
  *    branch's base. Without it, approving a merge raised here can archive an
  *    asset that still has another open proposal whose rejection renews it.
- * 2. A Codex review of this module with B0 in place.
+ * 2. MERGE-APPROVERS (Codex P1 on src/services/estate/merge.ts, Viet's code):
+ *    proposeMerge drops a side that has no active approver (inactive owner
+ *    and no region steward) and still creates the proposal, so one owner can
+ *    approve archiving a dashboard nobody represents. The fix belongs in
+ *    proposeMerge (refuse unless both sides have an approver); it is
+ *    deliberately NOT duplicated here. It must be reviewed and in this
+ *    branch's base.
+ * 3. A Codex review of this module with both fixes in place.
  * Not configurable from the environment by design; change it in code review.
  * The service functions below are usable (and tested) regardless.
  */
 export const FINDING_PROPOSALS_ENABLED: boolean = false;
-export const FINDING_PROPOSALS_BLOCKED_BY = "B0" as const;
+
+/** What the switch waits for, in order. IDs appear in the 409 and preview `blockedBy`. */
+export const FINDING_PROPOSALS_BLOCKERS: readonly FindingProposalBlocker[] = [
+  { id: "B0", description: "Lifecycle: archiving must close the asset's other open proposals (Viet)" },
+  {
+    id: "MERGE-APPROVERS",
+    description: "proposeMerge must refuse when either side has no active approver (inactive owner, no region steward) (Viet)",
+  },
+];
+export const FINDING_PROPOSALS_BLOCKED_BY: readonly FindingProposalBlockerId[] = FINDING_PROPOSALS_BLOCKERS.map((b) => b.id);
 
 export const FINDING_PROPOSAL_ACTIONS: readonly FindingProposalAction[] = ["merge"];
 
@@ -345,7 +364,7 @@ export async function previewFindingProposal(
       eligible,
       reasons,
       enabled: FINDING_PROPOSALS_ENABLED,
-      ...(FINDING_PROPOSALS_ENABLED ? {} : { blockedBy: FINDING_PROPOSALS_BLOCKED_BY }),
+      ...(FINDING_PROPOSALS_ENABLED ? {} : { blockedBy: [...FINDING_PROPOSALS_BLOCKED_BY] }),
       findingFingerprint: f.fingerprint,
       currentFingerprint: ev.currentFingerprint,
       directions: ev.directions,

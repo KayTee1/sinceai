@@ -81,6 +81,10 @@ export type MergeDirection = { sourceId: string; targetId: string };
  */
 export type DirectionCheck = MergeDirection & { allowed: boolean; reasons: EligibilityReason[]; comparatorPreferred: boolean };
 
+/** Unmet conditions for switching the POST route on (see FINDING_PROPOSALS_ENABLED). */
+export type FindingProposalBlockerId = "B0" | "MERGE-APPROVERS";
+export type FindingProposalBlocker = { id: FindingProposalBlockerId; description: string };
+
 export type FindingProposalPreview = {
   findingId: string;
   action: FindingProposalAction;
@@ -90,7 +94,8 @@ export type FindingProposalPreview = {
   reasons: EligibilityReason[];
   /** Whether POST is switched on in this build (FINDING_PROPOSALS_ENABLED). */
   enabled: boolean;
-  blockedBy?: "B0";
+  /** Present while switched off: every unmet enabling condition (FINDING_PROPOSALS_BLOCKERS). */
+  blockedBy?: FindingProposalBlockerId[];
   findingFingerprint: string;
   /** Re-run comparator's fingerprint for the pair now; null when it could not be evaluated or the overlap is gone. */
   currentFingerprint: string | null;

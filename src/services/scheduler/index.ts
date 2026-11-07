@@ -10,6 +10,7 @@ export { schedulerOverview, type SchedulerOverview } from "./overview";
 export * from "./proposal-types";
 export {
   FINDING_PROPOSALS_BLOCKED_BY,
+  FINDING_PROPOSALS_BLOCKERS,
   FINDING_PROPOSALS_ENABLED,
   FINDING_PROPOSAL_ACTIONS,
   listFindingProposals,

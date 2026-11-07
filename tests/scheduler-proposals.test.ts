@@ -6,7 +6,13 @@
 // Temporary insight (owner OWN-R, KPI-004 + KPI-042) that covers AST-1.
 //
 // Tests call the service directly; the HTTP POST is switched off until B0
-// (FINDING_PROPOSALS_ENABLED) and is only checked to refuse. No LLM, no network.
+// and MERGE-APPROVERS (FINDING_PROPOSALS_ENABLED) and is only checked to
+// refuse. No LLM, no network.
+//
+// MERGE-APPROVERS dependency: every fixture side has an active owner, so the
+// proposeMerge gap (a side without any active approver is dropped from the
+// required approvers) is not exercised; it is fixed in estate/merge.ts, not
+// here.
 //
 // B0 dependency: nothing here asserts behaviour that B0 changes. Rejecting
 // another proposal on an asset archived by an approved merge (the pre-B0
@@ -155,7 +161,7 @@ describe("raising a proposal from a finding", () => {
   it("creates the merge through proposeMerge with both owners as approvers; link, snapshot, linkage and audit persisted", async () => {
     const f = await betavexFinding();
     const pv = await previewFindingProposal(db, { findingId: f.findingId });
-    assert.deepEqual([pv.eligible, pv.enabled, pv.blockedBy, pv.reasons, pv.link], [true, false, "B0", [], null]);
+    assert.deepEqual([pv.eligible, pv.enabled, pv.blockedBy, pv.reasons, pv.link], [true, false, ["B0", "MERGE-APPROVERS"], [], null]);
     assert.equal(pv.currentFingerprint, f.fingerprint);
     assert.deepEqual(
       pv.directions.map((d) => [d.sourceId, d.targetId, d.allowed, d.reasons.map((r) => r.code)]),
@@ -487,7 +493,7 @@ describe("read-only preview, HTTP gate and reset", () => {
     assert.deepEqual(await snap(), before);
   });
 
-  it("POST is switched off until B0: 409 blockedBy B0, nothing created, even with the demo gate open", async () => {
+  it("POST is switched off until B0 and the merge approver fix: 409 blockedBy both, nothing created, even with the demo gate open", async () => {
     assert.equal(FINDING_PROPOSALS_ENABLED, false);
     const f = await betavexFinding();
     const before = [await mergeProposals(), await count(`SELECT COUNT(*) AS n FROM audit_log`)];
@@ -507,10 +513,11 @@ describe("read-only preview, HTTP gate and reset", () => {
       env: { ...process.env, DATABASE_FILE: DB_PATH, SCHEDULER_DEMO_ACTIONS: "1" },
       encoding: "utf8",
     });
-    const res = JSON.parse(out) as { status: number; body: { error: string; blockedBy: string } };
+    const res = JSON.parse(out) as { status: number; body: { error: string; blockedBy: string[]; blockers: { id: string }[] } };
     assert.equal(res.status, 409);
-    assert.equal(res.body.blockedBy, "B0");
-    assert.match(res.body.error, /switched off/);
+    assert.deepEqual(res.body.blockedBy, ["B0", "MERGE-APPROVERS"]);
+    assert.deepEqual(res.body.blockers.map((b) => b.id), ["B0", "MERGE-APPROVERS"]);
+    assert.match(res.body.error, /switched off.*B0.*MERGE-APPROVERS/);
     assert.deepEqual([await mergeProposals(), await count(`SELECT COUNT(*) AS n FROM audit_log`)], before);
     assert.equal(await links(), 0);
     assert.equal((await getFinding(db, f.findingId))?.proposalId, null);
