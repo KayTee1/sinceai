@@ -8,6 +8,7 @@
 // field added by a later branch (periodic reassessment, resolved/superseded
 // findings) shows up without a code change here.
 import type { ChangeWindow, Finding, JobDescriptor, OverlapSide, SchedulerRun } from "@/services/scheduler/types";
+import type { SimStatus, SimTriggerResult } from "@/services/scheduler/simulated";
 
 /** The Agentic workspace side tabs, in display order. */
 export const AGENTIC_SIDE_TABS = ["pipeline", "scheduler", "inbox"] as const;
@@ -37,6 +38,9 @@ export type JobOverview = {
 export type SchedulerOverviewResponse = { jobs: JobOverview[]; findings: Record<string, number> };
 export type RunsResponse = { runs: SchedulerRun[]; counts: Record<string, number> };
 export type FindingsResponse = { total: number; counts: Record<string, number>; findings: Finding[] };
+/** B5 (T26): GET /api/scheduler/simulated. */
+export type SimStatusResponse = SimStatus;
+export type SimCheckResponse = { result: SimTriggerResult };
 
 // ---- Result mapping ----
 
@@ -50,7 +54,7 @@ export type Fetcher = (url: string, init?: RequestInit) => Promise<Response>;
 type Raw = { status: number; body: unknown } | { status: null; error: string };
 
 /** Maps an HTTP status and JSON body to a result. Pure, so tests feed it directly. */
-export function mapResponse<T>(raw: Raw, context: "read" | "run" | "dismiss" | "abandon" = "read"): ApiResult<T> {
+export function mapResponse<T>(raw: Raw, context: "read" | "run" | "dismiss" | "abandon" | "check" = "read"): ApiResult<T> {
   if (raw.status === null) {
     return { ok: false, kind: "network", status: null, message: `Could not reach the server: ${raw.error}` };
   }
@@ -67,7 +71,7 @@ export function mapResponse<T>(raw: Raw, context: "read" | "run" | "dismiss" | "
     if (/not initiali[sz]ed/i.test(serverMsg)) return { ok: false, kind: "not_ready", status, message: NOT_READY_MESSAGE };
     const running = typeof (body as { runningRunId?: unknown })?.runningRunId === "string" || /still running|same time/i.test(serverMsg);
     const message =
-      context === "run" && running
+ (context === "run" || context === "check") && running
         ? `Another run is in progress; nothing was started. (${serverMsg})`
         : `Conflict (409): ${serverMsg || "the request conflicts with the current state"}`;
     return { ok: false, kind: "conflict", status, message };
@@ -117,6 +121,10 @@ export function schedulerApi(fetcher: Fetcher = (url, init) => fetch(url, init))
         post({ actor: DEMO_ACTOR, reason: reason.trim() }),
         "dismiss",
       ),
+    /** B5: status of simulated-clock scheduling at the stored date (read-only). */
+    simulated: () => get<SimStatusResponse>("/api/scheduler/simulated"),
+    /** B5: run the jobs due at the stored simulated date (never ticks the clock). */
+    checkDue: () => call<SimCheckResponse>(fetcher, "/api/scheduler/simulated", post({ actor: DEMO_ACTOR }), "check"),
     abandon: (runId: string, reason: string) =>
       call<{ run: SchedulerRun }>(
         fetcher,
@@ -274,4 +282,81 @@ export function sideText(s: OverlapSide | null | undefined): { label: string; va
 export function shortTime(iso: string | null | undefined): string {
   if (!iso) return "–";
   return iso.replace("T", " ").replace(/\.\d+Z$|Z$/, " UTC");
+}
+
+// ---- B5 (T26): simulated-clock scheduling ----
+
+const SIM_TONE: Record<string, Tone> = { ran: "active", not_due: "muted", already_processed: "ok", deferred: "attention" };
+
+/** Tone for a simulated decision; a failed run makes "ran" bad. Unknown decisions are neutral. */
+export function simDecisionTone(decision: string, run?: SchedulerRun | null): Tone {
+  if (decision === "ran" && run) return run.status === "failed" ? "bad" : run.status === "succeeded" ? "ok" : "active";
+  return SIM_TONE[decision] ?? "neutral";
+}
+
+export function jobTitle(jobId: string): string {
+  return jobId === "incremental_overlap" ? "Incremental overlap" : jobId === "periodic_reassessment" ? "Periodic reassessment" : jobId;
+}
+
+/** One line per job for a check / clock-action result: what ran, what was skipped and why. */
+export function simResultLines(r: SimTriggerResult | null | undefined): { tone: Tone; text: string }[] {
+  if (!r || !Array.isArray(r.decisions)) return [];
+  return r.decisions.map((d) => {
+    const run = d.run;
+    const counts = run?.summary && (run.summary as { findings?: Record<string, unknown> }).findings;
+    const outcome =
+      d.decision === "ran" && run
+        ? `ran ${run.runId}: ${statusLabel(run.status)}${run.status === "succeeded" && counts ? ` (${countsText(counts) || "no finding changes"})` : ""}`
+        : statusLabel(d.decision);
+    return { tone: simDecisionTone(d.decision, run), text: `${jobTitle(d.jobId)} at ${r.simDate}: ${outcome}. ${d.reason}` };
+  });
+}
+
+export function runTriggerText(run: Pick<SchedulerRun, "trigger" | "actor">): string {
+  return run.trigger === "simulated_clock" ? "triggered by the simulated clock" : `${statusLabel(run.trigger)} by ${run.actor} (demo identity)`;
+}
+
+/**
+ * B5 (Codex B5-F1): what a clock action's response says about the governance
+ * scheduler. The clock change itself succeeded (HTTP 200) and stays; this only
+ * reports when the scheduler did NOT complete its checks for the new date.
+ * Null when there is nothing to warn about: no `scheduler` field (B5 gates off,
+ * response as before) or every job ran successfully, was not due or was
+ * already processed. Never claims the checks succeeded.
+ */
+export type ClockSchedulerNotice = { tone: "bad" | "attention"; summary: string; detail: string };
+
+const RECOVERY = "Open Agentic → Scheduler and use Check due jobs to retry this date (abandon a stuck run there first if one is shown running).";
+
+export function clockSchedulerNotice(response: unknown, verb = "Clock advanced"): ClockSchedulerNotice | null {
+  if (!response || typeof response !== "object" || !("scheduler" in response)) return null;
+  const s = (response as { scheduler: unknown }).scheduler;
+  const date = (response as { clock?: { date?: unknown } }).clock?.date;
+  const head = typeof date === "string" ? `${verb} to ${date}` : verb;
+  const errorText = s && typeof s === "object" && typeof (s as { error?: unknown }).error === "string" ? (s as { error: string }).error : null;
+  if (errorText !== null || !s || typeof s !== "object" || !Array.isArray((s as { decisions?: unknown }).decisions)) {
+    const why = errorText ?? "the scheduler returned no readable outcome";
+    return {
+      tone: "bad",
+      summary: `${head}, but scheduler evaluation failed. Governance checks did not run.`,
+      detail: `${head}, but scheduler evaluation failed: ${why}. Governance checks did not run for this date. ${RECOVERY}`,
+    };
+  }
+  const r = s as SimTriggerResult;
+  const failed = r.decisions.filter((d) => d.decision === "ran" && d.run?.status !== "succeeded");
+  const deferred = r.decisions.filter((d) => d.decision === "deferred");
+  if (!failed.length && !deferred.length) return null;
+  const parts = [
+    ...failed.map((d) => {
+      const e = d.run?.error;
+      return `${jobTitle(d.jobId)}: run ${d.run?.runId ?? "?"} ${d.run?.status ?? "did not finish"}${e ? ` (${e.code}: ${e.message})` : ""}`;
+    }),
+    ...deferred.map((d) => `${jobTitle(d.jobId)}: deferred. ${d.reason}`),
+  ];
+  const what = failed.length ? "failed" : "was deferred";
+  return {
+    tone: failed.length ? "bad" : "attention",
+    summary: `${head}, but scheduler evaluation ${what} at ${r.simDate}.`,
+    detail: `${head}, but scheduler evaluation ${what} at ${r.simDate}. ${parts.join(" ")} ${RECOVERY}`,
+  };
 }

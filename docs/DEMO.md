@@ -1,11 +1,8 @@
 # Demo runbook
 
-Implementation snapshot: `43a1157d49702f8b7a285e8f82a4d2059554c584`
-(`integrate/T24-scheduler`), inspected 2026-11-08. Later commits are outside this refresh.
-Local `master` remains at `85c8494`. The already-available `origin/master` ref is
-`a93248f46542165dd3a64be283b78e9a835e7ba4` (#37), whose committed tree exactly matches this
-snapshot; B1–B4 are therefore also present in that mainline snapshot. No fetch was
-performed.
+Implementation snapshot: `1beff2ebd1e4df5393bc6b065795ca1ddb845edc` (`origin/master`, T26 merged in #38),
+verified 2026-11-08. Original refresh baseline: `43a1157`; reconciled against the
+committed final master revision. Local `master` is stale and was not moved.
 
 ## Prepare a disposable demo
 
@@ -83,13 +80,46 @@ If a finding exists, inspect evidence, dismiss with a reason and run again:
 unchanged evidence stays dismissed. Run Periodic reassessment manually to
 recheck open/dismissed findings after lifecycle changes. Show resolution only
 when the recorded pair no longer qualifies. It is not a full-estate scan and
-clock advance does not run either job. If a run is stuck, inspect it and use
+with `SCHEDULER_SIM_TRIGGER` off, clock actions do not run either job. If a run
+is stuck, inspect it and use
 Abandon with a reason; there is no stale-run timeout.
 
 Finding-to-proposal submission is disabled. Explain the review blockers and
 human authority instead of promising a working proposal button. For a merge
 demo through chat, rehearse a comparator-supported pair separately and obtain
 both sides' required approvals; do not guess a universally eligible pair.
+
+## Simulated-date monitoring (T26/B5)
+
+For clock-action checks, add to `.env.local` and restart the server:
+
+```dotenv
+SCHEDULER_DEMO_ACTIONS=1
+SCHEDULER_SIM_TRIGGER=1
+# Optional demo-only spacing; leave unset for no cadence:
+# SCHEDULER_SIM_REASSESS_DAYS=7
+```
+
+The T26 variables are not in `.env.example`. Manual Check due jobs requires only
+the first flag. Start paused; build, restore or promote an eligible asset, then
+advance +1 day. Scheduler → Simulated clock shows date, settings, due/pending
+state and last decision/run per job. Inspect history for trigger
+`simulated_clock`, actor `simulated-clock`, and succeeded/failed outcome.
+No finding is guaranteed; unsupported/no-overlap outcomes are valid evidence.
+
+Press Check due jobs again at the same date: successful jobs say
+already_processed; non-due jobs say not_due. A failed run can retry at that date.
+New watched changes after a successful simulated run show pending/next date:
+advance a day or use manual Run now to process them immediately.
+A busy writer or clock movement can produce deferred; retry after it settles,
+abandoning only a genuinely stuck run with a reason.
+
+Pause/resume/next event also check due jobs with both flags on. Advancing many
+days evaluates monitoring at the resulting date only, unlike lifecycle event
+processing. Letting the clock run at one day/second or merely polling does not
+run governance checks. Demonstrate that distinction explicitly; no cron or real
+background schedule exists. Scheduler error/deferred notices on the clock bar
+mean the clock action persisted but monitoring did not fully succeed.
 
 ## Recording and submission
 

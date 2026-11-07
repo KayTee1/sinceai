@@ -5,12 +5,9 @@ explain conflicting KPI definitions, and request a computed Temporary insight
 only when the deterministic services support it. Humans approve changes.
 All business values are synthetic challenge data.
 
-Implementation snapshot: `43a1157d49702f8b7a285e8f82a4d2059554c584`
-(`integrate/T24-scheduler`), inspected 2026-11-08. Later commits are outside this refresh.
-Local `master` remains at `85c8494`. The already-available `origin/master` ref is
-`a93248f46542165dd3a64be283b78e9a835e7ba4` (#37), whose committed tree exactly matches this
-snapshot; B1–B4 are therefore also present in that mainline snapshot. No fetch was
-performed.
+Implementation snapshot: `1beff2ebd1e4df5393bc6b065795ca1ddb845edc` (`origin/master`, T26 merged in #38),
+verified 2026-11-08. Original refresh baseline: `43a1157`; reconciled against the
+committed final master revision. Local `master` is stale and was not moved.
 
 ## Run locally
 
@@ -41,8 +38,14 @@ validates sheets, headers and counts, preserves `_source_row`, and refuses to
 overwrite an existing database. Use a fresh disposable database for demos;
 do not delete another developer's file.
 
-Optional `SCHEDULER_DEMO_ACTIONS=1` enables the demo manager's manual monitoring
-writes over HTTP. This flag and the role/identity pickers are not authentication.
+Optional `SCHEDULER_DEMO_ACTIONS=1` enables the demo manager's monitoring writes
+over HTTP (including Check due jobs). Also set `SCHEDULER_SIM_TRIGGER=1` to run
+due governance jobs after explicit clock actions. Both flags default off.
+`SCHEDULER_SIM_REASSESS_DAYS` optionally spaces simulated periodic reassessments
+by 1–365 simulated days; unset/invalid means no cadence. These two T26 variables
+are read in source but are not listed in `.env.example`; add them to `.env.local`
+for the server, or export them for CLI use. These flags and the role/identity
+pickers are not authentication.
 The app is a local prototype, without production SSO/RBAC.
 
 ## What works
@@ -53,8 +56,9 @@ The app is a local prototype, without production SSO/RBAC.
 - Deterministic computation of four mapped KPIs with query and row provenance.
 - Temporary TTL, usage-based promotion, lease reviews, escalation, archive,
   restore, and governed two-sided merge proposals.
-- Separate Scheduler tab for manually triggered incremental overlap checks and
-  reassessment of known findings. Findings do not authorize changes.
+- Scheduler tab for manual incremental overlap checks and reassessment of known
+  findings, plus opt-in checks after clock actions and manual Check due jobs at
+  the stored simulated date. Findings do not authorize changes.
 
 ## Check and demonstrate
 
@@ -103,8 +107,10 @@ Source KPI formulas are not supplied as executable definitions: our mapping
 remains team-authored and provisional. Unsupported metrics and missing data
 produce explicit statuses, not invented values.
 
-Monitoring is manual at this revision; no cron or simulated-clock trigger runs
-these jobs. Finding-to-merge POST is disabled pending independent reviews.
+Monitoring supports manual runs and T26 simulated-date checks at explicit clock
+control actions or Check due jobs. A freely running clock/polling alone starts
+no governance job; there is no cron, background worker or real automatic schedule.
+Finding-to-merge POST is disabled pending independent reviews.
 Full-estate monitoring, synthetic sprawl generation, proposal editing,
 owner-reassignment workflow and complete certification promotion are unfinished.
 Chat history and acting identities are supplied by the client.

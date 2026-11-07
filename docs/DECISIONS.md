@@ -534,23 +534,75 @@ evidence for any value); persisting `keep_both`/`partial` overlaps as findings
 (suggestMerge itself treats them as no action).
 Agreed by: KayTee (proposed); Viet pending
 
+D26: Simulated-time scheduler trigger (B5) (2026-11-07)
+Status: proposed (KayTee, T26 on `feat/T26-scheduler-simulated-time`;
+awaiting review). Touches Viet's `src/app/api/clock/shared.ts` (additive,
+behind a setting) and one reset-list line in
+`src/services/lifecycle/schema.ts`.
+Choice and why:
+- No cron, no worker. `runSimulatedTriggers` runs at explicit moments only:
+  after a manager clock action (advance, next event, pause, resume) when
+  `SCHEDULER_SIM_TRIGGER=1` and `SCHEDULER_DEMO_ACTIONS=1`, and from the
+  Scheduler tab's "Check due jobs" (demo gate). It reads the stored date and
+  never ticks or changes the clock; a free-running clock (1 day/s) runs
+  nothing until the next clock action or check. Off by default: clock
+  responses and behaviour are unchanged.
+- Jobs run in order incremental, then periodic, through the unchanged
+  `runIncremental` / `runReassessment` with trigger `simulated_clock`.
+  Due: incremental when watched audit rows exist after the checkpoint;
+  periodic when `reassessmentDue()` says so. No cadence by default; an
+  optional demo cadence (`SCHEDULER_SIM_REASSESS_DAYS`) only spaces
+  simulated reassessments and is not a production policy. Unrelated to the
+  90-day usage window and the 30-day Temporary TTL.
+- Idempotency: a job whose simulated run already SUCCEEDED at this date is
+  `already_processed` (read from `scheduler_runs`). Failed runs do not
+  count, so the next trigger at the same date retries (recovery). Changes
+  after that day's successful run wait for the next date or a manual run;
+  the status calls them `pending` with the next date, never "due now"
+  (Codex B5-F3).
+- One date per trigger (Codex B5-F2): the date read at the start is used for
+  the due checks, the idempotency check, the run claim and the saved state.
+  `claimRun` refuses inside its write transaction when the stored date no
+  longer matches (`deferred`, reason "Clock moved", nothing runs for the old
+  date); a run's date is fixed at claim; saved state never goes back to an
+  older date. Intermediate days are not replayed.
+- Clock response (Codex B5-F1): the clock change stays (200); a scheduler
+  error, failed run or deferred job is shown on the clock bar as "Clock
+  advanced to <date>, but scheduler evaluation failed / was deferred", with
+  the reason and the retry (Scheduler tab, Check due jobs). A simulated
+  status load failure is shown in place of the card.
+- Concurrency: any running finding-writing run (manual or simulated) defers
+  the simulated jobs (`deferred`, nothing started); the existing claim
+  indexes still refuse overlaps, and a lost claim race is also `deferred`.
+  A manual run during a simulated run gets the existing 409.
+- `scheduler_sim_state` keeps the last evaluation per job for display only;
+  dropped by the demo reset with the other scheduler tables.
+- Never proposes, decides, merges, retires or approves; B3 stays disabled.
+Alternatives considered: ticking-time hooks in `tick()` (would change
+real-time semantics and run on every GET); a fixed production cadence (no
+evidence for a value); client-only triggering from the Scheduler tab (would
+not run when the tab is closed).
+Agreed by: KayTee (proposed); Viet pending
+
 ## Documentation snapshot interpretation (2026-11-08; no new product decision)
 
-Implementation snapshot: `43a1157d49702f8b7a285e8f82a4d2059554c584`
-(`integrate/T24-scheduler`), inspected 2026-11-08. Later commits are outside this refresh.
-Local `master` remains at `85c8494`. The already-available `origin/master` ref is
-`a93248f46542165dd3a64be283b78e9a835e7ba4` (#37), whose committed tree exactly matches this
-snapshot; B1–B4 are therefore also present in that mainline snapshot. No fetch was
-performed.
+Implementation snapshot: `1beff2ebd1e4df5393bc6b065795ca1ddb845edc` (`origin/master`, T26 merged in #38),
+verified 2026-11-08. Original refresh baseline: `43a1157`; reconciled against the
+committed final master revision. Local `master` is stale and was not moved.
 
 Owner approved this documentation refresh and the isolated branch
 `docs/mvp-repository-refresh`. This note records implementation facts, not
 agreement on outstanding product decisions. Earlier entries and their agreed-by
 fields remain historical. D16 supersedes silence-driven lease archival; D22
 supersedes invented DSH team boards; D23 limits telemetry to the review window.
-D24 synthetic sprawl remains direction only. D25 monitoring B1/B2 is manual,
-B3 submission remains disabled, and B4 UI is present on the integration snapshot.
+D24 synthetic sprawl remains direction only. D25 initially added manual B1/B2;
+B3 submission remains disabled, and B4 UI is present in the verified master.
 Approval waits persist in application tables, not Mastra snapshots. The D14/D15
 mapping retains its provisional label. See [GOVERNANCE](GOVERNANCE.md) for current
 semantics and gaps. Independent review and Certified replacement policy remain
 open; documentation approval does not clear those gates.
+
+T26 reconciliation: D26 is implemented in master #38; its original proposed/
+agreed-by labels above are retained as decision history, not overwritten by
+this documentation update. B5 supports explicit simulated-date checks and
+opt-in clock-action hooks, not background scheduling. B3 remains disabled.

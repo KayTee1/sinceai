@@ -2,12 +2,9 @@
 
 ## Implementation status at the documentation snapshot
 
-Implementation snapshot: `43a1157d49702f8b7a285e8f82a4d2059554c584`
-(`integrate/T24-scheduler`), inspected 2026-11-08. Later commits are outside this refresh.
-Local `master` remains at `85c8494`. The already-available `origin/master` ref is
-`a93248f46542165dd3a64be283b78e9a835e7ba4` (#37), whose committed tree exactly matches this
-snapshot; B1–B4 are therefore also present in that mainline snapshot. No fetch was
-performed.
+Implementation snapshot: `1beff2ebd1e4df5393bc6b065795ca1ddb845edc` (`origin/master`, T26 merged in #38),
+verified 2026-11-08. Original refresh baseline: `43a1157`; reconciled against the
+committed final master revision. Local `master` is stale and was not moved.
 
 The sections below preserve product targets and historical planning. They are
 not a checklist of delivered functionality. Current behavior is specified in
@@ -21,9 +18,10 @@ Partial: catalog-only discovery remains separate from lifecycle-aware estate
 checks; lineage is catalog metadata plus built-value provenance, not a complete
 graph; counts do not establish KPI conflict resolution; owner reassignment,
 proposal editing and complete certification promotion are unfinished.
-B0 merge comparator is in mainline ancestry; B1/B2 manual jobs, B3 disabled
-proposal bridge and B4 Scheduler UI are on this integration snapshot. No automatic
-clock/cron monitoring or full-estate sweep. Synthetic sprawl generation remains
+B0–B5 are in the verified master snapshot: B1/B2 runners support manual runs,
+B3 proposal bridge stays disabled, B4 supplies Scheduler UI, and T26/B5 adds
+opt-in checks after explicit clock actions plus manual Check due jobs. No cron,
+background worker, freely ticking clock trigger or full-estate sweep. Synthetic sprawl generation remains
 planned. External BI/SSO integration and regulatory certification are absent.
 
 Organizer facts: [CHALLENGE](CHALLENGE.md). Dataset semantics:

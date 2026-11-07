@@ -2,12 +2,9 @@
 
 ## Current documentation task and baseline
 
-Implementation snapshot: `43a1157d49702f8b7a285e8f82a4d2059554c584`
-(`integrate/T24-scheduler`), inspected 2026-11-08. Later commits are outside this refresh.
-Local `master` remains at `85c8494`. The already-available `origin/master` ref is
-`a93248f46542165dd3a64be283b78e9a835e7ba4` (#37), whose committed tree exactly matches this
-snapshot; B1–B4 are therefore also present in that mainline snapshot. No fetch was
-performed.
+Implementation snapshot: `1beff2ebd1e4df5393bc6b065795ca1ddb845edc` (`origin/master`, T26 merged in #38),
+verified 2026-11-08. Original refresh baseline: `43a1157`; reconciled against the
+committed final master revision. Local `master` is stale and was not moved.
 
 Owner assigned and approved documentation execution on
 `docs/mvp-repository-refresh`, isolated worktree `/private/tmp/sinceai-docs-refresh`.
@@ -24,11 +21,11 @@ preserve IDs/ownership and avoid claiming another developer's reviews complete.
 | T19 | Synthetic sprawl direction only; implementation not assigned |
 | T21/T22/T23 | Chat cards, estate tools and persisted request pipeline in baseline |
 | T24/T25 | B0–B4 integration present; finding proposal POST disabled; independent reviews and Certified replacement policy remain open |
-| T26 | Separate simulated-time scheduler branch exists; excluded from this baseline; reconcile before publication |
+| T26 | Merged #38; gated explicit clock-action checks and manual Check due jobs documented; no background worker |
 
 No old review finding is closed by this refresh. No implementation task is
 claimed or changed. Final PR must target the owner-approved integrated MVP
-baseline after divergence assessment; no automatic merge/rebase.
+baseline after divergence assessment. Owner authorized integration of final master and publication; PR is for review, never automatic merge.
 
 ## Historical plan
 
@@ -81,6 +78,7 @@ on it and telling the other developer before starting.
 | T23 | Request pipeline (Miro page 2) as a Mastra workflow with step events, run continuations on submit / approval / reuse, Discovery + Conflict agents for findings, live Pipeline view | Viet / Claude | feat/T23-request-pipeline | src/mastra/workflows/, src/services/pipeline/, src/mastra/tools/pipeline-tools.ts, src/components/agentic/pipeline-view.tsx, tests/pipeline.test.ts | T22 | A stored or drafted request runs intent → discovery → conflict → duplicate → recommend; waits for Use this or Submit then the Lead; resumes to build/register; Pipeline view shows it live | done (merged #34) |
 | T24 | Pipeline storyboard (default view: steps, counters, human gate, result card), Steps/Diagram switch, accurate TTL expiry note, no usage on archived assets, insufficient-evidence wording | Viet / Claude | feat/T24-pipeline-storyboard | src/components/agentic/, src/mastra/, src/services/lifecycle/engine.ts, tests/pipeline.test.ts | T23 | Storyboard plays reuse / build / covered runs in the browser; expiry note names who opened it; tests pass | review |
 | T25 | Governance scheduler: B1 core (incremental audit-log checkpoint, `active_overlap` over suggestMerge, findings + dismissal), B2 periodic reassessment (resolve / supersede, stale-proposal report), B3 proposals from findings (POST disabled), B4 Scheduler tab. Branches keep the historical `feat/T24-scheduler-*` prefix; renumbered T25 because T24 is the pipeline storyboard | KayTee / Claude Code | integrate/T24-scheduler (from feat/T24-scheduler-core, -periodic, -finding-proposals, -tab) | src/services/scheduler/, src/app/api/scheduler/, src/lib/scheduler-*.ts, src/components/agentic/scheduler-*.tsx, src/components/steward-app.tsx (side tabs), src/services/lifecycle/schema.ts (reset list only), tests/scheduler*.test.ts | T22 (suggestMerge, proposeMerge), T5 audit log, B0 (#36) | Manual runs evaluate changed assets / reassess findings with evidence; dismissal audited; finding-writers serialised; proposal outcome read from proposals; proposal POST stays 409 until Viet reviews the MERGE-APPROVERS fix and Codex reviews; reset clears scheduler state; no merge, archive or KPI change by the scheduler; tests, build pass | review (D25 proposed; Codex REQUEST CHANGES on B2 `4233306` and B3 `35ea544` addressed; B4 filter race and MERGE-APPROVERS fixed in the integration; MERGE-APPROVERS awaits Viet's review) |
+| T26 | B5 simulated-time scheduler: clock actions (opt-in `SCHEDULER_SIM_TRIGGER=1`) and "Check due jobs" run the governance jobs due at the stored simulated date through the unchanged B1/B2 runners; idempotent per job and date, failed runs retried, deferred while another finding writer runs; Scheduler tab shows last evaluated day per job | KayTee / Claude Code | feat/T26-scheduler-simulated-time | src/services/scheduler/simulated.ts, src/app/api/scheduler/simulated/, src/app/api/clock/shared.ts (additive, behind the setting), src/lib/scheduler-client.ts, src/components/agentic/scheduler-*.tsx, src/services/lifecycle/schema.ts (reset list only), tests/scheduler-simulated.test.ts | T25 (#37) | Advance the clock -> due job runs once per date with trigger simulated_clock; repeats are no-ops; failure retried; manual runs never overlap; reset clears it; clock unchanged with the setting off; no proposal, merge or archive; tests, build pass | review (D26 proposed) |
 | T5 | Platform services: lifecycle engine, policy, semantic layer, clock/scheduler, audit, lineage | Viet / Claude (lifecycle part) | feat/T5-lifecycle | src/services/lifecycle/, src/app/api/ | T4 | Transitions, TTL, lease review, archive/restore covered by tests | done for lifecycle (merged #17; lifecycle, clock, audit, API); merge proposals, reassign_owner and lineage not included |
 | T17 | Build step: build proposal → Lead approval → computed Temporary insight (golden path step 4) | Viet / Claude | feat/T17-build-temporary | src/services/build/, src/components/dashboard/ | T14, T15, T5 | REQ-S01 fixture builds; values trace to query and source rows; requester cannot approve | done (merged #21); demo trigger TEAM-REQ-01 (D18, #22); agent trigger is T16 |
 | T6 | Mastra agents + workflow with approval pause; step event stream | TBD (Lane A) | feat/T6-agents | src/mastra/ | T4, contract | REQ-0001 run emits step events; build path creates a Temporary insight | todo |

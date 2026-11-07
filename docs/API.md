@@ -1,11 +1,8 @@
 # HTTP API
 
-Implementation snapshot: `43a1157d49702f8b7a285e8f82a4d2059554c584`
-(`integrate/T24-scheduler`), inspected 2026-11-08. Later commits are outside this refresh.
-Local `master` remains at `85c8494`. The already-available `origin/master` ref is
-`a93248f46542165dd3a64be283b78e9a835e7ba4` (#37), whose committed tree exactly matches this
-snapshot; B1–B4 are therefore also present in that mainline snapshot. No fetch was
-performed.
+Implementation snapshot: `1beff2ebd1e4df5393bc6b065795ca1ddb845edc` (`origin/master`, T26 merged in #38),
+verified 2026-11-08. Original refresh baseline: `43a1157`; reconciled against the
+committed final master revision. Local `master` is stale and was not moved.
 
 Routes below are verified against `src/app/api/**/route.ts`. Paths use `:id`
 for a dynamic segment. Bodies are JSON unless noted. These are local demo
@@ -42,11 +39,13 @@ There is no `POST /api/runs`, `/api/runs/:id/events`, generic `/api/assets`,
 `/api/assets/:id/lineage`, `/api/portfolio` or on-demand evidence route.
 Catalog/dashboard data is loaded server-side, and run events are polled.
 
-## Scheduler routes (B1–B4, integration snapshot)
+## Scheduler routes (B1–B5, merged master)
 
 | Method and path | Input | Purpose |
 | --- | --- | --- |
 | GET `/api/scheduler` | — | Job descriptors, checkpoints, run/finding counts |
+| GET `/api/scheduler/simulated` | — | Stored `simDate`, `settings`, per-job last evaluation and due preview; does not tick |
+| POST `/api/scheduler/simulated` | `actor` | `{result: {simDate, source, decisions}}`; check due jobs at stored date, no clock movement |
 | GET `/api/scheduler/runs` | optional `limit`, `jobId` query | Run history |
 | POST `/api/scheduler/runs` | `actor`, optional `jobId` | Synchronous run now; default `incremental_overlap`; alternative `periodic_reassessment` |
 | GET `/api/scheduler/runs/:id` | — | Run detail/window/assessments/error |
@@ -57,7 +56,7 @@ Catalog/dashboard data is loaded server-side, and run events are polled.
 | GET `/api/scheduler/findings/:id/proposal` | optional `sourceId`, `targetId` query | Read-only direction/eligibility preview, `enabled: false` and blockers |
 | POST `/api/scheduler/findings/:id/proposal` | disabled | Always 409 with `MERGE-APPROVERS`, `CODEX-REVIEW`; no proposal created |
 
-Run/dismiss/abandon writes require `SCHEDULER_DEMO_ACTIONS=1` and
+Run/dismiss/abandon and simulated-check writes require `SCHEDULER_DEMO_ACTIONS=1` and
 `actor: "manager"` before DB access. Errors use `{error}` and 400/403/404/409.
 A completed run can return 200 with status `failed`: inspect the status and
 `error.code` (`evaluation_failed` / `commit_failed`). Conflict may also report
@@ -65,6 +64,39 @@ A completed run can return 200 with status `failed`: inspect the status and
 failure can leave a running row that needs manual abandon. Concurrent
 finding-writing jobs return 409. Reads expose current findings and derived
 proposal outcomes; `superseded` is accepted but not generated.
+
+## T26 simulated-date behavior
+
+GET `/api/scheduler/simulated` returns `settings: {autoOnClock, reassessEveryDays}`
+and `jobs[]` with `jobId`, `last` (nullable evaluation: date, decision, reason,
+run ID, source, update time), and `due: {due, reason, pendingChanges?, nextOn?}`.
+Scheduler routes return 409 before lifecycle initialization: open the app once
+first. GET can initialize scheduler tables but does not tick lifecycle.
+The POST requires `SCHEDULER_DEMO_ACTIONS=1` and demo actor `manager`; it works
+without `SCHEDULER_SIM_TRIGGER=1`. Source is `manual_check`.
+
+With **both** flags enabled, POST pause/resume/advance (including toNextEvent)
+adds `scheduler: {simDate, source: clock_action, decisions}` or `{error}` to the
+existing clock response. A stored clock action remains successful (200) even
+when scheduler evaluation fails/deferred. Check each decision and run status;
+HTTP 200 alone does not prove monitoring succeeded. Flags off: clock response
+retains its old shape. GET clock/lifecycle and ordinary ticks never run jobs.
+
+Each decision contains `jobId`, `decision` (ran/not_due/already_processed/deferred),
+`reason`, nullable `run`. Failed runs returned as `ran` can retry; successful
+simulated runs deduplicate by job/date. New changes later that day wait for the
+next date or manual Run now. Busy finding writers/clock movement can defer.
+Checks do not replay intermediate fast-forward dates. See
+[governance](GOVERNANCE.md) for due policy and optional demo cadence.
+
+Operator CLI (export custom database/settings; no HTTP demo gate):
+
+```sh
+npx tsx src/services/scheduler/cli.ts sim-status
+npx tsx src/services/scheduler/cli.ts sim
+```
+
+These are status/check commands at the stored date, not a background scheduler.
 
 ## Deterministic build example
 

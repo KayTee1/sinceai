@@ -63,7 +63,7 @@ function finding(id: string, status: "open" | "dismissed") {
   };
 }
 
-function fakeServer() {
+function fakeServer(opts: { simulated?: { status: number; body: unknown } } = {}) {
   const store = [finding("F-OPEN", "open"), finding("F-OLD", "dismissed")];
   const pending: Pending[] = [];
   const counts = () => {
@@ -101,6 +101,7 @@ function fakeServer() {
       const run = { runId: "R-2", jobId: "incremental_overlap", status: "completed", summary: {}, error: null };
       return { status: 200, body: { run } };
     }
+    if (u.pathname === "/api/scheduler/simulated" && opts.simulated) return opts.simulated;
     if (u.pathname === "/api/scheduler") return { status: 200, body: { jobs: [job], findings: counts() } };
     if (u.pathname === "/api/scheduler/runs") return { status: 200, body: { runs: [], counts: {} } };
     if (u.pathname === "/api/scheduler/findings") {
@@ -264,6 +265,45 @@ describe("Scheduler tab: status filter vs. action completion (Codex P2)", () => 
     await server.releaseWhere(isRead);
     assert.deepEqual(pressedFilter(host), ["dismissed"]);
     assert.deepEqual(shownFindings(host), ["F-OLD"]);
+    await act(async () => root.unmount());
+  });
+});
+
+describe("Scheduler tab: simulated clock card (Codex B5-F1, B5-F3)", () => {
+  it("a simulated-status load failure is shown in place of the card, with a reload, not hidden", async () => {
+    const server = fakeServer({ simulated: { status: 500, body: { error: "Scheduler request failed" } } });
+    const { host, root } = await mount(server);
+    await server.releaseAll();
+    const text = host.textContent ?? "";
+    assert.match(text, /Simulated clock status could not be loaded/);
+    assert.match(text, /Scheduler request failed/);
+    button(host, /^Reload$/);
+    assert.match(text, /Overlap/, "the rest of the tab still renders");
+    await act(async () => root.unmount());
+  });
+
+  it("a watched change after today's simulated run reads 'pending · next <date>', not 'due now'", async () => {
+    const status = {
+      simDate: "2026-01-01",
+      settings: { autoOnClock: true, reassessEveryDays: null },
+      jobs: [
+        {
+          jobId: "incremental_overlap",
+          last: { simDate: "2026-01-01", decision: "ran", reason: "Due", runId: "R-1", source: "clock_action", updatedAt: "x" },
+          due: { due: false, pendingChanges: 1, nextOn: "2026-01-02", reason: "1 watched estate change(s) arrived after this job already ran" },
+        },
+        { jobId: "periodic_reassessment", last: null, due: { due: false, reason: "Already reassessed." } },
+      ],
+    };
+    const server = fakeServer({ simulated: { status: 200, body: status } });
+    const { host, root } = await mount(server);
+    await server.releaseAll();
+    const card = host.querySelector('[aria-label="Simulated clock scheduling"]');
+    assert.ok(card);
+    const text = card.textContent ?? "";
+    assert.match(text, /pending · next 2026-01-02/);
+    assert.doesNotMatch(text, /due now/i);
+    button(host, /^Run now$/); // the manual action stays available
     await act(async () => root.unmount());
   });
 });

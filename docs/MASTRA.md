@@ -1,11 +1,8 @@
 # Mastra agents and execution
 
-Implementation snapshot: `43a1157d49702f8b7a285e8f82a4d2059554c584`
-(`integrate/T24-scheduler`), inspected 2026-11-08. Later commits are outside this refresh.
-Local `master` remains at `85c8494`. The already-available `origin/master` ref is
-`a93248f46542165dd3a64be283b78e9a835e7ba4` (#37), whose committed tree exactly matches this
-snapshot; B1–B4 are therefore also present in that mainline snapshot. No fetch was
-performed.
+Implementation snapshot: `1beff2ebd1e4df5393bc6b065795ca1ddb845edc` (`origin/master`, T26 merged in #38),
+verified 2026-11-08. Original refresh baseline: `43a1157`; reconciled against the
+committed final master revision. Local `master` is stale and was not moved.
 
 ## Actual registrations
 
@@ -75,6 +72,15 @@ These command gates read client-supplied conversation context and constrain
 model-triggered tools; they do not secure direct HTTP access. Revalidation and
 required-approver checks live in services. No agent decision tool exists.
 Restore is offered as a card and performed by a human on the restore route.
+
+## T26 monitoring boundary
+
+T26 changes no Mastra registrations, models, tool map or request workflow.
+`src/services/scheduler/simulated.ts` invokes deterministic B1/B2 runners via
+clock actions, HTTP Check due jobs or operator CLI. It does not invoke an agent,
+create a build/merge proposal, approve or archive. `simulated_clock` is a scheduler
+trigger label, separate from request Pipeline events and Mastra tool execution.
+Human approval gates, including disabled finding-to-proposal submission, remain.
 
 ## Evidence and verification limits
 

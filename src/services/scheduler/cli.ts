@@ -6,6 +6,8 @@
 //   npx tsx src/services/scheduler/cli.ts run <actor>
 //   npx tsx src/services/scheduler/cli.ts periodic <actor>      (Mode 3: reassess known findings)
 //   npx tsx src/services/scheduler/cli.ts due                   (is a periodic reassessment due?)
+//   npx tsx src/services/scheduler/cli.ts sim                   (B5: run jobs due at the stored simulated date)
+//   npx tsx src/services/scheduler/cli.ts sim-status            (B5: what is due, last simulated evaluation)
 //   npx tsx src/services/scheduler/cli.ts findings [open|dismissed|resolved|superseded|any]
 //   npx tsx src/services/scheduler/cli.ts dismiss <findingId> <actor> <reason...>
 //   npx tsx src/services/scheduler/cli.ts abandon <runId> <actor> <reason...>
@@ -19,6 +21,9 @@ import {
   reassessmentDue,
   runIncremental,
   runReassessment,
+  runSimulatedTriggers,
+  simSettings,
+  simulatedStatus,
   schedulerOverview,
   type FindingStatus,
 } from "./index";
@@ -34,10 +39,12 @@ async function main() {
     else if (cmd === "due") {
       const state = await readReassessmentDueState(db);
       out = { ...reassessmentDue(state), state };
-    } else if (cmd === "findings") out = await listFindings(db, { status: (a as FindingStatus | "any" | undefined) ?? "open" });
+    } else if (cmd === "sim") out = await runSimulatedTriggers(db, { source: "manual_check", reassessEveryDays: simSettings().reassessEveryDays });
+    else if (cmd === "sim-status") out = await simulatedStatus(db);
+    else if (cmd === "findings") out = await listFindings(db, { status: (a as FindingStatus | "any" | undefined) ?? "open" });
     else if (cmd === "dismiss" && a && b) out = await dismissFinding(db, { findingId: a, actor: b, reason: rest.join(" ") });
     else if (cmd === "abandon" && a && b) out = await abandonRun(db, { runId: a, actor: b, reason: rest.join(" ") });
-    else throw new Error("Usage: cli.ts status | run <actor> | periodic <actor> | due | findings [status] | dismiss <findingId> <actor> <reason> | abandon <runId> <actor> <reason>");
+    else throw new Error("Usage: cli.ts status | run <actor> | periodic <actor> | due | sim | sim-status | findings [status] | dismiss <findingId> <actor> <reason> | abandon <runId> <actor> <reason>");
     console.log(JSON.stringify(out, null, 2));
   } finally {
     db.close();

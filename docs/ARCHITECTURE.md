@@ -1,11 +1,8 @@
 # Architecture
 
-Implementation snapshot: `43a1157d49702f8b7a285e8f82a4d2059554c584`
-(`integrate/T24-scheduler`), inspected 2026-11-08. Later commits are outside this refresh.
-Local `master` remains at `85c8494`. The already-available `origin/master` ref is
-`a93248f46542165dd3a64be283b78e9a835e7ba4` (#37), whose committed tree exactly matches this
-snapshot; B1–B4 are therefore also present in that mainline snapshot. No fetch was
-performed.
+Implementation snapshot: `1beff2ebd1e4df5393bc6b065795ca1ddb845edc` (`origin/master`, T26 merged in #38),
+verified 2026-11-08. Original refresh baseline: `43a1157`; reconciled against the
+committed final master revision. Local `master` is stale and was not moved.
 
 This describes committed behavior. [SCOPE](SCOPE.md) and historical decisions
 also contain targets; they do not imply every target is implemented.
@@ -28,7 +25,7 @@ Mastra orchestrator -> request-pipeline workflow -> service facts
   tools: explore, compute, draft request, propose; no decision tool
                                   |
 Deterministic steward | semantic | estate | build | lifecycle | pipeline
-Separate manual scheduler -> overlap findings, never automatic approval
+Manual / explicit simulated-date scheduler -> findings, never approval
                                   |
 SQLite: imported workbook tables + app-owned state/evidence/audit
 ```
@@ -66,7 +63,7 @@ lifecycle clock events and chat events.
 | `src/services/build` | Revalidate build/reuse, persist proposals, compute approved insight and provenance |
 | `src/services/lifecycle` | Clock, leases, usage, proposals/decisions, TTL, escalation, archive/restore, audit |
 | `src/services/pipeline` | Request run state and ordered events, continuation hooks |
-| `src/services/scheduler` | Manual incremental overlap detection and known-finding reassessment |
+| `src/services/scheduler` | Incremental overlap detection and known-finding reassessment; manual or explicit simulated-date triggers |
 | `src/lib/catalog.ts` | Server loader separating estate metadata from business facts for dashboard UI |
 
 The imported workbook tables remain source records, including catalog assets,
@@ -103,8 +100,31 @@ in this unauthenticated demo, so chat command gates are not API authorization.
 
 B0 comparator (`estate/merge.ts`) is in the mainline ancestry. B1 incremental
 monitoring, B2 reassessment, B3 gated proposal bridge and B4 Scheduler UI are
-present on this integration snapshot. Both job descriptors permit manual
-triggers only. Neither runs on clock advancement or a background timer.
+present in master. Both job descriptors permit `manual` and `simulated_clock`
+triggers. T26/B5 invokes the same deterministic runners after explicit clock
+controls when both `SCHEDULER_SIM_TRIGGER=1` and `SCHEDULER_DEMO_ACTIONS=1`, or
+through Check due jobs (`POST /api/scheduler/simulated`, demo action gate only).
+No cron/worker runs jobs as wall time or a freely running clock advances.
+
+Checks use one stored date per invocation; incremental runs first, then periodic.
+Incremental is due when watched audit rows remain after the checkpoint; periodic
+requires open/dismissed findings and no successful reassessment at the current
+date (optional demo cadence can delay it). Each job runs at most once successfully
+per simulated date through this trigger; failed runs can retry at that date.
+Results are `ran`, `not_due`, `already_processed`, `deferred`. `ran` must still be
+checked for failed status. Another writer, a lost claim race or a moved clock can
+defer work. Same-day changes after success remain pending until the next date or
+a manual Run now. Fast-forward checks the resulting date, not every intermediate
+day, although lifecycle events themselves are processed in date order.
+
+The Scheduler card shows stored date, settings, due/pending state and last
+evaluation per job; history identifies simulated runs (`trigger: simulated_clock`,
+actor `simulated-clock`). Status-load errors leave the other sections available.
+Clock actions keep their successful state even when scheduler checks fail/defer;
+responses include a scheduler outcome/error and the clock bar explains retry via
+Check due jobs. This does not mean a successful clock action proves governance
+checks succeeded. `scheduler_sim_state` stores latest evaluation and resets with
+other scheduler tables. [API](API.md) specifies payloads and gates.
 
 Incremental scans audit IDs since its committed checkpoint, watching
 `temporary_registered`, `insight_built`, `restored`, `promoted`. It records
@@ -127,7 +147,13 @@ independent review remains required. Certified replacement policy is unresolved.
 See [README](../README.md#run-locally) for installation and actual environment
 variables. Lifecycle time advances via `tick` on service/HTTP activity and UI
 polling, with one simulated day per second when running. Forward advancement
-processes due lifecycle events in order. It is separate from manual monitoring.
+processes due lifecycle events in order. T26 hooks explicit clock actions only;
+`tick()` and GET polling do not invoke governance checks. Server settings are
+`SCHEDULER_DEMO_ACTIONS`, `SCHEDULER_SIM_TRIGGER`, and optional
+`SCHEDULER_SIM_REASSESS_DAYS` (integer 1–365, otherwise ignored). No cadence by
+default; the optional cadence affects simulated periodic checks only, not
+manual Run now, 90-day leases or 30-day TTL. T26 flags are absent from
+`.env.example`; the README explains adding/exporting them.
 No external BI API, production scheduler, authenticated user sessions or server
 chat-history store is implemented. See [DEMO](DEMO.md) for a disposable reset
 and deterministic fallback; recorded replay is a proposed fallback, not a feature.

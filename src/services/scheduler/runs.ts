@@ -99,7 +99,20 @@ export function claimConflict(err: unknown): SchedulerError | null {
 const CHECKPOINT_JOBS: readonly JobId[] = ["incremental_overlap"];
 export const usesCheckpoint = (jobId: JobId) => CHECKPOINT_JOBS.includes(jobId);
 
-export type ClaimInput = { jobId: JobId; mode: SchedulerMode; trigger: TriggerSource; actor: string; rules: RuleRef[] };
+export type ClaimInput = {
+  jobId: JobId;
+  mode: SchedulerMode;
+  trigger: TriggerSource;
+  actor: string;
+  rules: RuleRef[];
+  /**
+   * B5 (T26): the simulated date the caller decided at. If the stored clock
+   * date differs when the claim transaction reads it, nothing is inserted and
+   * the claim is refused (conflict, detail.outcome "clock_moved"), so a run
+   * never records a different date than the decision that started it.
+   */
+  expectedSimDate?: string;
+};
 
 /**
  * Starts a run, or refuses with `conflict` while another run of the job is
@@ -120,6 +133,13 @@ export async function claimRun(db: Client, input: ClaimInput, nowIso = new Date(
         throw new SchedulerError(msg, "conflict", { runningRunId: running.runId, runningJobId: running.jobId });
       }
       const clock = await readClock(tx);
+      if (input.expectedSimDate !== undefined && clock.date !== input.expectedSimDate) {
+        throw new SchedulerError(
+          `The simulated clock moved from ${input.expectedSimDate} to ${clock.date} before the run started; nothing ran for ${input.expectedSimDate}`,
+          "conflict",
+          { outcome: "clock_moved", expectedSimDate: input.expectedSimDate, simDate: clock.date },
+        );
+      }
       const checkpointed = usesCheckpoint(input.jobId);
       const cp = checkpointed
         ? await tx.execute({ sql: `SELECT last_audit_id FROM scheduler_checkpoints WHERE job_id = ?`, args: [input.jobId] })

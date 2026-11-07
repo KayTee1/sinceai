@@ -6,6 +6,9 @@ import type { Finding, SchedulerRun } from "@/services/scheduler/types";
 import {
   assessmentsOf,
   checkpointText,
+  jobTitle,
+  runTriggerText,
+  simDecisionTone,
   shortTime,
   sideText,
   statusLabel,
@@ -13,6 +16,7 @@ import {
   summaryLines,
   validateReason,
   type JobOverview,
+  type SimStatusResponse,
   type Tone,
 } from "@/lib/scheduler-client";
 
@@ -230,7 +234,7 @@ export function RunRow({ run }: { run: SchedulerRun }) {
             <span className="font-medium text-ink">{run.runId}</span>
           </div>
           <div className="mt-0.5 text-ink-3">
-            {run.jobId} · {run.trigger} by {run.actor} (demo identity) · sim date {run.simDate}
+            {run.jobId} · {runTriggerText(run)} · sim date {run.simDate}
           </div>
         </div>
         <button type="button" onClick={() => setOpen((v) => !v)} className="shrink-0 text-blue hover:underline">
@@ -419,6 +423,79 @@ export function FindingCard({
             </button>
           </div>
         ))}
+    </li>
+  );
+}
+
+const TONE_PILL = (tone: Tone, text: string) => (
+  <span className={`rounded-sm px-1.5 py-px text-[10px] font-bold uppercase tracking-wide ${TONE[tone]}`}>{text}</span>
+);
+
+/**
+ * B5 (T26): simulated-clock scheduling. Shows whether clock actions run due
+ * jobs, the last simulated evaluation per job (date, decision, reason, run)
+ * and whether each job is due now; "Check due jobs" runs the due ones at the
+ * stored date. Everything shown comes from GET /api/scheduler/simulated.
+ */
+export function SimulatedClockCard({
+  sim,
+  busy,
+  checking,
+  onCheck,
+}: {
+  sim: SimStatusResponse;
+  busy: boolean;
+  checking: boolean;
+  onCheck: () => void;
+}) {
+  return (
+    <li className="rounded-sm border border-blue/40 bg-surface p-3 text-xs" aria-label="Simulated clock scheduling">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-sm font-medium text-ink">Simulated clock</div>
+          <div className="text-ink-3">
+            Sim date <span className="tabular font-semibold text-ink-2">{sim.simDate}</span> ·{" "}
+            {sim.settings.autoOnClock ? "clock actions run due jobs" : "clock actions do not run jobs (SCHEDULER_SIM_TRIGGER off)"}
+            {sim.settings.reassessEveryDays ? ` · demo cadence: reassess every ${sim.settings.reassessEveryDays} day(s)` : ""}
+          </div>
+        </div>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onCheck}
+          title="Run the jobs that are due at the stored simulated date; the clock is not moved"
+          className="shrink-0 rounded-sm bg-blue px-3 py-1 font-semibold text-white hover:bg-[#007fc4] disabled:bg-line-strong"
+        >
+          {checking ? "Checking…" : "Check due jobs"}
+        </button>
+      </div>
+      <ul className="mt-2 space-y-1.5">
+        {sim.jobs.map((j) => (
+          <li key={j.jobId} className="rounded-sm bg-canvas px-2 py-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="font-medium text-ink">{jobTitle(j.jobId)}</span>
+              {j.due.due
+                ? TONE_PILL("attention", "due now")
+                : j.due.pendingChanges
+                  ? TONE_PILL("neutral", `pending · next ${j.due.nextOn ?? "simulated date"}`)
+                  : TONE_PILL("muted", "not due")}
+            </div>
+            <div className="text-ink-3">{j.due.reason}</div>
+            <div className="mt-0.5 text-ink-2">
+              {j.last ? (
+                <>
+                  Last evaluated <span className="tabular">{j.last.simDate}</span> ({statusLabel(j.last.source)}):{" "}
+                  {TONE_PILL(simDecisionTone(j.last.decision), statusLabel(j.last.decision))}
+                  {j.last.runId ? ` · run ${j.last.runId}` : ""}
+                  <div className="text-ink-3">{j.last.reason}</div>
+                </>
+              ) : (
+                "Not evaluated by the simulated clock yet."
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
     </li>
   );
 }

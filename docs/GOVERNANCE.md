@@ -1,11 +1,8 @@
 # KPI and asset governance
 
-Implementation snapshot: `43a1157d49702f8b7a285e8f82a4d2059554c584`
-(`integrate/T24-scheduler`), inspected 2026-11-08. Later commits are outside this refresh.
-Local `master` remains at `85c8494`. The already-available `origin/master` ref is
-`a93248f46542165dd3a64be283b78e9a835e7ba4` (#37), whose committed tree exactly matches this
-snapshot; B1–B4 are therefore also present in that mainline snapshot. No fetch was
-performed.
+Implementation snapshot: `1beff2ebd1e4df5393bc6b065795ca1ddb845edc` (`origin/master`, T26 merged in #38),
+verified 2026-11-08. Original refresh baseline: `43a1157`; reconciled against the
+committed final master revision. Local `master` is stale and was not moved.
 
 ## KPI definitions and calculations
 
@@ -96,7 +93,7 @@ language in early decisions and requirements is superseded by D16.
 
 B0 merge comparisons can suggest merge, keep_both or partial based on scope,
 KPIs, tier and dashboard usage. Usage is never per-metric evidence.
-B1/B2 jobs are manually run, deterministic and non-LLM. They create/refresh
+B1/B2 jobs are deterministic and non-LLM. They create/refresh
 findings or resolve obsolete overlaps, never decide proposals or alter KPI
 approvals. Dismissal suppresses unchanged evidence; material fingerprint change
 can reopen it. Unknown/unsupported comparisons are not a clean bill of health.
@@ -104,8 +101,26 @@ can reopen it. Unknown/unsupported comparisons are not a clean bill of health.
 B3's finding-to-proposal module and read-only preview exist, but HTTP submission
 is disabled until independent reviews clear `MERGE-APPROVERS` and
 `CODEX-REVIEW`. A Personal/Team asset replacing Certified is blocked pending
-policy. B4 provides the Scheduler tab. There is no automatic governance job
-on clock advance, full-estate sweep or source refresh monitoring here.
+policy. B4 provides the Scheduler tab; B5/T26 adds simulated-date checks.
+
+Manual Run now runs the selected job directly. Check due jobs instead evaluates
+due jobs at the stored date (HTTP demo gate required, no auto-trigger flag needed).
+Opt-in clock-action checks require both `SCHEDULER_SIM_TRIGGER=1` and
+`SCHEDULER_DEMO_ACTIONS=1`. They run incremental then periodic after pause,
+resume, advance or next event, without ticking/changing the clock themselves.
+Free-running clock ticks, GET polling and elapsed wall time never start governance
+jobs; no real automatic schedule, cron or worker exists. Fast-forward checks
+only the resulting date; it does not replay intermediate monitoring days.
+
+Incremental is due for unprocessed watched audit changes. Periodic is due only
+for existing open/dismissed findings when none has succeeded at the stored date.
+Optional `SCHEDULER_SIM_REASSESS_DAYS` (integer 1–365; unset/invalid = none)
+spaces simulated periodic reassessments only, not leases, TTL or manual runs.
+One successful simulated run per job/date suppresses repeats; failures retry;
+new same-day changes after success are pending for next date or manual Run now.
+A running writer or moved clock defers work rather than running concurrently.
+Clock success survives scheduler failure; inspect outcomes and retry deliberately.
+No full-estate sweep or source refresh monitoring is implemented.
 
 ## Audit and prototype trust
 

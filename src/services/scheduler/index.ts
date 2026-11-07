@@ -36,3 +36,21 @@ export {
   raiseFindingProposal,
   syncFindingProposals,
 } from "./proposals";
+export {
+  SIM_ACTOR,
+  SIM_REASSESS_DAYS_ENV,
+  SIM_TRIGGER_ENV,
+  jobDue,
+  runSimulatedTriggers,
+  simSettings,
+  simulatedStatus,
+  type SimDecision,
+  type SimDecisionKind,
+  type SimDue,
+  type SimJobState,
+  type SimOptions,
+  type SimSettings,
+  type SimStatus,
+  type SimTriggerResult,
+  type SimTriggerSource,
+} from "./simulated";
