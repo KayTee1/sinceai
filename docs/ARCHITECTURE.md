@@ -109,6 +109,11 @@ KPI mapping from SCOPE (D14).
    Built in T5 (beyond the draft): `GET /api/lifecycle` (clock, inbox,
    counts, recent audit for the UI), `POST /api/lifecycle/reset` (demo reset of
    app-owned tables) and `POST /api/assets/:id/restore` (`{ actor, reason? }`).
+   Built in T17: `POST /api/builds` (`{ requestId, answer?, requesterId? }`)
+   runs the steward analysis and stores a `build_temporary` proposal only when
+   it recommends a build; `POST /api/proposals/:id/decision` on that proposal
+   computes the insight (per market, latest month, actual-like) and registers
+   it as Temporary. Built insights live in the app-owned `insights` table.
 
 Role toggle controls visibility only; approval checks the proposal's required
 approvers (owner / team lead / steward) against the acting identity. Runs are

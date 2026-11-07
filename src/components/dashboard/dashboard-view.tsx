@@ -117,7 +117,7 @@ function AssetRow({ asset, active, onSelect }: { asset: AssetSummary; active: bo
             {!asset.ownerActive && asset.ownerName ? " (inactive)" : ""}
           </span>
           <span className={`tabular ${asset.status === "active" ? "" : "font-medium text-warn"}`}>
-            {leaseLabel(asset.status, asset.leaseEnd)}
+            {leaseLabel(asset.status, asset.leaseEnd, asset.tier)}
           </span>
         </div>
       </button>

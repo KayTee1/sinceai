@@ -265,7 +265,7 @@ async function openLeaseReview(tx: Db, assetId: string, date: string) {
 
 // Region data steward who takes over overdue reviews (D14: a team is an owner
 // region; Global covers Asia Pacific, which has no active steward).
-async function regionSteward(tx: Db, ownerId: string | null): Promise<string | null> {
+export async function regionSteward(tx: Db, ownerId: string | null): Promise<string | null> {
   const owner = ownerId
     ? (await tx.execute({ sql: `SELECT scope FROM Owners WHERE owner_id = ?`, args: [ownerId] })).rows[0]
     : undefined;
@@ -335,46 +335,60 @@ export type DecisionInput = {
   reason?: string;
 };
 
+/** Shared checks for every decision: open proposal, required approver, active, reason on reject (Rules 5, 11). */
+export async function validateDecision(tx: Db, input: DecisionInput): Promise<{ p: Proposal; reason: string }> {
+  const p = await getProposal(tx, input.proposalId);
+  if (!p) throw new LifecycleError(`Unknown proposal ${input.proposalId}`, "not_found");
+  if (p.status !== "open" && p.status !== "escalated") {
+    throw new LifecycleError(`Proposal ${p.id} is already ${p.status}`, "invalid");
+  }
+  if (!p.requiredApprovers.includes(input.actor)) {
+    throw new LifecycleError(
+      `${input.actor} is not a required approver for ${p.id} (needs ${p.requiredApprovers.join(", ") || "an assigned owner"})`,
+      "not_allowed",
+    );
+  }
+  if ((await ownerStatus(tx, input.actor)) !== "active") {
+    throw new LifecycleError(`${input.actor} is not an active owner`, "not_allowed");
+  }
+  const reason = input.reason?.trim() ?? "";
+  if (input.action === "reject" && !reason) throw new LifecycleError("Reject requires a reason", "invalid");
+  return { p, reason };
+}
+
+/** Closes the proposal and writes the decision row and its audit entry. */
+export async function recordDecision(tx: Db, p: Proposal, input: DecisionInput, reason: string, date: string) {
+  await tx.execute({
+    sql: `UPDATE proposals SET status = ?, due_on = NULL WHERE id = ?`,
+    args: [input.action === "approve" ? "approved" : "rejected", p.id],
+  });
+  await tx.execute({
+    sql: `INSERT INTO decisions (proposal_id, version, actor, action, reason, sim_date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    args: [p.id, p.version, input.actor, input.action, reason || null, date, new Date().toISOString()],
+  });
+  await appendAudit(tx, {
+    simDate: date,
+    actor: input.actor,
+    action: `proposal_${input.action === "approve" ? "approved" : "rejected"}`,
+    assetId: p.assetIds[0],
+    proposalId: p.id,
+    rationale: reason || `Approved ${p.type}.`,
+  });
+}
+
 /** Owner decision on a lease review. Any decision closes the review (D14). */
 export async function decide(db: Client, input: DecisionInput, date: string): Promise<Proposal> {
   const tx = await db.transaction("write");
   try {
-    const p = await getProposal(tx, input.proposalId);
-    if (!p) throw new LifecycleError(`Unknown proposal ${input.proposalId}`, "not_found");
-    if (p.status !== "open" && p.status !== "escalated") {
-      throw new LifecycleError(`Proposal ${p.id} is already ${p.status}`, "invalid");
+    const { p, reason } = await validateDecision(tx, input);
+    if (p.type === "build_temporary") {
+      throw new LifecycleError("Build proposals are decided by the build service (decideBuild)", "invalid");
     }
-    if (!p.requiredApprovers.includes(input.actor)) {
-      throw new LifecycleError(
-        `${input.actor} is not a required approver for ${p.id} (needs ${p.requiredApprovers.join(", ") || "an assigned owner"})`,
-        "not_allowed",
-      );
-    }
-    if ((await ownerStatus(tx, input.actor)) !== "active") {
-      throw new LifecycleError(`${input.actor} is not an active owner`, "not_allowed");
-    }
-    const reason = input.reason?.trim() ?? "";
-    if (input.action === "reject" && !reason) throw new LifecycleError("Reject requires a reason", "invalid");
 
     const assetId = p.assetIds[0];
     // approve renew / reject retire -> renew; approve retire / reject renew -> retire.
     const renew = (p.type === "renew") === (input.action === "approve");
-    await tx.execute({
-      sql: `UPDATE proposals SET status = ?, due_on = NULL WHERE id = ?`,
-      args: [input.action === "approve" ? "approved" : "rejected", p.id],
-    });
-    await tx.execute({
-      sql: `INSERT INTO decisions (proposal_id, version, actor, action, reason, sim_date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      args: [p.id, p.version, input.actor, input.action, reason || null, date, new Date().toISOString()],
-    });
-    await appendAudit(tx, {
-      simDate: date,
-      actor: input.actor,
-      action: `proposal_${input.action === "approve" ? "approved" : "rejected"}`,
-      assetId,
-      proposalId: p.id,
-      rationale: reason || `Approved ${p.type}.`,
-    });
+    await recordDecision(tx, p, input, reason, date);
 
     if (p.type === "promote") {
       if (input.action === "approve") {
@@ -471,29 +485,38 @@ export async function restore(
   }
 }
 
+/** Same as registerTemporary, inside a caller's transaction (used by the build step). */
+export async function registerTemporaryTx(
+  tx: Db,
+  input: { assetId: string; name: string; ownerId: string; approvedBy: string; proposalId?: string },
+  date: string,
+): Promise<void> {
+  const ttlEnd = addDays(date, TTL_DAYS);
+  await tx.execute({
+    sql: `INSERT INTO asset_state (asset_id, origin, name, owner_id, tier, status, ttl_end)
+          VALUES (?, 'app', ?, ?, 'temporary', 'active', ?)`,
+    args: [input.assetId, input.name, input.ownerId, ttlEnd],
+  });
+  await appendAudit(tx, {
+    simDate: date,
+    actor: input.approvedBy,
+    action: "temporary_registered",
+    assetId: input.assetId,
+    proposalId: input.proposalId ?? null,
+    policyVersion: POLICY_VERSION,
+    rationale: `Temporary insight "${input.name}" for ${input.ownerId}; expires ${ttlEnd} unless used again.`,
+  });
+}
+
 /** Registers an approved build as a Temporary insight with a 30-day TTL. Called by the build step. */
 export async function registerTemporary(
   db: Client,
   input: { assetId: string; name: string; ownerId: string; approvedBy: string; proposalId?: string },
   date: string,
 ): Promise<AssetState> {
-  const ttlEnd = addDays(date, TTL_DAYS);
   const tx = await db.transaction("write");
   try {
-    await tx.execute({
-      sql: `INSERT INTO asset_state (asset_id, origin, name, owner_id, tier, status, ttl_end)
-            VALUES (?, 'app', ?, ?, 'temporary', 'active', ?)`,
-      args: [input.assetId, input.name, input.ownerId, ttlEnd],
-    });
-    await appendAudit(tx, {
-      simDate: date,
-      actor: input.approvedBy,
-      action: "temporary_registered",
-      assetId: input.assetId,
-      proposalId: input.proposalId ?? null,
-      policyVersion: POLICY_VERSION,
-      rationale: `Temporary insight "${input.name}" for ${input.ownerId}; expires ${ttlEnd} unless used again.`,
-    });
+    await registerTemporaryTx(tx, input, date);
     await tx.commit();
     return (await getAssetState(db, input.assetId))!;
   } catch (err) {

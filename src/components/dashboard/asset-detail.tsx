@@ -6,6 +6,7 @@ import { eurM, formatDate, formatMonth, leaseLabel, pct } from "@/lib/format";
 import { TierBadge } from "./tier-badge";
 import { BreakdownChart, SalesTrendChart, UsageChart } from "./charts";
 import { Timeline } from "../lifecycle/timeline";
+import { InsightBody } from "./insight-body";
 
 export function AssetDetail({ asset, data, role }: { asset: AssetSummary; data: DashboardData; role: Role }) {
   const view = useMemo(() => buildView(asset, data), [asset, data]);
@@ -28,7 +29,11 @@ export function AssetDetail({ asset, data, role }: { asset: AssetSummary; data: 
             value={asset.ownerName ? `${asset.ownerName}${asset.ownerActive ? "" : " (inactive)"}` : "Missing"}
             warn={!asset.ownerActive}
           />
-          <Meta label="Lifecycle" value={leaseLabel(asset.status, asset.leaseEnd)} warn={asset.status !== "active"} />
+          <Meta
+            label="Lifecycle"
+            value={leaseLabel(asset.status, asset.leaseEnd, asset.tier)}
+            warn={asset.status !== "active"}
+          />
           <Meta label="Last modified" value={formatDate(asset.lastModified)} />
           {role === "manager" && (
             <Meta label="Source status" value={`${asset.endorsement} · ${asset.lifecycleStatus.replace("_", " ")}`} />
@@ -38,12 +43,16 @@ export function AssetDetail({ asset, data, role }: { asset: AssetSummary; data: 
 
       <p className="flex items-center gap-2 rounded-sm border border-line bg-surface px-3 py-2 text-xs text-ink-2">
         <span className="h-1.5 w-1.5 rounded-full bg-sky" aria-hidden />
-        Synthetic challenge data from the Bayer builder pack ({view.periodLabel}). Not actual Bayer performance.
+        {asset.origin === "app"
+          ? "Temporary insight built by Analytics Steward from certified KPIs. Expires after 30 days unless used again."
+          : `Synthetic challenge data from the Bayer builder pack (${view.periodLabel}). Not actual Bayer performance.`}
       </p>
 
       {role === "manager" && <Timeline assetId={asset.id} />}
 
-      {view.rows === 0 ? (
+      {asset.origin === "app" ? (
+        <InsightBody insight={data.insights[asset.id]} />
+      ) : view.rows === 0 ? (
         <div className="rounded-sm border border-line bg-surface p-6 text-sm text-ink-2">
           No product-market data recorded for this scope.
         </div>
@@ -71,7 +80,9 @@ export function AssetDetail({ asset, data, role }: { asset: AssetSummary; data: 
               </Card>
             )}
             <Card title="Dashboard usage" subtitle="Views per month · from the catalog's usage log">
-              <UsageChart data={asset.monthlyViews.map((u) => ({ month: formatMonth(u.month), views: u.views, users: u.users }))} />
+              <UsageChart
+                data={asset.monthlyViews.map((u) => ({ month: formatMonth(u.month), views: u.views, users: u.users }))}
+              />
             </Card>
           </div>
         </>
@@ -109,12 +120,16 @@ function buildView(asset: AssetSummary, data: DashboardData) {
   const marketName = new Map(data.markets.map((m) => [m.id, m.name]));
   let breakdown: { by: string; items: { name: string; value: number }[] } | null = null;
   if (allMarkets || allProducts) {
-    const key = allMarkets ? (r: (typeof scoped)[number]) => marketName.get(r.market) ?? r.market : (r: (typeof scoped)[number]) => r.product;
+    const key = allMarkets
+      ? (r: (typeof scoped)[number]) => marketName.get(r.market) ?? r.market
+      : (r: (typeof scoped)[number]) => r.product;
     const totals = new Map<string, number>();
     for (const r of scoped) totals.set(key(r), (totals.get(key(r)) ?? 0) + r.netSales);
     breakdown = {
       by: allMarkets ? "market" : "product",
-      items: [...totals.entries()].map(([name, value]) => ({ name, value: round(value) })).sort((a, b) => b.value - a.value),
+      items: [...totals.entries()]
+        .map(([name, value]) => ({ name, value: round(value) }))
+        .sort((a, b) => b.value - a.value),
     };
   }
 
@@ -169,4 +184,3 @@ function Card({ title, subtitle, children }: { title: string; subtitle: string; 
     </div>
   );
 }
-
