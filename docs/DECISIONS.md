@@ -361,3 +361,17 @@ Alternatives considered: keep the four team boards (D20); show catalog
 metadata to employees (D8).
 Agreed by: Viet
 
+D23: Pack telemetry only counts within the 90 days before a review (2026-11-07)
+Status: accepted. Refines D21.
+Choice and why: the pack's Asset_Usage is a fixed snapshot (Jan-Oct 2026).
+D21 treated its latest months as current, so in a long simulation dashboards
+kept auto-renewing on 2026 data (1,068 renewals by Apr 2028). Now a pack month
+counts only if it starts within the 90 days before the review date, so pack
+telemetry supports reviews until about the end of Jan 2027; after that only
+in-app views keep a dashboard alive. The catalog usage chart labels months
+with the year and warns when the snapshot is older than the simulated 90-day
+window. Policy version lifecycle-v5.
+Alternatives considered: keep the snapshot as current (D21); extrapolate the
+snapshot forward (would invent usage).
+Agreed by: Viet
+

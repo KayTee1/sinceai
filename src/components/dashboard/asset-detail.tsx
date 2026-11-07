@@ -1,7 +1,7 @@
 "use client";
 
 import type { AssetSummary, DashboardData, Role } from "@/lib/types";
-import { formatDate, formatMonth, int, leaseLabel } from "@/lib/format";
+import { formatDate, formatMonthYear, int, leaseLabel, olderThan } from "@/lib/format";
 import { TierBadge } from "./tier-badge";
 import { UsageChart } from "./charts";
 import { Timeline } from "../lifecycle/timeline";
@@ -13,6 +13,9 @@ import { Card, Meta, Note, Pill, toneFor } from "./ui";
 // no business numbers are shown as if they were this asset's content.
 export function AssetDetail({ asset, data, role }: { asset: AssetSummary; data: DashboardData; role: Role }) {
   const model = asset.modelId ? data.estate.models[asset.modelId] : undefined;
+  const last = asset.monthlyViews.at(-1)?.month;
+  // The pack's telemetry ends Oct 2026; once the clock is 90+ days past it, it is history, not current use.
+  const stale = last ? olderThan(last, data.clockDate, 90 + 31) : false;
   const app = asset.origin === "app";
 
   return (
@@ -151,9 +154,27 @@ export function AssetDetail({ asset, data, role }: { asset: AssetSummary; data: 
             </div>
           </div>
 
-          <Card title="Usage" subtitle="Views per month · Asset_Usage (pack)">
+          <Card
+            title="Usage"
+            subtitle={
+              last
+                ? `Pack telemetry (Asset_Usage) · ${formatMonthYear(asset.monthlyViews[0].month)}–${formatMonthYear(last)}`
+                : "Pack telemetry (Asset_Usage)"
+            }
+          >
+            {stale && (
+              <p className="mb-3 rounded-sm border border-warn/30 bg-[#fdf3e6] px-3 py-2 text-xs text-warn">
+                This is a fixed snapshot ending {formatMonthYear(last!)}. The simulated date is{" "}
+                {formatDate(data.clockDate)}, so it says nothing about the last 90 days: lease reviews now count only
+                in-app views for this dashboard (D23).
+              </p>
+            )}
             <UsageChart
-              data={asset.monthlyViews.map((u) => ({ month: formatMonth(u.month), views: u.views, users: u.users }))}
+              data={asset.monthlyViews.map((u) => ({
+                month: formatMonthYear(u.month),
+                views: u.views,
+                users: u.users,
+              }))}
             />
           </Card>
         </>

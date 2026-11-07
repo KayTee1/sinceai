@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AssetSummary, DashboardData, Role } from "@/lib/types";
-import { formatDate, int, leaseLabel } from "@/lib/format";
+import { formatDate, formatMonthYear, int, leaseLabel, olderThan } from "@/lib/format";
 import { TierBadge } from "./tier-badge";
 import { InsightBody } from "./insight-body";
 import { DomainBoard } from "./wallboard";
@@ -190,6 +190,8 @@ function Views({ asset }: { asset: AssetSummary }) {
   const u = data?.appUsage[asset.id];
   const recent = asset.monthlyViews.slice(-3);
   const packUsers = recent.length ? Math.round(recent.reduce((s, m) => s + m.users, 0) / recent.length) : null;
+  const lastMonth = recent.at(-1)?.month;
+  const stale = lastMonth && data ? olderThan(lastMonth, data.clock.date, 90 + 31) : false;
   return (
     <div className="flex flex-wrap items-center gap-x-6 gap-y-1 rounded-sm border border-line bg-surface px-5 py-2 text-xs">
       <span className="label">Relevance</span>
@@ -197,11 +199,16 @@ function Views({ asset }: { asset: AssetSummary }) {
         <b className="tabular">{int(u?.opens ?? 0)}</b> app views by <b className="tabular">{int(u?.viewers ?? 0)}</b>{" "}
         {u?.viewers === 1 ? "person" : "people"} · <b className="tabular">{int(u?.last30 ?? 0)}</b> in 30 days
       </span>
-      {packUsers !== null && (
-        <span>
-          <b className="tabular">{int(packUsers)}</b> users/month in pack telemetry
-        </span>
-      )}
+      {packUsers !== null &&
+        (stale ? (
+          <span className="text-ink-3">
+            Pack telemetry ended {formatMonthYear(lastMonth!)}: only app views count now (D23)
+          </span>
+        ) : (
+          <span>
+            <b className="tabular">{int(packUsers)}</b> users/month in pack telemetry (to {formatMonthYear(lastMonth!)})
+          </span>
+        ))}
       <span className="text-ink-3">
         {u?.lastOpened ? `Last viewed ${formatDate(u.lastOpened)}` : "Not viewed in the app"}
       </span>

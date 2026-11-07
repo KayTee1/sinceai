@@ -1,5 +1,8 @@
 # Handoff
 
+- **D23 (`fix/telemetry-window`):** pack telemetry counts only for months in
+  the 90 days before a review; after ~Jan 2027 only app views keep a dashboard
+  alive. Usage chart shows years and a stale-snapshot note. `lifecycle-v5`.
 - **D22 my team's dashboards (`feat/my-team-dashboards`):** employee picks or
   inherits a team (domain + region from the viewing-as person) and sees the
   real catalog dashboards for it; each opens as a wallboard built from its

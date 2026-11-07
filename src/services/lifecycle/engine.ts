@@ -182,9 +182,12 @@ async function downstreamAssets(tx: Db, assetId: string): Promise<string[]> {
 }
 
 async function buildEvidence(tx: Db, state: AssetState, date: string): Promise<ReviewEvidence> {
+  // Pack telemetry counts only for months that start within the 90 days before
+  // the review: the pack ends Oct 2026, so later reviews rely on app views only.
   const usage = await tx.execute({
-    sql: `SELECT month, unique_users FROM Asset_Usage WHERE asset_id = ? ORDER BY month DESC LIMIT ?`,
-    args: [state.assetId, USAGE_MONTHS],
+    sql: `SELECT month, unique_users FROM Asset_Usage WHERE asset_id = ? AND month >= ? AND month <= ?
+          ORDER BY month DESC LIMIT ?`,
+    args: [state.assetId, addDays(date, -LEASE_DAYS), date, USAGE_MONTHS],
   });
   const users = usage.rows.map((u) => Number(u.unique_users));
   const opens = await tx.execute({
@@ -216,10 +219,10 @@ function wasUsed(ev: ReviewEvidence): boolean {
 }
 
 function usageText(ev: ReviewEvidence): string {
-  return (
-    `average ${ev.avgMonthlyUsers ?? 0} monthly users over the latest ${ev.usageMonths.length} months of pack telemetry ` +
-    `and ${ev.appOpens90d} app views in the last 90 days`
-  );
+  const telemetry = ev.usageMonths.length
+    ? `average ${ev.avgMonthlyUsers ?? 0} monthly users in pack telemetry (${ev.usageMonths.length} months in the last 90 days)`
+    : "no pack telemetry in the last 90 days (the pack ends Oct 2026)";
+  return `${telemetry} and ${ev.appOpens90d} app views in the last 90 days`;
 }
 
 /**
