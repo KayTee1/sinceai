@@ -115,27 +115,37 @@ export function SalesTrendChart({ data }: { data: TrendPoint[] }) {
   );
 }
 
-export function BreakdownChart({ data }: { data: { name: string; value: number }[] }) {
+export function BreakdownChart({
+  data,
+  format = (v: number) => eurM(v),
+  label = "Net sales",
+  labelWidth = 104,
+}: {
+  data: { name: string; value: number }[];
+  format?: (v: number) => string;
+  label?: string;
+  labelWidth?: number;
+}) {
   const height = Math.max(160, data.length * 26 + 16);
   return (
     <div style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} layout="vertical" margin={{ top: 0, right: 56, bottom: 0, left: 0 }} barCategoryGap={4}>
           <XAxis type="number" hide />
-          <YAxis type="category" dataKey="name" tick={AXIS} tickLine={false} axisLine={false} width={104} />
+          <YAxis type="category" dataKey="name" tick={AXIS} tickLine={false} axisLine={false} width={labelWidth} />
           <Tooltip
             cursor={{ fill: "#f3f6f8" }}
             content={({ active, payload }) =>
               active && payload?.length ? (
                 <TooltipBox
                   title={String(payload[0].payload.name)}
-                  rows={[{ label: "Net sales", value: eurM(Number(payload[0].value), 2) }]}
+                  rows={[{ label, value: format(Number(payload[0].value)) }]}
                 />
               ) : null
             }
           />
           <Bar dataKey="value" fill={SERIES_1} radius={[0, 4, 4, 0]} maxBarSize={18}>
-            <LabelList dataKey="value" position="right" formatter={(v) => eurM(Number(v))} style={AXIS} />
+            <LabelList dataKey="value" position="right" formatter={(v) => format(Number(v))} style={AXIS} />
           </Bar>
         </BarChart>
       </ResponsiveContainer>

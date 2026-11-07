@@ -44,6 +44,7 @@ export async function getPortfolioCounts(
   const now = empty();
   for (const r of states.rows) {
     if (r.origin === "pack") before[TIER_BY_ENDORSEMENT[r.source_endorsement as string] ?? "personal"]++;
+    if (r.origin === "team") before.certified++; // team dashboards are seeded as Certified (D20)
     if (r.status === "archived") now.archived++;
     else now[r.tier as keyof PortfolioCounts]++;
     if (r.status === "lease_due") now.underReview++;
