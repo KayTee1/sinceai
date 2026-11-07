@@ -239,3 +239,16 @@ Alternatives considered: blend value types; drop mismatched cells; average
 percentages; probe the scope's own latest month; allow a build when some
 markets compute (partial build).
 Agreed by: pending (proposed by KayTee / Claude Code)
+
+D16: Silence escalates, never archives (2026-11-07)
+Status: accepted. Replaces D9's default archive on silence; refines D13/D14.
+Choice and why: archiving must always follow an approved proposal. When an
+owner does not answer a lease review within 14 days, the review is marked
+escalated and the region's data steward (D14; Global covers Asia Pacific and
+assets with no owner) is added as an approver. The asset stays under review;
+nothing is archived by policy. Temporary insights still expire on their
+30-day TTL, which is the tier's rule rather than a review default. Policy
+version lifecycle-v2.
+Alternatives considered: archive on silence (D9); renew on silence; archive
+only silent retire proposals.
+Agreed by: Viet
