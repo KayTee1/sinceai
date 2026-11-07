@@ -1,12 +1,15 @@
 # Handoff
 
 - **Now:** T14 (#14) and T15 (#15) merged; Viet's DB-path fix (#16) merged.
-  T16 on `feat/T16-mastra-steward-integration`: Mastra tool adapters over the
+  T16 is draft PR #18 (`feat/T16-mastra-steward-integration`; Codex review
+  fixes applied: complete reuse match kept in the compact view, honest
+  provenance note). Mastra tool adapters over the
   deterministic services, `src/mastra/tools/steward-tools.ts`
   (`createStewardTools(getDb)` → `analyze-request`, `compute-kpi`,
   `check-kpi-definitions`). They return service results unchanged and re-throw
   service errors. Model and chat UI both get compact views
-  (`steward-views.ts`) without row provenance. **Not wired into the
+  (`steward-views.ts`) without structured provenance (diagnostic reasons may
+  still name a workbook row). **Not wired into the
   orchestrator yet:** the tool map and prompt change is a proposal for Viet,
   `docs/agent/T16-orchestrator-proposal.md`.
 - **Measured (pack):** REQ-0001 Nubeqa / Global: full analysis 55 KB, view
@@ -30,6 +33,17 @@
   the UI needs provenance (sketched in ARCHITECTURE, "Steward tools").
   Dashboard KPI tiles still blend value types and average percentages
   (`asset-detail.tsx`, Viet's), see the integration audit.
+- **Cross-branch (T16 × PR #17, T5 lifecycle):** T5 archives an asset by
+  setting `asset_state.status = 'archived'` (feat/T5-lifecycle
+  `src/services/lifecycle/engine.ts:320`), but T14 discovery reads only the
+  imported `Analytics_Assets` (`src/services/steward/discovery.ts:87-94`).
+  Once both merge, an archived asset can still be recommended for reuse, and
+  app-built Temporary insights in `asset_state` are never found. Not fixed in
+  T16. Contract decision with Viet: does discovery read `asset_state` (exclude
+  `archived`, include app-built assets, use app tier instead of
+  `endorsement`), and does that rule live in discovery or in a lifecycle query
+  discovery calls? Implement after #17 merges, in the steward service, with
+  regression tests.
 - **Open:** F1 (no real request reaches a build proposal; owner decision);
   one agent vs. three (D11/R17); free-text requests have no governed entry
   point; IP / external AI terms (more catalog data reaches Anthropic once

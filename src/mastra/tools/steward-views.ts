@@ -7,19 +7,26 @@
 // select and rename fields; they never compute, round or reword a value, and
 // the recommendation is copied unchanged.
 //
-// Omitted here: KPI_Catalog / workbook row references, SQL queries and their
-// arguments, source-row lists and the D14 mapping label. They are not lost:
-// the services are deterministic over the read-only imported pack, so the
-// same call with the same inputs reproduces them (see docs/ARCHITECTURE.md,
-// "Steward tools").
+// Omitted here: structured provenance, i.e. KPI_Catalog / workbook SourceRefs,
+// SQL queries and their arguments, source-row lists, and the D14 mapping label.
+// They are not lost: the services are deterministic over the read-only
+// imported pack, so the same call with the same inputs reproduces them (see
+// docs/ARCHITECTURE.md, "Steward tools").
+//
+// Kept on purpose: human-readable diagnostic reasons from the services, which
+// may name a workbook row to explain an insufficient_data result, e.g.
+// "P-BET / FR / 2026-10-01 is forecast_like_synthetic (row 11)". No raw
+// source records (row contents) are included in any view.
 //
 // PROVISIONAL contract (T16): to be agreed with the frontend lane (Viet).
 import type { KpiCheck, StewardAnalysis } from "../../services/steward/types";
 import type { KpiResult } from "../../services/semantic/types";
+import { presentCandidates } from "../../services/steward/discovery";
 
 export const OMITTED_NOTE =
-  "Compact chat view. Row-level source references, SQL queries and source-row lists are omitted from this payload; " +
-  "they are reproducible by calling the same deterministic service with the same inputs.";
+  "Compact chat view. Structured provenance (source references, SQL queries and source-row lists) is omitted from " +
+  "this payload and is reproducible by calling the same deterministic service with the same inputs. Diagnostic " +
+  "reasons may still name a workbook row, e.g. '(row 11)'; no raw source records are included.";
 
 /** A tool input-validation error returned by Mastra in place of a result. */
 export type ToolValidationError = { error: true; message: string } & Record<string, unknown>;
@@ -28,7 +35,7 @@ export function isToolValidationError(x: unknown): x is ToolValidationError {
   return typeof x === "object" && x !== null && (x as { error?: unknown }).error === true;
 }
 
-const CANDIDATES_SHOWN = 5;
+export const CANDIDATES_SHOWN = 5;
 
 export type KpiCheckView = {
   canonicalMetric: string;
@@ -95,7 +102,9 @@ export function analysisView(a: StewardAnalysis): AnalysisView {
     kpiChecks: a.kpiChecks.map(kpiCheckView),
     candidates: {
       total: a.candidates.length,
-      shown: a.candidates.slice(0, CANDIDATES_SHOWN).map((c) => ({
+      // Same truncation rule as discovery: the best complete match, which can
+      // drive reuse_candidates from a low rank, is never cut from the view.
+      shown: presentCandidates(a.candidates, CANDIDATES_SHOWN).map((c) => ({
         assetId: c.assetId,
         name: c.name,
         score: c.score,

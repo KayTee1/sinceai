@@ -26,14 +26,14 @@ are Viet's files and are unchanged on this branch. Apply only after agreement.
 +import { createStewardTools } from "../tools/steward-tools";
 +
 +const steward = createStewardTools(db);
- 
+
  export const orchestrator = new Agent({
 @@
    instructions: `
  You are Analytics Steward, an assistant for Bayer Pharmaceuticals analytics managers.
  Your job: before anything new is built, find what already exists, flag conflicting KPI
  definitions, and recommend reuse. You only propose; a human decides.
- 
+
 -How to work on a request:
 -1. Understand intent: metrics, product, market, period. If the user gives a request ID
 -   (e.g. REQ-0001), load it with get-business-request.
@@ -58,7 +58,7 @@ are Viet's files and are unchanged on this branch. Apply only after agreement.
 +- KPI values: compute-kpi (product name or All Pharma; market ID, region or Global).
 +- Finding existing assets: search-assets. It is keyword exploration, not a governed reuse
 +  recommendation; say so, and suggest a stored request for a governed analysis.
- 
+
  Rules:
  - Cite source IDs (AST-..., KPI-..., REQ-...) for every claim. No evidence, no claim.
 -- Never invent numbers, owners or links. Only use values returned by tools.
@@ -114,3 +114,6 @@ Suggested follow-ups for the UI, against the provisional views in
 2. Accept the view shapes as the provisional chat contract.
 3. One orchestrator with deterministic tools for now (D11/R17 list three
    agents; separate decision).
+4. With PR #17 (T5 lifecycle): should discovery, and so `analyze-request`,
+   read `asset_state` so archived assets are not recommended and app-built
+   assets are found? Today it reads only `Analytics_Assets` (see HANDOFF).

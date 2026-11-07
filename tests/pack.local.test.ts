@@ -226,7 +226,7 @@ describe("Bayer pack (local)", { skip }, () => {
     const visible = JSON.stringify(modelVisible(second.prompts[0])).length;
     assert.deepEqual(toolResults(second.prompts[0]).c1.value, analysisView(await analyzeRequest(db, "REQ-0001", answer)));
     assert.ok(visible < full / 3, `model-visible follow-up ${visible} bytes vs full analysis ${full} bytes`);
-    // No row-level provenance anywhere, including Mastra's providerOptions copy.
+    // No structured provenance anywhere, including Mastra's providerOptions copy.
     const raw = JSON.stringify(second.prompts[0]);
     for (const banned of ['"provenance"', '"query"', '"rows"', "SELECT "]) assert.ok(!raw.includes(banned), banned);
   });

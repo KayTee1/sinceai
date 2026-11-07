@@ -6,10 +6,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Client } from "@libsql/client";
-import { importWorkbook } from "../src/db/import-workbook";
+import { importWorkbook, type ParsedSheet } from "../src/db/import-workbook";
 import { openDb } from "../src/db/open";
 import { createStewardTools, StewardToolInputError } from "../src/mastra/tools/steward-tools";
-import { analysisView, isToolValidationError, kpiResultView, OMITTED_NOTE } from "../src/mastra/tools/steward-views";
+import { analysisView, CANDIDATES_SHOWN, isToolValidationError, kpiResultView, OMITTED_NOTE } from "../src/mastra/tools/steward-views";
 import { InvalidKpiQueryError, computeKpi, computeKpiByMarket } from "../src/services/semantic/compute";
 import { analyzeRequest, RequestNotFoundError } from "../src/services/steward/analyze";
 import { checkKpis, loadKpis } from "../src/services/steward/kpis";
@@ -46,8 +46,12 @@ const uiView = (tool: unknown, output: unknown) =>
   (tool as { transform: { display: { output: (c: { output: unknown }) => unknown } } }).transform.display.output({ output });
 const OCT = "2026-10-01";
 
-/** No row-level provenance, SQL or source references anywhere in a chat payload. */
-function assertNoRowDetail(x: unknown, label: string) {
+/**
+ * No structured provenance anywhere in a chat payload: no provenance objects,
+ * SQL, source-row lists or SourceRefs. Diagnostic reason strings may still
+ * name a workbook row; see the "diagnostic reasons" test.
+ */
+function assertNoStructuredProvenance(x: unknown, label: string) {
   const s = JSON.stringify(x);
   for (const banned of ['"provenance"', '"query"', '"rows"', '"sql"', "SELECT ", '"source"', '"evidence"', '"catalog"']) {
     assert.ok(!s.includes(banned), `${label} contains ${banned}`);
@@ -130,7 +134,7 @@ describe("analyze-request", () => {
     assert.ok(de.provenance.query);
 
     const v = modelView(facts.analyzeRequest, out).value as ReturnType<typeof analysisView>;
-    assertNoRowDetail(v, "analysis view");
+    assertNoStructuredProvenance(v, "analysis view");
     assert.equal(v.omitted, OMITTED_NOTE);
     // Every value in the view is copied from the result, not recomputed.
     for (const [i, c] of v.computability.entries()) {
@@ -165,6 +169,68 @@ describe("analyze-request", () => {
   });
 });
 
+describe("analyze-request: complete match beyond the compact limit (Codex F1)", () => {
+  // Same scenario as the T14 regression (steward.test.ts, F2): 11 partial
+  // matches score 9; the only complete match, AST-C1, scores 8 and is 10th of
+  // the service's 10 candidates.
+  let d: Client;
+  let tools: ReturnType<typeof createStewardTools>;
+  const ASSET_TAIL = ["Dashboard", "Power BI", "WS-1", "2026-09-01"];
+  const partials = Array.from({ length: 11 }, (_, i) => `AST-P${String(i + 1).padStart(2, "0")}`);
+  const extra: Record<string, unknown[][]> = {
+    Analytics_Assets: [
+      ...partials.map((id) => [id, `Betavex Growth FR ${id}`, "SM-1", "Betavex", "FR", "OWN-1", "active", "certified", ...ASSET_TAIL]),
+      ["AST-C1", "Pharma Sales Complete", "SM-1", "All Pharma", "Global", "OWN-1", "active", "none", ...ASSET_TAIL],
+    ],
+    Asset_KPI_Map: [...partials.map((id) => [id, "KPI-A1", "primary"]), ["AST-C1", "KPI-A1", "primary"], ["AST-C1", "KPI-B1", "primary"]],
+    Business_Requests: [["REQ-T10", "2026-10-10", "Betavex", "FR", "Net sales growth and net sales for Betavex in France.", "low", "new"]],
+  };
+
+  before(async () => {
+    const sheets: ParsedSheet[] = FIXTURE_SHEETS.map((x) => ({ sheet: x.sheet, data: [...x.data.map((r) => [...r]), ...(extra[x.sheet] ?? [])] }));
+    const expected = Object.fromEntries(sheets.filter((x) => x.sheet !== "START_HERE").map((x) => [x.sheet, x.data.length - 1]));
+    await importWorkbook({ sheets, dest: join(dir, "complete-match.db"), expected });
+    d = openDb(join(dir, "complete-match.db"));
+    tools = createStewardTools(() => d);
+  });
+  after(() => d?.close());
+
+  it("keeps the complete match that drives reuse in both projections, within the limit", async () => {
+    const out = (await run(tools.analyzeRequest, { requestId: "REQ-T10" })) as Awaited<ReturnType<typeof analyzeRequest>>;
+    assert.deepEqual(out, await analyzeRequest(d, "REQ-T10"));
+    // The authoritative result is unchanged: reuse, driven by AST-C1 in 10th place.
+    assert.equal(out.recommendation.kind, "reuse_candidates");
+    assert.equal(out.candidates.length, 10);
+    assert.equal(out.candidates.findIndex((c) => c.coversAllMetrics), 9);
+
+    for (const [label, view] of [
+      ["toModelOutput", modelView(tools.analyzeRequest, out).value],
+      ["transform.display", uiView(tools.analyzeRequest, out)],
+    ] as const) {
+      const v = view as ReturnType<typeof analysisView>;
+      const ids = v.candidates.shown.map((c) => c.assetId);
+      assert.equal(ids.length, CANDIDATES_SHOWN, label);
+      assert.equal(new Set(ids).size, ids.length, `${label}: no duplicates`);
+      // Service order kept: the four best partials, then the complete match in the last slot.
+      assert.deepEqual(ids, [...out.candidates.slice(0, CANDIDATES_SHOWN - 1).map((c) => c.assetId), "AST-C1"], label);
+      const c1 = v.candidates.shown.at(-1)!;
+      assert.deepEqual([c1.coversAllMetrics, c1.score, c1.owner.active, c1.endorsement], [true, 8, true, "none"], label);
+      assert.ok(c1.known.some((k) => k.includes("KPI-A1")) && c1.known.some((k) => k.includes("KPI-B1")), `${label}: coverage explains reuse`);
+      assert.equal(v.candidates.total, 10, label);
+      assert.equal(v.recommendation.kind, "reuse_candidates", label);
+      assert.ok(v.recommendation.evidenceIds.includes("AST-C1"), label);
+    }
+  });
+
+  it("does not change the list when a complete match is already in the top slots", async () => {
+    const out = (await run(catalog.analyzeRequest, { requestId: "REQ-T02" })) as Awaited<ReturnType<typeof analyzeRequest>>;
+    assert.deepEqual(
+      analysisView(out).candidates.shown.map((c) => c.assetId),
+      out.candidates.slice(0, CANDIDATES_SHOWN).map((c) => c.assetId),
+    );
+  });
+});
+
 describe("compute-kpi", () => {
   const scope = { productIds: ["P-ALP"], marketIds: ["DE"], month: OCT };
 
@@ -183,7 +249,7 @@ describe("compute-kpi", () => {
     assert.deepEqual(v, kpiResultView(direct));
     assert.equal(v.sourceRowCount, 2);
     assert.match(v.formula!, /Net Sales Growth =/);
-    assertNoRowDetail(v, "kpi view");
+    assertNoStructuredProvenance(v, "kpi view");
   });
 
   it("resolves regions to markets and breaks down by market like computeKpiByMarket", async () => {
@@ -195,7 +261,7 @@ describe("compute-kpi", () => {
       ["DE", 25],
       ["FR", -20],
     ]);
-    assertNoRowDetail(v, "by-market view");
+    assertNoStructuredProvenance(v, "by-market view");
   });
 
   it("keeps unsupported and insufficient_data distinct", async () => {
@@ -218,6 +284,23 @@ describe("compute-kpi", () => {
       result: Awaited<ReturnType<typeof computeKpi>>;
     };
     assert.deepEqual([fc.result.status, fc.result.value, fc.result.filters.valueType], ["computed", 7, "forecast_like_synthetic"]);
+  });
+
+  it("keeps diagnostic row locators in reasons, but no structured provenance or row contents (Codex F2)", async () => {
+    const out = (await run(facts.computeKpi, { kpiId: "KPI-001", product: "Betavex", market: "FR" })) as {
+      result: Awaited<ReturnType<typeof computeKpi>>;
+    };
+    const v = modelView(facts.computeKpi, out).value as ReturnType<typeof kpiResultView>;
+    // The diagnosis is kept verbatim from the service, including its row locator.
+    assert.deepEqual(v.reasons, out.result.reasons);
+    assert.match(v.reasons[0], /P-BET \/ FR \/ 2026-10-01 is forecast_like_synthetic \(row 11\)/);
+    // ...and the payload says so, without claiming that no row is ever named.
+    assert.match(v.omitted, /Diagnostic reasons may still name a workbook row/);
+    assert.doesNotMatch(v.omitted, /Row-level source references .* are omitted/);
+    assertNoStructuredProvenance(v, "insufficient kpi view");
+    // No raw source record: the forecast-like row's measures (net 7, forecast 6) are not in the view.
+    assert.equal(v.value, null);
+    assert.ok(!JSON.stringify(v).includes('"net_sales_m_eur_syn"') && !JSON.stringify(v).includes("_source_row"));
   });
 
   it("rejects unknown scopes and invalid months with explicit errors", async () => {
@@ -245,7 +328,7 @@ describe("check-kpi-definitions", () => {
     assert.deepEqual(g.checks.map((c) => [c.canonicalMetric, c.approvedKpiId, c.conflict, c.variants.map((x) => x.id)]), [
       ["Net Sales Growth", "KPI-A1", true, ["KPI-A2"]],
     ]);
-    assertNoRowDetail(g, "kpi checks view");
+    assertNoStructuredProvenance(g, "kpi checks view");
   });
 
   it("returns no checks for text that names no catalog metric", async () => {
@@ -278,7 +361,7 @@ describe("Mastra stream (mock model, no LLM)", () => {
     assert.ok(isToolValidationError(byCall.c2.output));
     assert.equal(byCall.c3.type, "tool-output-error");
     assert.match(byCall.c3.errorText!, /Business request not found: REQ-NOPE/);
-    assertNoRowDetail(chunks, "UI stream");
+    assertNoStructuredProvenance(chunks, "UI stream");
 
     const seen = toolResults(prompts[1]);
     assert.deepEqual(seen.c1, { type: "json", value: s01View });
@@ -286,7 +369,7 @@ describe("Mastra stream (mock model, no LLM)", () => {
     assert.equal((seen.c2.value as { error: boolean }).error, true);
     assert.equal(seen.c3.type, "error-text");
     assert.match(String(seen.c3.value), /Business request not found/);
-    assertNoRowDetail(prompts[1], "model prompt");
+    assertNoStructuredProvenance(prompts[1], "model prompt");
   });
 
   it("does not replay full provenance in a follow-up turn", async () => {
@@ -304,7 +387,7 @@ describe("Mastra stream (mock model, no LLM)", () => {
     const replayed = toolResults(second.prompts[0]).c1;
     const full = await analyzeRequest(factsDb, "REQ-S04");
     assert.deepEqual(replayed, { type: "json", value: analysisView(full) });
-    assertNoRowDetail(second.prompts[0], "follow-up prompt");
+    assertNoStructuredProvenance(second.prompts[0], "follow-up prompt");
     // The replayed tool result is the compact view, not the full result.
     // (Real-size numbers: pack.local.test.ts, REQ-0001 Nubeqa / Global.)
     assert.ok(JSON.stringify(replayed.value).length < JSON.stringify(full).length);
