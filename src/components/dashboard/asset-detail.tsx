@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import type { AssetSummary, DashboardData, Role } from "@/lib/types";
-import { eurM, formatDate, formatMonth, pct } from "@/lib/format";
+import { eurM, formatDate, formatMonth, leaseLabel, pct } from "@/lib/format";
 import { TierBadge } from "./tier-badge";
 import { BreakdownChart, SalesTrendChart, UsageChart } from "./charts";
 
@@ -27,7 +27,7 @@ export function AssetDetail({ asset, data, role }: { asset: AssetSummary; data: 
             value={asset.ownerName ? `${asset.ownerName}${asset.ownerActive ? "" : " (inactive)"}` : "Missing"}
             warn={!asset.ownerActive}
           />
-          <Meta label="Lease ends" value={formatDate(asset.leaseEnd)} />
+          <Meta label="Lifecycle" value={leaseLabel(asset.status, asset.leaseEnd)} warn={asset.status !== "active"} />
           <Meta label="Last modified" value={formatDate(asset.lastModified)} />
           {role === "manager" && (
             <Meta label="Source status" value={`${asset.endorsement} · ${asset.lifecycleStatus.replace("_", " ")}`} />

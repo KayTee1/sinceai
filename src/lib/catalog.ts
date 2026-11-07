@@ -1,25 +1,9 @@
 import "server-only";
-import { rows } from "@/db/client";
+import { db, rows } from "@/db/client";
+import { ensureLifecycle, listAssetStates, tick } from "@/services/lifecycle";
 import type { AssetSummary, DashboardData, Market, ProductMarketRow, Tier } from "./types";
 
-// Simulated clock start and first 90-day lease cycle (app-owned, see SCOPE).
-export const CLOCK_START = "2026-11-06";
-const LEASE_DAYS = 90;
-
-// Initial tier mapping is a team assumption (SCOPE "Data").
-const TIER_BY_ENDORSEMENT: Record<string, Tier> = {
-  certified: "certified",
-  promoted: "team",
-  none: "personal",
-};
-
 const TIER_ORDER: Record<Tier, number> = { certified: 0, team: 1, personal: 2, temporary: 3 };
-
-function addDays(iso: string, days: number): string {
-  const d = new Date(`${iso}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
 
 type AssetRow = {
   asset_id: string;
@@ -39,6 +23,11 @@ type AssetRow = {
 type UsageRow = { asset_id: string; month: string; views: number; unique_users: number };
 
 export async function getDashboardData(): Promise<DashboardData> {
+  // Tiers, leases and status come from the lifecycle engine (app-owned).
+  await ensureLifecycle(db());
+  const clock = await tick(db());
+  const states = new Map((await listAssetStates(db())).map((s) => [s.assetId, s]));
+
   const [assetRows, usageRows, pm, markets] = await Promise.all([
     rows<AssetRow>(`
       SELECT a.asset_id, a.asset_name, a.asset_type, a.platform, a.product_scope, a.market_scope,
@@ -64,8 +53,9 @@ export async function getDashboardData(): Promise<DashboardData> {
     usage.set(u.asset_id, list);
   }
 
-  const leaseEnd = addDays(CLOCK_START, LEASE_DAYS);
-  const assets: AssetSummary[] = assetRows.map((a) => ({
+  const assets: AssetSummary[] = assetRows.map((a) => {
+    const state = states.get(a.asset_id);
+    return {
     id: a.asset_id,
     name: a.asset_name,
     type: a.asset_type,
@@ -77,11 +67,13 @@ export async function getDashboardData(): Promise<DashboardData> {
     ownerActive: a.owner_status === "active",
     lifecycleStatus: a.lifecycle_status,
     endorsement: a.endorsement,
-    tier: TIER_BY_ENDORSEMENT[a.endorsement] ?? "personal",
-    leaseEnd,
+    tier: (state?.tier ?? "personal") as Tier,
+    status: state?.status ?? "active",
+    leaseEnd: state?.leaseEnd ?? state?.ttlEnd ?? null,
     lastModified: a.last_modified,
     monthlyViews: usage.get(a.asset_id) ?? [],
-  }));
+    };
+  });
 
   assets.sort((x, y) => TIER_ORDER[x.tier] - TIER_ORDER[y.tier] || x.name.localeCompare(y.name));
 
@@ -89,6 +81,6 @@ export async function getDashboardData(): Promise<DashboardData> {
     assets,
     productMarket: pm.map((r) => ({ ...r })),
     markets: markets.map((m) => ({ ...m })),
-    clockDate: CLOCK_START,
+    clockDate: clock.date,
   };
 }

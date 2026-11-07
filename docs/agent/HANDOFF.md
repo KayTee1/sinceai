@@ -1,5 +1,14 @@
 # Handoff
 
+- **T5 lifecycle (Viet / Claude, PR from `feat/T5-lifecycle`):**
+  `src/services/lifecycle` runs D12–D14: clock (1 day = 1 s, pause / resume /
+  advance / next event), seeded per-asset leases, lease review (renew or
+  retire by usage), 14-day window, archive on silence (skipped for downstream
+  dependents and missing / inactive owners → escalated), owner decisions
+  (reject needs a reason), restore, Temporary 30-day TTL and promotion to
+  Personal, append-only audit (DB triggers). Dashboard reads tier, lease and
+  status from it. API routes per the contract; no UI controls yet (inbox,
+  clock panel, timeline are next).
 - **Now:** T14 merged (#14, squash `1162fcd`). T15 is draft PR #15
   (`feat/T15-kpi-computation`). Codex review fixes applied (F2 provenance,
   F4 handoff, month validation, F5 as proposed D15); awaiting Codex

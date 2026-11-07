@@ -106,6 +106,9 @@ KPI mapping from SCOPE (D14).
    `POST /api/usage` (`{ assetId, viewerId }`), `GET /api/clock`, `POST /api/clock/pause`,
    `POST /api/clock/resume`, `POST /api/clock/advance` (`{ days }` or
    `{ toNextEvent: true }`), `GET /api/portfolio`.
+   Built in T5 (beyond the draft): `GET /api/lifecycle` (clock, inbox,
+   counts, recent audit for the UI), `POST /api/lifecycle/reset` (demo reset of
+   app-owned tables) and `POST /api/assets/:id/restore` (`{ actor, reason? }`).
 
 Role toggle controls visibility only; approval checks the proposal's required
 approvers (owner / team lead / steward) against the acting identity. Runs are

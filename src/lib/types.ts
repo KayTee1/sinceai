@@ -16,7 +16,8 @@ export type AssetSummary = {
   lifecycleStatus: string; // source field, never overwritten
   endorsement: string; // source field, never overwritten
   tier: Tier; // app-owned
-  leaseEnd: string; // ISO date, app-owned
+  status: "active" | "lease_due" | "archived"; // app-owned
+  leaseEnd: string | null; // ISO date (lease or TTL end), app-owned
   lastModified: string;
   monthlyViews: { month: string; views: number; users: number }[];
 };

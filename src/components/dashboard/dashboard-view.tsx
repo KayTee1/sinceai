@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { AssetSummary, DashboardData, Role, Tier } from "@/lib/types";
-import { formatDate, int } from "@/lib/format";
+import { int, leaseLabel } from "@/lib/format";
 import { TierBadge } from "./tier-badge";
 import { AssetDetail } from "./asset-detail";
 
@@ -105,7 +105,9 @@ function AssetRow({ asset, active, onSelect }: { asset: AssetSummary; active: bo
             {asset.ownerName ?? "No owner"}
             {!asset.ownerActive && asset.ownerName ? " (inactive)" : ""}
           </span>
-          <span className="tabular">Lease {formatDate(asset.leaseEnd)}</span>
+          <span className={`tabular ${asset.status === "active" ? "" : "font-medium text-warn"}`}>
+            {leaseLabel(asset.status, asset.leaseEnd)}
+          </span>
         </div>
       </button>
     </li>
