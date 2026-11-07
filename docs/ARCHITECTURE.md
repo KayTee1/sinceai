@@ -129,6 +129,10 @@ Names only; values go in `.env` (ignored):
 - `DATABASE_URL` (libSQL file path)
 - `SCHEDULER_DEMO_ACTIONS` (optional, `1` enables scheduler run / dismiss /
   abandon over HTTP for the demo `manager` actor; off by default, D25)
+- `SCHEDULER_SIM_TRIGGER` (optional, `1`, with `SCHEDULER_DEMO_ACTIONS=1`:
+  clock actions run the governance jobs due at the new simulated date; D26)
+- `SCHEDULER_SIM_REASSESS_DAYS` (optional demo cadence, 1-365: minimum
+  simulated days between simulated periodic reassessments; unset = none; D26)
 
 ## Run commands
 
@@ -278,7 +282,8 @@ read-only catalog tools), `src/db` (SQLite client, import).
 
 `src/services/scheduler` (no Mastra, no LLM). Jobs `incremental_overlap`
 (mode `incremental`) and `periodic_reassessment` (mode `reassessment`), both
-trigger `manual`; finding-writing runs are serialised (409 while one runs).
+triggers `manual` and `simulated_clock` (B5, D26); finding-writing runs are
+serialised (409 while one runs).
 UI: Scheduler tab in the Agentic side panel (Pipeline | Scheduler | Inbox,
 `src/components/agentic/scheduler-view.tsx`). Routes, errors as `{ error }`
 with 400 / 403 / 404 / 409:
@@ -309,11 +314,27 @@ with 400 / 403 / 404 / 409:
 - `POST /api/scheduler/findings/[id]/proposal`: disabled, always 409
   `{ error, blockedBy: ["MERGE-APPROVERS", "CODEX-REVIEW"], blockers }`.
 
+- B5 (T26, D26): `GET /api/scheduler/simulated`: stored sim date, settings
+  (`autoOnClock`, `reassessEveryDays`), per job the last simulated
+  evaluation (`simDate`, `decision` ran / not_due / already_processed /
+  deferred, `reason`, `runId`, `source` clock_action / manual_check) and
+  whether it is due now. `POST /api/scheduler/simulated` `{ actor }`: run
+  the jobs due at the stored date (never ticks the clock); 200
+  `{ result: { simDate, source, decisions } }`. With
+  `SCHEDULER_SIM_TRIGGER=1`, `POST /api/clock/*` responses add
+  `scheduler` (the same result, or `{ error }`; the clock action is kept;
+  the client reports an error, failed run or deferred job, D26). Due
+  preview per job: `{ due, reason, pendingChanges?, nextOn? }`; changes
+  after the day's successful simulated run are pending, not due. A
+  `deferred` decision can mean the clock moved during the trigger.
+  Simulated runs have `trigger: "simulated_clock"`, actor `simulated-clock`.
+
 POST routes need `SCHEDULER_DEMO_ACTIONS=1` and `actor: "manager"`; the
 check runs before any database access. Scheduler writes use their own
 short-lived `libsql` connections, never the shared client (D25).
 Operator CLI: `npx tsx src/services/scheduler/cli.ts status | run <actor> |
-findings | dismiss <id> <actor> <reason> | abandon <id> <actor> <reason>`.
+findings | dismiss <id> <actor> <reason> | abandon <id> <actor> <reason> |
+sim | sim-status`.
 
 ## Demo reset and fallback
 

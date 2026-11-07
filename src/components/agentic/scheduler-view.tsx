@@ -14,15 +14,17 @@ import {
   findingStatusOptions,
   runOutcome,
   schedulerApi,
+  simResultLines,
   statusLabel,
   type ApiResult,
   type SchedulerOverviewResponse,
+  type SimStatusResponse,
   type Tone,
 } from "@/lib/scheduler-client";
-import { FindingCard, JobCard, Notice, RunRow } from "./scheduler-parts";
+import { FindingCard, JobCard, Notice, RunRow, SimulatedClockCard } from "./scheduler-parts";
 
 type Section = "jobs" | "findings" | "runs";
-type Flash = { tone: Tone; text: string } | null;
+type Flash = { tone: Tone; text: string; lines?: { tone: Tone; text: string }[] } | null;
 
 const api = schedulerApi();
 
@@ -39,6 +41,8 @@ export function SchedulerPanel({ clockKey }: { clockKey: string }) {
   const [section, setSection] = useState<Section>("jobs");
   const [statusFilter, setStatusFilter] = useState("open");
   const [overview, setOverview] = useState<SchedulerOverviewResponse | null>(null);
+  const [sim, setSim] = useState<SimStatusResponse | null>(null);
+  const [simError, setSimError] = useState<string | null>(null);
   const [runs, setRuns] = useState<SchedulerRun[] | null>(null);
   const [findings, setFindings] = useState<{ total: number; list: Finding[] } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -57,11 +61,14 @@ export function SchedulerPanel({ clockKey }: { clockKey: string }) {
   const load = useCallback(async () => {
     const seq = ++loadSeq.current;
     const filter = filterRef.current;
-    const [o, r, f] = await Promise.all([api.overview(), api.runs(20), api.findings(filter)]);
+    const [o, r, f, s] = await Promise.all([api.overview(), api.runs(20), api.findings(filter), api.simulated()]);
     if (seq !== loadSeq.current || filter !== filterRef.current) return;
     const firstError = [o, r, f].find((x): x is Extract<ApiResult<unknown>, { ok: false }> => !x.ok);
     setLoadError(firstError ? firstError.message : null);
     if (o.ok) setOverview(o.data);
+    // B5: a simulated-status error does not hide the rest, and is shown in place of its card (Codex B5-F1).
+    setSim(s.ok ? s.data : null);
+    setSimError(s.ok ? null : s.message);
     if (r.ok) setRuns(r.data.runs);
     if (f.ok) setFindings({ total: f.data.total, list: f.data.findings });
     setLoading(false);
@@ -104,6 +111,16 @@ export function SchedulerPanel({ clockKey }: { clockKey: string }) {
 
   const startRun = (jobId: string) =>
     act(`run:${jobId}`, () => api.startRun(jobId), (d) => runOutcome(d.run));
+  const checkDue = () =>
+    act("check", () => api.checkDue(), (d) => {
+      const lines = simResultLines(d.result);
+      const ran = d.result.decisions.filter((x) => x.decision === "ran").length;
+      return {
+        tone: lines.some((l) => l.tone === "bad") ? "bad" : ran ? "ok" : "muted",
+        text: ran ? `Simulated date ${d.result.simDate}: ${ran} job(s) ran.` : `Simulated date ${d.result.simDate}: nothing new to run.`,
+        lines,
+      };
+    });
   const dismiss = (findingId: string, reason: string) =>
     act(`dismiss:${findingId}`, () => api.dismiss(findingId, reason), (d) => ({
       tone: "ok",
@@ -152,7 +169,18 @@ export function SchedulerPanel({ clockKey }: { clockKey: string }) {
             </button>
           ))}
         </div>
-        {flash && <Notice tone={flash.tone}>{flash.text}</Notice>}
+        {flash && (
+          <Notice tone={flash.tone}>
+            {flash.text}
+            {flash.lines?.length ? (
+              <ul className="mt-1 list-disc pl-4">
+                {flash.lines.map((l) => (
+                  <li key={l.text}>{l.text}</li>
+                ))}
+              </ul>
+            ) : null}
+          </Notice>
+        )}
         {loadError && <Notice tone="bad">{loadError}</Notice>}
       </div>
 
@@ -171,6 +199,19 @@ export function SchedulerPanel({ clockKey }: { clockKey: string }) {
             <p className="p-4 text-center text-xs text-ink-3">No scheduler jobs are registered on this server.</p>
           ) : (
             <ul className="space-y-2">
+              {sim && (
+                <SimulatedClockCard sim={sim} busy={inFlight !== null} checking={inFlight === "check"} onCheck={() => void checkDue()} />
+              )}
+              {simError && (
+                <li aria-label="Simulated clock scheduling">
+                  <Notice tone="bad">
+                    Simulated clock status could not be loaded, so whether jobs are due at the simulated date is unknown: {simError}{" "}
+                    <button type="button" onClick={() => void load()} className="font-semibold underline">
+                      Reload
+                    </button>
+                  </Notice>
+                </li>
+              )}
               {overview.jobs.map((j) => (
                 <JobCard
                   key={j.job.jobId}

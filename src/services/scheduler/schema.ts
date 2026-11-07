@@ -10,7 +10,13 @@ import type { Client, Transaction } from "@libsql/client";
 import { writeTx } from "./db";
 import type { JobId } from "./types";
 
-export const SCHEDULER_TABLES = ["scheduler_runs", "scheduler_checkpoints", "scheduler_findings", "scheduler_finding_proposals"] as const;
+export const SCHEDULER_TABLES = [
+  "scheduler_runs",
+  "scheduler_checkpoints",
+  "scheduler_findings",
+  "scheduler_finding_proposals",
+  "scheduler_sim_state",
+] as const;
 
 /**
  * Jobs that write findings (incremental observes, periodic resolves). They
@@ -52,6 +58,12 @@ const DDL = [
      action TEXT NOT NULL CHECK (action IN ('merge')), source_id TEXT NOT NULL, target_id TEXT NOT NULL, actor TEXT NOT NULL,
      created_at TEXT NOT NULL, sim_date TEXT NOT NULL, fingerprint TEXT NOT NULL, evidence TEXT NOT NULL,
      outcome TEXT NOT NULL CHECK (outcome IN ('pending', 'approved', 'rejected', 'expired', 'missing')), outcome_synced_at TEXT)`,
+  // B5 (T26): the last simulated-clock evaluation per job (simulated.ts). What was decided at which simulated
+  // date, and the run it started, if any. Display state only: idempotency is read from scheduler_runs.
+  `CREATE TABLE IF NOT EXISTS scheduler_sim_state (
+     job_id TEXT PRIMARY KEY, sim_date TEXT NOT NULL,
+     decision TEXT NOT NULL CHECK (decision IN ('ran', 'not_due', 'already_processed', 'deferred')),
+     reason TEXT NOT NULL, run_id TEXT, source TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   // At most one pending proposal per finding.
   `CREATE UNIQUE INDEX IF NOT EXISTS scheduler_finding_proposals_one_pending ON scheduler_finding_proposals (finding_id) WHERE outcome = 'pending'`,
 ];
