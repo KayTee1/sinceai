@@ -1,5 +1,12 @@
 # T16: proposed orchestrator changes (not applied)
 
+> **Applied in T16B** (`feat/T16B-live-orchestrator`, stacked on PR #18), with
+> changes: the prompt and tool map live in
+> `src/mastra/agents/orchestrator-config.ts`; a governed `proposeBuild` tool
+> was added; the chat UI got step labels and an inbox refresh. See
+> ARCHITECTURE, "Live orchestrator (T16B)". The text below is the original
+> T16A proposal, kept for Viet's review history.
+
 Status: **proposal for Viet's review.** `src/mastra/agents/orchestrator.ts`,
 `src/mastra/tools/catalog-tools.ts` and `src/components/agentic/chat-view.tsx`
 are Viet's files and are unchanged on this branch. Apply only after agreement.
