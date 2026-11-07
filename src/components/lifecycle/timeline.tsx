@@ -30,7 +30,7 @@ const LABEL: Record<string, string> = {
 
 // Per-asset audit timeline (Manager), with Restore for archived assets.
 export function Timeline({ assetId }: { assetId: string }) {
-  const { data, post, busy, actingAs } = useLifecycle();
+  const { data, post, busy } = useLifecycle();
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [state, setState] = useState<AssetState>(null);
   const people = data?.people ?? {};
@@ -52,7 +52,8 @@ export function Timeline({ assetId }: { assetId: string }) {
     };
   }, [assetId, version]);
 
-  const restoreActor = state?.ownerId ?? actingAs;
+  // Restore is an owner action; owner-less assets are restored by the manager, logged as such.
+  const restoreActor = state?.ownerId ?? "manager";
 
   return (
     <div className="rounded-sm border border-line bg-surface">
@@ -61,15 +62,11 @@ export function Timeline({ assetId }: { assetId: string }) {
         {state?.status === "archived" && (
           <button
             type="button"
-            disabled={busy || !restoreActor}
+            disabled={busy}
             onClick={() =>
               post(`/api/assets/${assetId}/restore`, { actor: restoreActor, reason: "Restored on request." })
             }
-            title={
-              restoreActor
-                ? `Restore as ${people[restoreActor]?.name ?? restoreActor}`
-                : "No owner: pick an identity in the inbox"
-            }
+            title={`Restore as ${people[restoreActor]?.name ?? restoreActor}`}
             className="rounded-sm bg-blue px-3 py-1 text-xs font-semibold text-white hover:bg-[#007fc4] disabled:bg-line-strong"
           >
             Restore

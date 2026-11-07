@@ -37,8 +37,6 @@ type Ctx = {
   data: LifecycleSnapshot | null;
   error: string | null;
   busy: boolean;
-  actingAs: string;
-  setActingAs: (id: string) => void;
   /** POSTs to a lifecycle route, then refreshes the snapshot and the server-rendered dashboard. */
   post: (url: string, body?: object) => Promise<boolean>;
 };
@@ -56,7 +54,6 @@ export function LifecycleProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<LifecycleSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [actingAs, setActingAs] = useState("");
   const lastDate = useRef<string | null>(null);
 
   const load = useCallback(async () => {
@@ -109,9 +106,6 @@ export function LifecycleProvider({ children }: { children: React.ReactNode }) {
     [load, router],
   );
 
-  const value = useMemo(
-    () => ({ data, error, busy, actingAs, setActingAs, post }),
-    [data, error, busy, actingAs, post],
-  );
+  const value = useMemo(() => ({ data, error, busy, post }), [data, error, busy, post]);
   return <LifecycleContext.Provider value={value}>{children}</LifecycleContext.Provider>;
 }

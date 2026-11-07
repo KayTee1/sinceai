@@ -6,20 +6,17 @@ import { useLifecycle, type PendingProposal } from "./lifecycle-context";
 
 type Filter = "all" | "escalated" | "retire" | "renew";
 
-// Approval inbox (Manager). Approval follows the proposal's required approvers,
-// so the manager picks who they are acting as (D12); reject needs a reason.
+// Approval inbox (Manager). Approval follows each proposal's required approvers
+// (Rule 11), so every card offers only its own approvers to decide as (D12).
+// Reject needs a reason.
 export function Inbox() {
-  const { data, actingAs, setActingAs } = useLifecycle();
+  const { data } = useLifecycle();
   const [filter, setFilter] = useState<Filter>("all");
   if (!data) return <div className="p-5 text-sm text-ink-3">Loading inbox…</div>;
 
   const items = data.pending.filter((p) =>
     filter === "all" ? true : filter === "escalated" ? p.status === "escalated" : p.type === filter,
   );
-  // Keep the current identity selectable even after its last proposal is decided.
-  const approverIds = [
-    ...new Set([...data.pending.flatMap((p) => p.requiredApprovers), ...(actingAs ? [actingAs] : [])]),
-  ].sort((a, b) => (data.people[a]?.name ?? a).localeCompare(data.people[b]?.name ?? b));
 
   return (
     <div className="flex h-full flex-col">
@@ -28,21 +25,9 @@ export function Inbox() {
           <h2 className="text-sm font-semibold">Approval inbox</h2>
           <span className="tabular text-xs text-ink-3">{data.pending.length} waiting</span>
         </div>
-        <label className="block text-xs text-ink-3">
-          Acting as
-          <select
-            value={actingAs}
-            onChange={(e) => setActingAs(e.target.value)}
-            className="mt-1 block w-full rounded-sm border border-line-strong bg-surface px-2 py-1.5 text-sm text-ink focus:border-blue focus:outline-none"
-          >
-            <option value="">Choose an approver…</option>
-            {approverIds.map((id) => (
-              <option key={id} value={id}>
-                {data.people[id]?.name ?? id} · {data.people[id]?.role ?? "unknown role"}
-              </option>
-            ))}
-          </select>
-        </label>
+        <p className="text-xs text-ink-3">
+          You decide as one of each card&apos;s approvers: the owner, or the data steward once escalated.
+        </p>
         <div className="flex gap-1">
           {(["all", "escalated", "retire", "renew"] as Filter[]).map((f) => (
             <button
@@ -76,15 +61,19 @@ export function Inbox() {
 }
 
 function ProposalCard({ p }: { p: PendingProposal }) {
-  const { data, actingAs, setActingAs, post, busy } = useLifecycle();
+  const { data, post, busy } = useLifecycle();
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
+  // Only active approvers can decide; defaults to the first one (the owner when active).
+  const [chosen, setChosen] = useState<string | null>(null);
   const people = data?.people ?? {};
-  const canDecide = p.requiredApprovers.includes(actingAs);
+  const eligible = p.requiredApprovers.filter((id) => people[id]?.active);
+  const decider = chosen && eligible.includes(chosen) ? chosen : (eligible[0] ?? null);
+  const canDecide = decider !== null;
   const ev = p.evidence;
 
   const decide = async (action: "approve" | "reject") => {
-    const ok = await post(`/api/proposals/${p.id}/decision`, { actor: actingAs, action, reason });
+    const ok = await post(`/api/proposals/${p.id}/decision`, { actor: decider, action, reason });
     if (ok) {
       setRejecting(false);
       setReason("");
@@ -133,22 +122,24 @@ function ProposalCard({ p }: { p: PendingProposal }) {
       </dl>
 
       <div className="mt-2 flex flex-wrap items-center gap-1">
-        <span className="text-ink-3">Approvers:</span>
+        <span className="text-ink-3">{eligible.length > 1 ? "Decide as:" : "Decides:"}</span>
         {p.requiredApprovers.length === 0 && <span className="text-warn">none assigned</span>}
         {p.requiredApprovers.map((id) => (
           <button
             key={id}
             type="button"
-            onClick={() => setActingAs(id)}
-            title="Act as this approver"
+            disabled={!people[id]?.active}
+            onClick={() => setChosen(id)}
+            title={people[id]?.active ? `Decide as ${people[id]?.name ?? id}` : "Inactive: cannot decide"}
             className={`rounded-full border px-2 py-px ${
-              actingAs === id
+              decider === id
                 ? "border-blue bg-[#e6f4fc] text-[#00609a]"
-                : "border-line-strong text-ink-2 hover:border-blue"
+                : "border-line-strong text-ink-2 hover:border-blue disabled:border-line disabled:text-ink-3 disabled:line-through"
             }`}
           >
             {people[id]?.name ?? id}
             {people[id]?.role === "Data Steward" ? " (steward)" : ""}
+            {people[id] && !people[id].active ? " (inactive)" : ""}
           </button>
         ))}
       </div>
@@ -179,7 +170,7 @@ function ProposalCard({ p }: { p: PendingProposal }) {
         </div>
       ) : (
         <div className="mt-2 flex items-center justify-end gap-1.5">
-          {!canDecide && <span className="mr-auto text-ink-3">Act as an approver to decide</span>}
+          {!canDecide && <span className="mr-auto text-warn">No active approver: waits for the steward</span>}
           <button
             type="button"
             disabled={busy || !canDecide}
