@@ -1,5 +1,8 @@
 # Handoff
 
+- **D23 (`fix/telemetry-window`):** pack telemetry counts only for months in
+  the 90 days before a review; after ~Jan 2027 only app views keep a dashboard
+  alive. Usage chart shows years and a stale-snapshot note. `lifecycle-v5`.
 - **D21 auto-renew (`feat/auto-renew-used`):** at lease end, used assets
   (any app view in 90 days, or pack telemetry >= 10 users/month) with an
   active owner renew automatically; unused ones get a retire proposal;

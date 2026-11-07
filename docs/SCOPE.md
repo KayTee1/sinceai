@@ -78,8 +78,9 @@ of all on day 90.
 
 At lease end the engine checks use (D21). **Used** means any in-app view in the
 last 90 days, or pack telemetry (`Asset_Usage`) averaging at least 10 monthly
-users over its latest 3 months; the pack ends Oct 2026, so its latest months
-stand in for current telemetry (production: live usage). A used asset with an
+users over its months within those 90 days. The pack ends Oct 2026, so its
+telemetry only counts for reviews until about the end of Jan 2027; later reviews
+rely on in-app views only (D23; production: live usage). A used asset with an
 active owner **renews automatically** for 90 days in the same tier, logged as a
 policy action; nobody has to approve it. A used asset without an active owner
 goes straight to the region's data steward (Rule 8). Only **unused** assets get

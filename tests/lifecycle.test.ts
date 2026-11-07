@@ -81,7 +81,7 @@ describe("lease review", () => {
     }
     const audit = await getAssetAudit(db, "AST-LOW");
     const escalated = audit.find((a) => a.action === "review_escalated");
-    assert.deepEqual([escalated?.actor, escalated?.policyVersion, escalated?.simDate], ["policy", "lifecycle-v4", "2026-11-22"]);
+    assert.deepEqual([escalated?.actor, escalated?.policyVersion, escalated?.simDate], ["policy", "lifecycle-v5", "2026-11-22"]);
     assert.ok(!audit.some((a) => a.action.startsWith("archived")));
 
     const byAsset = new Map((await listPendingProposals(db)).map((p) => [p.assetIds[0], p]));
@@ -115,6 +115,15 @@ describe("lease review", () => {
     const renewed = (await getAssetAudit(db, "AST-HIGH")).find((a) => a.action === "renewed");
     assert.equal(renewed?.actor, "policy");
     assert.match(renewed!.rationale, /Renewed automatically/);
+  });
+
+  it("old pack telemetry stops counting: the next cycle without views is a retire review (D23)", async () => {
+    await advance(9); // 2026-11-10: AST-HIGH renewed on Sep/Oct 2026 telemetry, lease to 2027-02-08
+    await advance(90); // 2027-02-08: no pack months in the last 90 days, no app views
+    const p = (await listPendingProposals(db)).find((x) => x.assetIds[0] === "AST-HIGH");
+    assert.equal(p?.type, "retire");
+    assert.deepEqual((p?.evidence as ReviewEvidence).usageMonths, []);
+    assert.match(p!.rationale, /no pack telemetry in the last 90 days/);
   });
 
   it("app views in the last 90 days count as use (D21)", async () => {
