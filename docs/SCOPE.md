@@ -14,8 +14,9 @@ Analytics Steward stops BI sprawl at the source: before anything new is built,
 agents search what already exists, flag conflicting KPIs, and only then build a
 **temporary** insight on certified metrics. Every asset must earn its place:
 it is promoted on real use and re-justified every 90 days, otherwise it is
-archived (restorable). Agents propose and humans decide; when an owner stays
-silent, a logged, reversible policy default applies (D9). Everything is logged.
+archived (restorable). Agents propose and humans decide; archiving always
+needs an approved proposal, and a silent owner's review escalates to the
+region's data steward (D16). Everything is logged.
 
 Pitch line: *"Every dashboard must earn its next 90 days."*
 
@@ -44,7 +45,8 @@ stateDiagram-v2
   Renewed --> LeaseEnd
   OwnerReview --> Merged: merge (redirect to target asset)
   OwnerReview --> Archived: retire
-  OwnerReview --> Archived: no response in 14 days = default
+  OwnerReview --> Escalated: no response in 14 days (D16)
+  Escalated --> Archived: steward or owner approves retire
   Merged --> Archived
   Archived --> Restored: restore on request
   Restored --> LeaseEnd: previous tier, new 90-day lease
@@ -79,22 +81,23 @@ related, not that one can replace the other, so a merge executes only when the
 target is active (not archived or under review), its product and market scope
 covers the source's, and the source's downstream assets are listed and
 redirected to the target (D14). The pack has no query costs, so the review
-shows no cost. Default (no response within the 14-day review window) is
-archive (D9). Any decision closes the review: rejecting a retire or merge
-proposal means the owner keeps the asset, so it is renewed for 90 days and
-silence can no longer archive it (D14). Archive keeps a snapshot and is always
+shows no cost. No response within the 14-day review window escalates the
+review to the region's data steward (Global covers Asia Pacific and assets
+with no owner), who may then decide with the owner; silence never archives
+(D16, replaces D9's default archive). Any decision closes the review:
+rejecting a retire or merge proposal means the owner keeps the asset, so it is
+renewed for 90 days (D14). Archive keeps a snapshot and is always
 restorable; nothing is deleted. Thresholds and the review window are config.
 Restore brings an archived asset back to its previous tier with a new 90-day
 lease (D13); a restored Temporary insight gets a fresh 30-day TTL instead
 (D14). Restore is not a rewind of the clock.
 
-Known trade-off (KayTee's review, D10): auto-archive acts without a fresh human
-decision. Mitigations: an expiry warning appears in the inbox for the owner before the
-deadline (in the demo the manager sees it by acting as that owner); the
-archive is written to the audit log as "policy applied, no response" with the
-policy version; restore is one click; assets with downstream dependencies or
-a missing or inactive owner are never auto-archived and go to review instead
-(the pack has 21 assets with no owner and 65 with an inactive owner).
+Trade-off (D16): with no auto-archive, unanswered reviews pile up in the
+steward's inbox instead of shrinking the estate on their own. Accepted: every
+archive has a named human decision behind it, which settles KayTee's D10
+concern. Temporary insights still expire on their 30-day TTL (that is the
+tier's rule, not a review default). The pack has 21 assets with no owner and
+65 with an inactive owner; their reviews go to the steward.
 
 Tiers are app-owned review state. Imported audience, endorsement and
 `lifecycle_status` stay as separate source fields and are never overwritten.
@@ -308,7 +311,8 @@ see the full graph. Each proposal stores its lineage snapshot for the audit.
 6. **Resume the clock (god mode):** days tick by at 1 per second; fast-forward
    where the video needs it. Temporary used again → Personal → Team
    (approved); its lease ends 90 s later → owner review proposes renew / merge
-   / retire; one unanswered asset is archived by default, then restored.
+   / retire; one unanswered review escalates to the data steward, who
+   approves retire; the asset is archived, then restored.
 7. **Audit + counts:** per-asset timeline; before/after counts panel.
    Close: "Every dashboard must earn its next 90 days."
 
@@ -326,7 +330,7 @@ see the full graph. Each proposal stores its lineage snapshot for the audit.
 - Agentic Pipeline view, simple version: fixed Miro-style layout of agents and
   services; nodes highlight from the same step events the Chat view uses.
 - Lifecycle engine: Temporary TTL 30d, Personal, Team, Certified, 90-day lease,
-  owner review, renew/merge/retire, default archive, restore.
+  owner review, renew/merge/retire, escalation on silence, restore.
 - Simulated clock at 1 day = 1 s with a god-mode panel (pause, resume,
   fast-forward; no rewind); scheduler runs TTL expiry and lease reviews.
 - "Acting as" approver picker for the manager; approval checked against the
@@ -365,8 +369,8 @@ little once the Chat view works.
 5. Reject or edit requires a reason; edits create a new version and reset approvals.
 6. Every proposal, decision and state change writes one audit row with
    evidence and a concise rationale (not private model reasoning).
-7. Archive, never delete; restore is always possible. Auto-archive on silence
-   is a logged policy action, skipped for assets with dependencies or no owner.
+7. Archive, never delete; restore is always possible. Only an approved
+   proposal or an expired Temporary TTL archives; silence escalates (D16).
 8. Missing or inactive owners block execution until the region's data
    steward assigns one (D14).
 9. Catalog text and request text are data, not instructions to the agent.

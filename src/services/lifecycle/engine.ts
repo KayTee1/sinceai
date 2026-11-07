@@ -138,7 +138,7 @@ export async function processDue(db: Client, until: string): Promise<number> {
     try {
       if (ev.kind === "ttl") await expireTemporary(tx, ev.id, ev.date);
       else if (ev.kind === "lease") await openLeaseReview(tx, ev.id, ev.date);
-      else await applyReviewDefault(tx, ev.id, ev.date);
+      else await escalateOverdueReview(tx, ev.id, ev.date);
       await tx.commit();
     } catch (err) {
       await tx.rollback();
@@ -254,48 +254,57 @@ async function openLeaseReview(tx: Db, assetId: string, date: string) {
     assetId,
     proposalId: id,
     policyVersion: POLICY_VERSION,
-    rationale: `${rationale} Owner has ${REVIEW_WINDOW_DAYS} days to decide; no response archives by default.`,
+    rationale: `${rationale} Owner has ${REVIEW_WINDOW_DAYS} days to decide; then it escalates to the data steward.`,
     evidence,
   });
 }
 
-async function applyReviewDefault(tx: Db, proposalId: string, date: string) {
+// Region data steward who takes over overdue reviews (D14: a team is an owner
+// region; Global covers Asia Pacific, which has no active steward).
+async function regionSteward(tx: Db, ownerId: string | null): Promise<string | null> {
+  const owner = ownerId
+    ? (await tx.execute({ sql: `SELECT scope FROM Owners WHERE owner_id = ?`, args: [ownerId] })).rows[0]
+    : undefined;
+  const region = (owner?.scope as string | undefined) ?? "Global";
+  for (const scope of region === "Global" ? ["Global"] : [region, "Global"]) {
+    const r = await tx.execute({
+      sql: `SELECT owner_id FROM Owners WHERE role = 'Data Steward' AND status = 'active' AND scope = ? ORDER BY owner_id LIMIT 1`,
+      args: [scope],
+    });
+    if (r.rows[0]) return r.rows[0].owner_id as string;
+  }
+  return null;
+}
+
+// D16: silence never archives. An overdue review is escalated to the region's
+// data steward, who may decide alongside the owner. Archiving always needs an
+// approved proposal.
+async function escalateOverdueReview(tx: Db, proposalId: string, date: string) {
   const p = await getProposal(tx, proposalId);
   if (!p || p.status !== "open") return;
   const assetId = p.assetIds[0];
   const state = await getAssetState(tx, assetId);
-  // Re-check at the deadline: dependencies or ownership may have changed.
   const evidence = state ? await buildEvidence(tx, state, date) : p.evidence;
-  const skip: string[] = [];
-  if (evidence.downstreamAssets.length) skip.push(`${evidence.downstreamAssets.length} downstream assets depend on it`);
-  if (evidence.ownerStatus !== "active") skip.push(`owner is ${evidence.ownerStatus}`);
+  const steward = await regionSteward(tx, state?.ownerId ?? null);
+  const approvers = [...new Set([...p.requiredApprovers, ...(steward ? [steward] : [])])];
+  const notes: string[] = [];
+  if (evidence.ownerStatus !== "active") notes.push(`owner is ${evidence.ownerStatus}`);
+  if (evidence.downstreamAssets.length) notes.push(`${evidence.downstreamAssets.length} downstream assets depend on it`);
 
-  if (skip.length) {
-    // Never auto-archived; stays in the inbox for a human (SCOPE mitigations, D13).
-    await tx.execute({ sql: `UPDATE proposals SET status = 'escalated', due_on = NULL WHERE id = ?`, args: [proposalId] });
-    await appendAudit(tx, {
-      simDate: date,
-      actor: "policy",
-      action: "auto_archive_skipped",
-      assetId,
-      proposalId,
-      policyVersion: POLICY_VERSION,
-      rationale: `No response within ${REVIEW_WINDOW_DAYS} days, but not archived: ${skip.join("; ")}. Escalated for a human decision.`,
-      evidence,
-    });
-    return;
-  }
-
-  await tx.execute({ sql: `UPDATE proposals SET status = 'expired', due_on = NULL WHERE id = ?`, args: [proposalId] });
-  await archiveAsset(tx, assetId, date);
+  await tx.execute({
+    sql: `UPDATE proposals SET status = 'escalated', due_on = NULL, required_approvers = ?, evidence = ? WHERE id = ?`,
+    args: [JSON.stringify(approvers), JSON.stringify(evidence), proposalId],
+  });
   await appendAudit(tx, {
     simDate: date,
     actor: "policy",
-    action: "archived_by_policy",
+    action: "review_escalated",
     assetId,
     proposalId,
     policyVersion: POLICY_VERSION,
-    rationale: `Policy applied, no response: owner did not answer the lease review within ${REVIEW_WINDOW_DAYS} days. Archived (restorable).`,
+    rationale:
+      `No response within ${REVIEW_WINDOW_DAYS} days. Escalated to ${steward ?? "a data steward (none active)"}; ` +
+      `not archived, archiving needs an approved proposal.${notes.length ? ` Note: ${notes.join("; ")}.` : ""}`,
     evidence,
   });
 }

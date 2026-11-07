@@ -16,6 +16,8 @@ export const LIFECYCLE_SHEETS: ParsedSheet[] = [
     ["OWN-1", "Active Owner", "Commercial Lead", "EMEA", "active"],
     ["OWN-2", "Inactive Owner", "Analyst", "EMEA", "inactive"],
     ["OWN-3", "Other Owner", "Analyst", "EMEA", "active"],
+    ["OWN-S", "EMEA Steward", "Data Steward", "EMEA", "active"],
+    ["OWN-G", "Global Steward", "Data Steward", "Global", "active"],
   ]),
   sheet(
     "Analytics_Assets",
@@ -26,8 +28,8 @@ export const LIFECYCLE_SHEETS: ParsedSheet[] = [
     [
       asset("AST-LOW", "OWN-1", "none", "2026-08-10"), // lease ends 2026-11-08; low usage -> retire
       asset("AST-HIGH", "OWN-1", "certified", "2026-08-12"), // lease ends 2026-11-10; renew
-      asset("AST-INACT", "OWN-2", "none", "2026-08-10"), // inactive owner -> never auto-archived
-      asset("AST-DEP", "OWN-1", "promoted", "2026-08-10"), // has downstream -> never auto-archived
+      asset("AST-INACT", "OWN-2", "none", "2026-08-10"), // inactive owner
+      asset("AST-DEP", "OWN-1", "promoted", "2026-08-10"), // has downstream dependents
       asset("AST-NOOWN", null, "none", "2026-08-10"), // missing owner
       asset("AST-OLD", "OWN-1", "none", "2025-11-15"), // three whole periods -> lease ends 2026-11-10
     ],

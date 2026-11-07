@@ -1,11 +1,11 @@
 // Lifecycle policy (D9, D12–D14). Thresholds are config, not hard rules.
 
-export const POLICY_VERSION = "lifecycle-v1";
+export const POLICY_VERSION = "lifecycle-v2"; // v2: silence escalates, never archives (D16)
 
 export const CLOCK_START = "2026-11-01"; // D13
 export const TTL_DAYS = 30; // Temporary insights
 export const LEASE_DAYS = 90; // Personal, Team, Certified
-export const REVIEW_WINDOW_DAYS = 14; // owner review before the default applies (D13)
+export const REVIEW_WINDOW_DAYS = 14; // owner review before escalation to the data steward (D13, D16)
 
 // Lease review proposes retire when the asset is barely used: pack average
 // monthly unique users over the latest months below this, and no app opens.

@@ -3,9 +3,9 @@
 - **T5 lifecycle (Viet / Claude, PR from `feat/T5-lifecycle`):**
   `src/services/lifecycle` runs D12–D14: clock (1 day = 1 s, pause / resume /
   advance / next event), seeded per-asset leases, lease review (renew or
-  retire by usage), 14-day window, archive on silence (skipped for downstream
-  dependents and missing / inactive owners → escalated), owner decisions
-  (reject needs a reason), restore, Temporary 30-day TTL and promotion to
+  retire by usage), 14-day window, then escalation to the region's data
+  steward (D16: silence never archives), owner / steward decisions (reject
+  needs a reason), restore, Temporary 30-day TTL and promotion to
   Personal, append-only audit (DB triggers). Dashboard reads tier, lease and
   status from it. API routes per the contract; no UI controls yet (inbox,
   clock panel, timeline are next).

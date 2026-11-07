@@ -72,30 +72,37 @@ describe("lease review", () => {
     assert.equal((await getAssetState(db, "AST-LOW"))?.status, "lease_due");
   });
 
-  it("archives on silence after 14 days, logged as policy, then restores", async () => {
+  it("never archives on silence: escalates to the region steward (D16)", async () => {
     await advance(30);
-    const s = await getAssetState(db, "AST-LOW");
-    assert.equal(s?.status, "archived");
+    for (const id of ["AST-LOW", "AST-HIGH", "AST-DEP", "AST-INACT"]) {
+      assert.equal((await getAssetState(db, id))?.status, "lease_due", id);
+    }
     const audit = await getAssetAudit(db, "AST-LOW");
-    const archived = audit.find((a) => a.action === "archived_by_policy");
-    assert.equal(archived?.actor, "policy");
-    assert.equal(archived?.policyVersion, "lifecycle-v1");
-    assert.equal(archived?.simDate, "2026-11-22");
-    assert.match(archived!.rationale, /no response/i);
+    const escalated = audit.find((a) => a.action === "review_escalated");
+    assert.deepEqual([escalated?.actor, escalated?.policyVersion, escalated?.simDate], ["policy", "lifecycle-v2", "2026-11-22"]);
+    assert.ok(!audit.some((a) => a.action.startsWith("archived")));
 
-    const r = await restore(db, { assetId: "AST-LOW", actor: "OWN-1" }, "2026-12-01");
-    assert.deepEqual([r.status, r.tier, r.leaseEnd], ["active", "personal", "2027-03-01"]);
-    assert.deepEqual(await actions("AST-LOW"), ["lease_review_opened", "archived_by_policy", "restored"]);
+    const byAsset = new Map((await listPendingProposals(db)).map((p) => [p.assetIds[0], p]));
+    assert.equal(byAsset.get("AST-LOW")?.status, "escalated");
+    assert.deepEqual(byAsset.get("AST-LOW")?.requiredApprovers, ["OWN-1", "OWN-S"]); // EMEA steward joins
+    assert.deepEqual(byAsset.get("AST-NOOWN")?.requiredApprovers, ["OWN-G"]); // no owner -> Global steward
   });
 
-  it("never auto-archives assets with downstream dependents, inactive or missing owners", async () => {
+  it("archives only on an approved proposal, then restores", async () => {
     await advance(30);
-    for (const id of ["AST-DEP", "AST-INACT", "AST-NOOWN"]) {
-      assert.equal((await getAssetState(db, id))?.status, "lease_due", id);
-      assert.ok((await actions(id)).includes("auto_archive_skipped"), id);
-    }
-    const escalated = (await listPendingProposals(db)).filter((p) => p.status === "escalated");
-    assert.deepEqual(escalated.map((p) => p.assetIds[0]).sort(), ["AST-DEP", "AST-INACT", "AST-NOOWN"]);
+    const p = (await listPendingProposals(db)).find((x) => x.assetIds[0] === "AST-LOW")!;
+    await decide(db, { proposalId: p.id, actor: "OWN-S", action: "approve" }, "2026-12-01");
+    assert.equal((await getAssetState(db, "AST-LOW"))?.status, "archived");
+
+    const r = await restore(db, { assetId: "AST-LOW", actor: "OWN-1" }, "2026-12-02");
+    assert.deepEqual([r.status, r.tier, r.leaseEnd], ["active", "personal", "2027-03-02"]);
+    assert.deepEqual(await actions("AST-LOW"), [
+      "lease_review_opened",
+      "review_escalated",
+      "proposal_approved",
+      "retired",
+      "restored",
+    ]);
   });
 
   it("renews on owner approval and keeps the tier (D12)", async () => {
