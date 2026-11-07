@@ -132,7 +132,7 @@ export type DraftView = DraftedRequest & { view: "draft-request/v1"; next: strin
 export const draftView = (d: DraftedRequest): DraftView => ({
   view: "draft-request/v1",
   ...d,
-  next: `Stored as ${d.requestId} (drafted in chat, not a Bayer request). Now call analyzeRequest with ${d.requestId}.`,
+  next: `Stored as ${d.requestId} (drafted in chat, not a Bayer request). Now call runRequestPipeline with ${d.requestId}.`,
 });
 
 export type RestoreOfferView = {

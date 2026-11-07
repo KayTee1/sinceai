@@ -7,10 +7,12 @@
 // produces them. Nothing is built without an approved proposal (Rule 1).
 import type { Client } from "@libsql/client";
 import { checkDuplicate, type DuplicateCheck } from "../estate";
+import { onBuildDecided, onBuildProposed } from "../pipeline";
 import {
   LifecycleError,
   POLICY_VERSION,
   appendAudit,
+  getAssetState,
   getProposal,
   recordDecision,
   regionSteward,
@@ -199,6 +201,7 @@ export async function proposeBuild(
   } finally {
     tx.close();
   }
+  await onBuildProposed(db, { requestId, proposalId, approvers });
   return { status: "proposed", proposal: (await getProposal(db, proposalId))! };
 }
 
@@ -306,6 +309,15 @@ export async function decideBuild(db: Client, input: DecisionInput, date: string
   } finally {
     tx.close();
   }
+  // T23: continue the pipeline run that asked for this approval, if any.
+  const ttlEnd = insight ? ((await getAssetState(db, insight.id))?.ttlEnd ?? null) : null;
+  await onBuildDecided(db, {
+    proposalId: input.proposalId,
+    actor: input.actor,
+    action: input.action,
+    reason: input.reason,
+    insight: insight ? { id: insight.id, kpiIds: insight.results.map((r) => r.kpiId), ttlEnd } : null,
+  });
   return { proposal: (await getProposal(db, input.proposalId))!, insight };
 }
 

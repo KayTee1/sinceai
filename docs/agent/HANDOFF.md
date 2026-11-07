@@ -29,6 +29,21 @@
   D22 team catalog dashboards (#25), D23 telemetry window (#27), T19 docs
   (#26), T16B live orchestrator (#28) and F5 build provenance (#29). Open:
   T21 (`feat/T21-chat-assistant`, PR #31, Viet / Claude).
+- **T23 request pipeline (`feat/T23-request-pipeline`, not pushed):** the
+  Miro page-2 sequence runs as a Mastra workflow
+  (`src/mastra/workflows/request-pipeline.ts`: intent → discovery →
+  conflict → estate duplicate → recommend) started by the orchestrator tool
+  `runRequestPipeline` (prompt now uses it instead of `analyzeRequest`).
+  Step events follow ARCHITECTURE contract 1 in app tables `runs` /
+  `run_events` (`src/services/pipeline`). The run waits in our tables, not a
+  Mastra snapshot (survives reloads): `proposeBuild` → `onBuildProposed`,
+  `decideBuild` → `onBuildDecided`, `confirmReuse` → `onReuseConfirmed`
+  continue it. Discovery agent + Conflict detector (Haiku,
+  `pipeline-agents.ts`) only word the finding; template fallback on timeout,
+  no key, or a number/ID not in the facts. Pipeline view
+  (`pipeline-view.tsx`) polls `/api/runs/latest` and draws the sequence;
+  Agentic tab = chat + Pipeline | Inbox. Smoke on pack: TEAM-REQ-01 full
+  build path, REQ-0026 reuse path. Not verified: browser, live agents.
 - **T22 orchestrator tools (`feat/T22-orchestrator-tools`, not pushed):**
   new estate service (`src/services/estate`) over catalog + app-built
   insights with lifecycle state, exposed as tools in

@@ -108,3 +108,15 @@ body {
   padding: 4px 8px;
   text-align: left;
 }
+
+/* T23 Pipeline view: steps waiting for a person pulse gently. */
+@keyframes pipeline-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.pipeline-pulse {
+  animation: pipeline-pulse 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pipeline-pulse { animation: none; }
+}
