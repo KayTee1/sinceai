@@ -1,5 +1,10 @@
 # Handoff
 
+- **D22 my team's dashboards (`feat/my-team-dashboards`):** employee picks or
+  inherits a team (domain + region from the viewing-as person) and sees the
+  real catalog dashboards for it; each opens as a wallboard built from its
+  KPI domain and scope (`wallboard.tsx`, `my-dashboards.tsx`). Views land on
+  real assets and feed D21. DSH-* boards removed (D20 superseded).
 - **D21 auto-renew (`feat/auto-renew-used`):** at lease end, used assets
   (any app view in 90 days, or pack telemetry >= 10 users/month) with an
   active owner renew automatically; unused ones get a retire proposal;
