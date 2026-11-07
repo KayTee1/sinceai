@@ -340,7 +340,7 @@ Alternatives considered: review every asset (D12-D14); auto-archive unused
 assets (rejected in D16).
 Agreed by: Viet
 
-D22: LLM-authored synthetic analytics sprawl scenarios (2026-11-07)
+D24: LLM-authored synthetic analytics sprawl scenarios (2026-11-07)
 Status: accepted direction (both developers); implementation is planned, not
 built. Complete T16B and the current golden-path integration first.
 Choice and why: augment the original Bayer-provided synthetic estate with
@@ -369,7 +369,7 @@ legitimate business requirement; a difference alone does not make it invalid.
   source records or audit history. The LLM cannot bypass governance or
   independently authorize retirement.
 - Separate from T16A, T16B, T17 and D18's existing TEAM-REQ-01; complements
-  their contracts rather than replacing them. D14-D21 remain unchanged.
+  their contracts rather than replacing them. D14-D23 remain unchanged.
 
 Open: fixture schema, seed workflow, detection methods, UI presentation,
 implementation owner, schedule and final dataset size. No approval of these

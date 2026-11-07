@@ -308,7 +308,7 @@ see the full graph. Each proposal stores its lineage snapshot for the audit.
 - Warehouse integration, live BI telemetry and query costs are future
   capabilities (production path), not available in the pack.
 
-## Planned synthetic analytics sprawl demo (D22; not implemented)
+## Planned synthetic analytics sprawl demo (D24; not implemented)
 
 After T16B and the current golden path, plan an expanded estate alongside the
 unchanged Bayer-provided synthetic workbook and imported records. Additional

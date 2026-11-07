@@ -1,6 +1,6 @@
 # Handoff
 
-- **New direction (D22, both developers; not implemented):** after T16B and
+- **New direction (D24, both developers; not implemented):** after T16B and
   the current golden path, plan T19's additional team-authored, LLM-generated
   synthetic estate scenarios (KPI forks, duplicate/overlapping assets, stale
   products, governance inconsistencies). Preserve the original Bayer workbook
