@@ -231,7 +231,8 @@ export type ReassessmentOptions = {
  * transaction with the run. Same outcomes and errors as runIncremental:
  * returns the finished run (succeeded, or failed with evaluation_failed /
  * commit_failed, nothing of it committed); throws SchedulerError("conflict")
- * while another periodic run is running, when the lock stayed taken at claim,
+ * while another finding-writing run (periodic or incremental) is running,
+ * when the lock stayed taken at claim,
  * or when the failure could not be settled (detail.outcome).
  */
 export async function runReassessment(db: Client, opts: ReassessmentOptions): Promise<SchedulerRun> {

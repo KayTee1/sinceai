@@ -8,7 +8,10 @@
 //   a write transaction, no other writer is mid-flight, so no audit row with a
 //   lower ID can appear after the bound is read. A partial unique index allows
 //   one running run per job; a second claim is refused (conflict). Jobs
-//   are independent: an incremental run and a periodic run may overlap.
+//   that write findings (incremental and periodic, FINDING_WRITER_JOBS) are
+//   also mutually exclusive (Codex B2-F1): a second partial unique index
+//   admits one running run across them, and the claim checks it in the same
+//   transaction that inserts the run. Abandoning or finishing a run releases it.
 // - Jobs without a checkpoint (periodic reassessment) read no audit rows.
 //   Their window is a reference: from the previous succeeded run's upper
 //   bound of the same job (0 if none) to MAX(audit_log.id) at claim, and
@@ -29,7 +32,7 @@ import { randomUUID } from "node:crypto";
 import type { Client, Transaction } from "@libsql/client";
 import { POLICY_VERSION, appendAudit, readClock } from "../lifecycle";
 import { writeTx } from "./db";
-import { ensureScheduler } from "./schema";
+import { FINDING_WRITER_INDEX, FINDING_WRITER_JOBS, ensureScheduler } from "./schema";
 import {
   SchedulerError,
   type ChangeWindow,
@@ -66,9 +69,30 @@ function toRun(r: Row): SchedulerRun {
   };
 }
 
-async function runningRun(db: Client | Transaction, jobId: JobId): Promise<SchedulerRun | null> {
-  const r = await db.execute({ sql: `SELECT * FROM scheduler_runs WHERE job_id = ? AND status = 'running'`, args: [jobId] });
+/** The running run that blocks a claim for `jobId`: one of the same job, or (finding writers) of any finding-writing job. */
+async function blockingRun(db: Client | Transaction, jobId: JobId): Promise<SchedulerRun | null> {
+  const jobs = FINDING_WRITER_JOBS.includes(jobId) ? [...FINDING_WRITER_JOBS] : [jobId];
+  const r = await db.execute({
+    sql: `SELECT * FROM scheduler_runs WHERE status = 'running' AND job_id IN (${jobs.map(() => "?").join(", ")}) ORDER BY started_at, rowid LIMIT 1`,
+    args: jobs,
+  });
   return r.rows[0] ? toRun(r.rows[0] as Row) : null;
+}
+
+/**
+ * A claim refused by one of the running-run unique indexes (a concurrent
+ * claim that got past the in-transaction check) as a conflict, so the API
+ * answers 409, not 500. Null for any other error.
+ */
+export function claimConflict(err: unknown): SchedulerError | null {
+  const msg = String((err as Error)?.message ?? err);
+  if (/UNIQUE constraint failed: scheduler_runs\.job_id/i.test(msg)) {
+    return new SchedulerError("Another run of this job started at the same time", "conflict");
+  }
+  if (/UNIQUE constraint failed: scheduler_runs\.status/i.test(msg) || msg.includes(FINDING_WRITER_INDEX)) {
+    return new SchedulerError("Another finding-writing run started at the same time; finding-writing jobs run one at a time", "conflict");
+  }
+  return null;
 }
 
 /** Jobs that read the audit log from a committed checkpoint. */
@@ -77,16 +101,23 @@ export const usesCheckpoint = (jobId: JobId) => CHECKPOINT_JOBS.includes(jobId);
 
 export type ClaimInput = { jobId: JobId; mode: SchedulerMode; trigger: TriggerSource; actor: string; rules: RuleRef[] };
 
-/** Starts a run, or refuses with `conflict` while another run of the job is running. */
+/**
+ * Starts a run, or refuses with `conflict` while another run of the job is
+ * running or, for a finding-writing job, while any finding-writing run is.
+ */
 export async function claimRun(db: Client, input: ClaimInput, nowIso = new Date().toISOString()): Promise<SchedulerRun> {
   const actor = input.actor.trim();
   if (!actor) throw new SchedulerError("actor is required", "invalid");
   await ensureScheduler(db);
   try {
     const runId = await writeTx(db, async (tx) => {
-      const running = await runningRun(tx, input.jobId);
+      const running = await blockingRun(tx, input.jobId);
       if (running) {
-        throw new SchedulerError(`Run ${running.runId} is still running`, "conflict", { runningRunId: running.runId });
+        const msg =
+          running.jobId === input.jobId
+            ? `Run ${running.runId} is still running`
+            : `Run ${running.runId} (${running.jobId}) is still running; finding-writing jobs run one at a time`;
+        throw new SchedulerError(msg, "conflict", { runningRunId: running.runId, runningJobId: running.jobId });
       }
       const clock = await readClock(tx);
       const checkpointed = usesCheckpoint(input.jobId);
@@ -125,10 +156,7 @@ export async function claimRun(db: Client, input: ClaimInput, nowIso = new Date(
     });
     return (await getRun(db, runId))!;
   } catch (err) {
-    if (/UNIQUE constraint failed: scheduler_runs\.job_id/i.test(String((err as Error).message))) {
-      throw new SchedulerError("Another run of this job started at the same time", "conflict");
-    }
-    throw err;
+    throw claimConflict(err) ?? err;
   }
 }
 

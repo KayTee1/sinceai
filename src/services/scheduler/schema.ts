@@ -8,8 +8,29 @@
 // its run row no longer exists (see runs.ts commitRun).
 import type { Client, Transaction } from "@libsql/client";
 import { writeTx } from "./db";
+import type { JobId } from "./types";
 
 export const SCHEDULER_TABLES = ["scheduler_runs", "scheduler_checkpoints", "scheduler_findings"] as const;
+
+/**
+ * Jobs that write findings (incremental observes, periodic resolves). They
+ * must not run concurrently (Codex B2-F1): an incremental run that evaluated
+ * an overlap before an asset was archived could otherwise commit after a
+ * periodic run resolved that finding, and reopen it on stale evidence.
+ * Serialising them is enough for the prototype.
+ */
+export const FINDING_WRITER_JOBS: readonly JobId[] = ["incremental_overlap", "periodic_reassessment"];
+
+/**
+ * Database-enforced exclusion: a unique index on `status` over running runs of
+ * finding-writing jobs. Every indexed row has status 'running', so the index
+ * admits one row: a second running finding writer violates it whatever path
+ * inserted it. A run that ends (succeeded, failed, abandoned) leaves the index,
+ * which releases the exclusion.
+ */
+export const FINDING_WRITER_INDEX = "scheduler_runs_one_finding_writer";
+const FINDING_WRITER_INDEX_DDL = `CREATE UNIQUE INDEX IF NOT EXISTS ${FINDING_WRITER_INDEX} ON scheduler_runs (status)
+  WHERE status = 'running' AND job_id IN (${FINDING_WRITER_JOBS.map((j) => `'${j}'`).join(", ")})`;
 
 const DDL = [
   `CREATE TABLE IF NOT EXISTS scheduler_runs (
@@ -19,6 +40,8 @@ const DDL = [
      rules TEXT NOT NULL, policy_version TEXT NOT NULL, summary TEXT, error TEXT)`,
   // At most one running run per job: the database refuses a second claim.
   `CREATE UNIQUE INDEX IF NOT EXISTS scheduler_runs_one_running ON scheduler_runs (job_id) WHERE status = 'running'`,
+  // Codex B2-F1: at most one running run across ALL finding-writing jobs (see FINDING_WRITER_INDEX).
+  FINDING_WRITER_INDEX_DDL,
   `CREATE INDEX IF NOT EXISTS scheduler_runs_started ON scheduler_runs (started_at)`,
   `CREATE TABLE IF NOT EXISTS scheduler_checkpoints (
      job_id TEXT PRIMARY KEY, last_audit_id INTEGER NOT NULL, run_id TEXT, updated_at TEXT NOT NULL)`,
@@ -65,11 +88,45 @@ export async function ensureScheduler(db: Client): Promise<void> {
     sql: `SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name IN (${SCHEDULER_TABLES.map(() => "?").join(", ")})`,
     args: [...SCHEDULER_TABLES],
   });
-  if (Number(r.rows[0]?.n) === SCHEDULER_TABLES.length && !isOldFindings(await findingsSql(db))) return;
+  if (Number(r.rows[0]?.n) === SCHEDULER_TABLES.length && !isOldFindings(await findingsSql(db)) && (await hasWriterIndex(db))) return;
   await writeTx(db, async (tx) => {
     // Checked again inside the write transaction: another connection may have upgraded it meanwhile.
     if (isOldFindings(await findingsSql(tx))) await rebuildFindings(tx);
+    if (!(await hasWriterIndex(tx))) await releaseConcurrentWriters(tx);
     for (const sql of DDL) await tx.execute(sql);
+  });
+}
+
+async function hasWriterIndex(db: Client | Transaction): Promise<boolean> {
+  const r = await db.execute({ sql: `SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?`, args: [FINDING_WRITER_INDEX] });
+  return r.rows.length > 0;
+}
+
+/**
+ * Upgrade step for the finding-writer index (B2-F1). A database from before it
+ * may hold running runs of both finding-writing jobs, which would make the
+ * unique index fail to build (and every request with it). All but the oldest
+ * are abandoned here, so their late commit is refused like any abandoned run's.
+ * No audit row (table setup must not depend on the lifecycle tables); the
+ * run's error records who and why.
+ */
+async function releaseConcurrentWriters(tx: Transaction) {
+  const runs = await tx.execute(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'scheduler_runs'`);
+  if (!runs.rows.length) return;
+  const nowIso = new Date().toISOString();
+  const error = JSON.stringify({
+    code: "abandoned",
+    stage: "recovery",
+    message: "Abandoned by the scheduler upgrade: finding-writing jobs no longer run concurrently (Codex B2-F1).",
+    at: nowIso,
+    actor: "scheduler",
+  });
+  const jobs = FINDING_WRITER_JOBS.map(() => "?").join(", ");
+  await tx.execute({
+    sql: `UPDATE scheduler_runs SET status = 'failed', completed_at = ?, error = ?
+          WHERE status = 'running' AND job_id IN (${jobs})
+            AND rowid <> (SELECT rowid FROM scheduler_runs WHERE status = 'running' AND job_id IN (${jobs}) ORDER BY started_at, rowid LIMIT 1)`,
+    args: [nowIso, error, ...FINDING_WRITER_JOBS, ...FINDING_WRITER_JOBS],
   });
 }
 

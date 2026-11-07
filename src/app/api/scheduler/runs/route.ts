@@ -18,7 +18,8 @@ export async function GET(req: Request) {
 
 // { actor, jobId? } — manual run of one job (default incremental_overlap; unknown jobId => 400).
 // Manager only, and only with SCHEDULER_DEMO_ACTIONS=1 (see services/scheduler/access.ts).
-// 200 with the finished run (succeeded or failed); 409 while another run of that job is in progress.
+// 200 with the finished run (succeeded or failed); 409 while another finding-writing run
+// (incremental or periodic; they run one at a time) is in progress.
 export async function POST(req: Request) {
   const b = await body(req);
   return withSchedulerAction(b.actor, async (actor) => ({ run: await runJob(db(), { jobId: parseJobId(b.jobId), actor }) }));

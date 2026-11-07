@@ -21,15 +21,20 @@ import { proposeMerge, suggestMerge } from "../src/services/estate";
 import { decide, listPendingProposals, proposeRetire, recordUsage, resetLifecycle, restore } from "../src/services/lifecycle";
 import {
   B1_FINDINGS_DDL,
+  INCREMENTAL_JOB,
   PERIODIC_JOB,
   SCHEDULER_TABLES,
   SchedulerError,
+  abandonRun,
+  claimConflict,
   claimRun,
+  commitRun,
   countRuns,
   dismissFinding,
   ensureScheduler,
   getCheckpoint,
   getFinding,
+  getRun,
   listFindings,
   listRuns,
   parseJobFilter,
@@ -388,13 +393,98 @@ describe("failure and concurrency", () => {
     assert.deepEqual(await getFinding(db, f.findingId), f);
   });
 
-  it("one running run per job: a held periodic run blocks periodic, not incremental", async () => {
+  it("finding-writing jobs never run concurrently: a held periodic run blocks both jobs (Codex B2-F1)", async () => {
     await buildInsight();
     const held = await claimRun(db, { jobId: "periodic_reassessment", mode: "reassessment", trigger: "manual", actor: "manager", rules: PERIODIC_JOB.rules });
-    await assert.rejects(periodic(), (e: unknown) => e instanceof SchedulerError && e.code === "conflict" && e.detail?.runningRunId === held.runId);
-    const inc = await runIncremental(db, { actor: "manager" });
-    assert.equal(inc.status, "succeeded");
+    const blocked = (e: unknown) => e instanceof SchedulerError && e.code === "conflict" && e.detail?.runningRunId === held.runId;
+    await assert.rejects(periodic(), blocked);
+    await assert.rejects(runIncremental(db, { actor: "manager" }), blocked);
+    assert.deepEqual(await countRuns(db, "incremental_overlap"), { running: 0, succeeded: 0, failed: 0, total: 0 }, "refused claims leave no run");
     assert.deepEqual(await countRuns(db, "periodic_reassessment"), { running: 1, succeeded: 0, failed: 0, total: 1 });
+  });
+
+  it("B2-F1 ordering: incremental claimed, subject archived, periodic refused; abandoning the incremental run releases the claim", async () => {
+    const f = await openFinding();
+    await recordUsage(db, { assetId: INSIGHT, userId: "OWN-R" }, DAY); // promoted: a watched change for the next incremental run
+    const held = await claimRun(db, { jobId: "incremental_overlap", mode: "incremental", trigger: "manual", actor: "manager", rules: INCREMENTAL_JOB.rules });
+    await archiveAst1();
+    await assert.rejects(
+      runJob(db, { jobId: "periodic_reassessment", actor: "manager" }),
+      (e: unknown) =>
+        e instanceof SchedulerError && e.code === "conflict" && e.detail?.runningRunId === held.runId && e.detail?.runningJobId === "incremental_overlap",
+    );
+    assert.equal((await getFinding(db, f.findingId))!.status, "open", "nothing resolved while the incremental run holds the claim");
+
+    await abandonRun(db, { runId: held.runId, actor: "manager", reason: "Fixture: crashed." });
+    const r = await periodic();
+    assert.deepEqual([r.status, r.summary!.reassessment!.counts.resolved], ["succeeded", 1]);
+    await assert.rejects(
+      commitRun(db, held, async () => ({ ...r.summary!, findings: { created: 0, updated: 0, unchanged: 0, reopened: 0, suppressed: 0 } })),
+      (e: unknown) => e instanceof SchedulerError && e.code === "conflict",
+      "the abandoned run's late commit is refused",
+    );
+    assert.equal((await getFinding(db, f.findingId))!.status, "resolved");
+  });
+
+  it("B2-F1 ordering end to end: the older incremental run commits first; the periodic run then resolves, and nothing reopens it", async () => {
+    const f = await openFinding();
+    await recordUsage(db, { assetId: INSIGHT, userId: "OWN-R" }, DAY); // promoted: the incremental run evaluates the overlap again
+    let refused: unknown;
+    const inc = await runIncremental(db, {
+      actor: "manager",
+      // Evaluated (overlap still active); now the subject is archived and a periodic run is attempted before this run commits.
+      beforeCommit: async () => {
+        await archiveAst1();
+        refused = await periodic().then(() => undefined, (e: unknown) => e);
+      },
+    });
+    assert.ok(refused instanceof SchedulerError && refused.code === "conflict" && refused.detail?.runningRunId === inc.runId, "periodic refused while incremental holds the claim");
+    assert.deepEqual([inc.status, inc.summary!.findings.updated], ["succeeded", 1]);
+    assert.deepEqual(await countRuns(db, "periodic_reassessment"), { running: 0, succeeded: 0, failed: 0, total: 0 });
+
+    const r = await periodic();
+    assert.equal(r.summary!.reassessment!.counts.resolved, 1);
+    const again = await runIncremental(db, { actor: "manager" });
+    assert.equal(again.summary!.findings.reopened, 0);
+    const now = (await getFinding(db, f.findingId))!;
+    assert.deepEqual([now.status, now.resolution?.reason], ["resolved", "asset_inactive"], "no stale reopen");
+  });
+
+  it("the database itself refuses a second running finding writer, and the claim error is a conflict (409), not a 500", async () => {
+    await ensureScheduler(db);
+    const held = await claimRun(db, { jobId: "incremental_overlap", mode: "incremental", trigger: "manual", actor: "manager", rules: INCREMENTAL_JOB.rules });
+    const insert = (jobId: string) =>
+      db.execute({
+        sql: `INSERT INTO scheduler_runs (run_id, job_id, mode, trigger, actor, sim_date, status, started_at, from_audit_id, to_audit_id, rules, policy_version)
+              VALUES (?, ?, 'reassessment', 'manual', 'manager', '2026-11-03', 'running', 't', 0, 0, '[]', 'p')`,
+        args: [`SCH-raw-${jobId}`, jobId],
+      });
+    let raw: unknown;
+    await insert("periodic_reassessment").catch((e: unknown) => (raw = e));
+    assert.match(String(raw), /UNIQUE constraint failed/);
+    const mapped = claimConflict(raw);
+    assert.ok(mapped instanceof SchedulerError && mapped.code === "conflict");
+    assert.equal(claimConflict(new Error("disk I/O error")), null);
+    await abandonRun(db, { runId: held.runId, actor: "manager", reason: "Fixture." });
+    await insert("periodic_reassessment"); // released
+  });
+
+  it("upgrade: a database with concurrent running finding writers gets the index; all but the oldest are abandoned", async () => {
+    await ensureScheduler(db);
+    await db.execute(`DROP INDEX scheduler_runs_one_finding_writer`);
+    for (const [id, job, at] of [["SCH-a", "incremental_overlap", "2026-11-01T00:00:00Z"], ["SCH-b", "periodic_reassessment", "2026-11-02T00:00:00Z"]]) {
+      await db.execute({
+        sql: `INSERT INTO scheduler_runs (run_id, job_id, mode, trigger, actor, sim_date, status, started_at, from_audit_id, to_audit_id, rules, policy_version)
+              VALUES (?, ?, 'incremental', 'manual', 'manager', '2026-11-03', 'running', ?, 0, 0, '[]', 'p')`,
+        args: [id, job, at],
+      });
+    }
+    await ensureScheduler(db);
+    assert.equal((await db.execute(`SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'scheduler_runs_one_finding_writer'`)).rows[0].n, 1);
+    const [a, b] = await Promise.all([getRun(db, "SCH-a"), getRun(db, "SCH-b")]);
+    assert.deepEqual([a?.status, b?.status, b?.error?.code], ["running", "failed", "abandoned"]);
+    await ensureScheduler(db); // idempotent
+    assert.equal((await getRun(db, "SCH-a"))?.status, "running");
   });
 
   it("a finding changed between evaluation and commit is skipped, not overwritten", async () => {

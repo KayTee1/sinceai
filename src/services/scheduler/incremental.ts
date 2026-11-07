@@ -143,7 +143,8 @@ export type RunOptions = {
  * A failure leaves the checkpoint and findings untouched and is recorded on
  * the run: returns the finished run (succeeded, or failed with
  * `error.code` evaluation_failed / commit_failed). Throws
- * SchedulerError("conflict") when another run is in progress, the database
+ * SchedulerError("conflict") when another finding-writing run (incremental or
+ * periodic) is in progress, the database
  * stayed locked at claim time, or the failure could not be settled as a
  * failed run (abandoned, reset, or the failure itself could not be recorded;
  * `detail.outcome`, `detail.runId` and `detail.failure` say which). See
