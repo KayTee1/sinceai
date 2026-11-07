@@ -143,6 +143,13 @@ Backend services (`src/services/steward`) take a libSQL client as a parameter
 (`src/db/open.ts`), so they run in tests and scripts without Next.js:
 `npx tsx src/services/steward/cli.ts REQ-0001 [product market]` prints the
 structured analysis.
+KPI computation (T15, `src/services/semantic`) applies the D14 mapping
+(team-authored, proposed) to `Product_Market_Monthly`: one `value_type` per
+calculation, additive M EUR measures summed, growth as a ratio of sums,
+coverage % per product and market only. Results are `computed`,
+`unsupported` or `insufficient_data`, with units, filters, the query and
+source rows: `npx tsx src/services/semantic/cli.ts KPI-004 P-NUB DE
+2026-10-01` (add `--by-market` for one result per market).
 
 Code layout: `src/app` (page + `api/chat`), `src/components` (shell, dashboard,
 agentic chat), `src/lib` (catalog loader, shared types), `src/mastra` (agent +

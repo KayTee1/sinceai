@@ -11,6 +11,7 @@ import readXlsxFile from "read-excel-file/node";
 import { EXPECTED_ROW_COUNTS } from "../src/db/expected";
 import { importWorkbook } from "../src/db/import-workbook";
 import { openDb } from "../src/db/open";
+import { computeKpi } from "../src/services/semantic/compute";
 import { analyzeRequest } from "../src/services/steward/analyze";
 
 const PACK = process.env.PACK_XLSX;
@@ -84,5 +85,99 @@ describe("Bayer pack (local)", { skip }, () => {
       assert.ok(c.coverage.unknown.length > 0);
     }
     assert.notEqual(a.recommendation.kind, "clarify");
+  });
+
+  // T15: every cell recomputed with independent SQL; no pack values are
+  // written into this file.
+  type Cell = { p: string; m: string; month: string; vt: string; net: number; fc: number; mac: number; fvp: number; pvt: string | null; pnet: number | null };
+  async function cells(): Promise<Cell[]> {
+    const r = await db.execute(`
+      SELECT product_id AS p, market_id AS m, month, value_type AS vt,
+             net_sales_m_eur_syn AS net, forecast_m_eur_syn AS fc,
+             market_access_coverage_pct_syn AS mac, forecast_variance_pct AS fvp,
+             lag(value_type) OVER w AS pvt, lag(net_sales_m_eur_syn) OVER w AS pnet
+      FROM Product_Market_Monthly
+      WINDOW w AS (PARTITION BY product_id, market_id ORDER BY month)
+      ORDER BY 1, 2, 3`);
+    return r.rows as unknown as Cell[];
+  }
+  const ACTUAL = "actual_like_synthetic";
+  const close = (a: number | null, b: number, msg: string) => assert.ok(a !== null && Math.abs(a - b) < 1e-6, `${msg}: ${a} vs ${b}`);
+
+  it("T15: KPI-001, KPI-042 and KPI-027 match the source row for every actual-like cell, and nothing else", async () => {
+    const all = await cells();
+    assert.equal(all.length, 980);
+    for (const c of all) {
+      const where = { productIds: [c.p], marketIds: [c.m], month: c.month };
+      const [sales, variance, access] = await Promise.all(
+        ["KPI-001", "KPI-042", "KPI-027"].map((kpiId) => computeKpi(db, { kpiId, ...where })),
+      );
+      const msg = `${c.p}/${c.m}/${c.month}`;
+      if (c.vt !== ACTUAL) {
+        for (const r of [sales, variance, access]) assert.deepEqual([r.status, r.issues], ["insufficient_data", ["other_value_type"]], msg);
+        continue;
+      }
+      close(sales.value, c.net, `KPI-001 ${msg}`);
+      close(variance.value, c.net - c.fc, `KPI-042 ${msg}`);
+      close(access.value, c.mac, `KPI-027 ${msg}`);
+      // KPI-042 agrees with the pack's own forecast_variance_pct (1 decimal) where the forecast is positive.
+      if (c.fc > 0) assert.ok(Math.abs(((variance.value as number) / c.fc) * 100 - c.fvp) <= 0.051, `variance pct ${msg}`);
+    }
+  });
+
+  it("T15: KPI-004 is computed exactly when both months are actual-like with a positive prior", async () => {
+    let computed = 0;
+    for (const c of await cells()) {
+      const r = await computeKpi(db, { kpiId: "KPI-004", productIds: [c.p], marketIds: [c.m], month: c.month });
+      const msg = `${c.p}/${c.m}/${c.month}`;
+      const expected = c.vt === ACTUAL && c.pvt === ACTUAL && (c.pnet as number) > 0;
+      assert.equal(r.status, expected ? "computed" : "insufficient_data", msg);
+      if (expected) {
+        computed++;
+        close(r.value, ((c.net - (c.pnet as number)) / (c.pnet as number)) * 100, msg);
+      }
+    }
+    assert.ok(computed > 0);
+  });
+
+  it("T15: aggregates are ratios of sums or refused, never blended", async () => {
+    const all = await cells();
+    // Find a month where Nubeqa is actual-like in both months for at least two markets.
+    const pairs = all.filter((c) => c.p === "P-NUB" && c.vt === ACTUAL && c.pvt === ACTUAL && (c.pnet as number) > 0);
+    const month = pairs.map((c) => c.month).find((m) => pairs.filter((c) => c.month === m).length >= 2)!;
+    const group = pairs.filter((c) => c.month === month);
+    const r = await computeKpi(db, { kpiId: "KPI-004", productIds: ["P-NUB"], marketIds: group.map((c) => c.m), month });
+    const now = group.reduce((s, c) => s + c.net, 0);
+    const prior = group.reduce((s, c) => s + (c.pnet as number), 0);
+    close(r.value, ((now - prior) / prior) * 100, "ratio of sums");
+
+    const global = await computeKpi(db, { kpiId: "KPI-004", productIds: ["P-NUB"], marketIds: [...new Set(all.map((c) => c.m))], month: "2026-10-01" });
+    assert.equal(global.status, "insufficient_data"); // some markets are forecast-like; none are dropped
+    const access = await computeKpi(db, { kpiId: "KPI-027", productIds: ["P-NUB"], marketIds: group.map((c) => c.m), month });
+    assert.equal(access.status, "unsupported");
+  });
+
+  it("T15: REQ-0001 checks computability of KPI-004, KPI-042 and KPI-027 per country", async () => {
+    const a = await analyzeRequest(db, "REQ-0001", { product: "Nubeqa", market: "Global" });
+    assert.deepEqual(
+      a.computability.map((c) => [c.kpiId, c.probe?.month, c.probe?.byMarket.length]),
+      [
+        ["KPI-004", "2026-10-01", 14],
+        ["KPI-042", "2026-10-01", 14],
+        ["KPI-027", "2026-10-01", 14],
+      ],
+    );
+    for (const c of a.computability) {
+      const markets = c.probe!.byMarket;
+      const ok = markets.filter((m) => m.status === "computed").length;
+      assert.equal(c.status, ok === markets.length ? "computable" : ok > 0 ? "incomplete" : "insufficient_data", c.kpiId);
+      for (const m of markets) {
+        assert.equal(m.value !== null, m.status === "computed", `${c.kpiId} ${m.marketId}`);
+        const direct = await computeKpi(db, { kpiId: c.kpiId, productIds: c.probe!.productIds, marketIds: [m.marketId], month: c.probe!.month });
+        assert.deepEqual([m.value, m.filters, m.provenance], [direct.value, direct.filters, direct.provenance], `${c.kpiId} ${m.marketId}`);
+        if (m.status === "computed") assert.ok(m.provenance.rows.length > 0 && m.provenance.query !== null);
+      }
+    }
+    assert.notEqual(a.recommendation.kind, "build_proposal"); // assets map every metric
   });
 });

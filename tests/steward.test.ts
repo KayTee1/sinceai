@@ -136,15 +136,25 @@ describe("analyzeRequest", () => {
     }
   });
 
-  it("proposes a build only for a positive per-metric gap", async () => {
+  it("finds a positive per-metric gap but proposes no build for KPIs outside the computable mapping", async () => {
+    // T15: a build may use only KPIs in the computable mapping. The fixture's
+    // KPI IDs are not in D14, so the gap is reported and no build is proposed.
+    // The positive build path is covered in semantic.test.ts (REQ-S01).
     const a = await analyzeRequest(db, "REQ-T03");
-    assert.equal(a.recommendation.kind, "build_proposal");
+    assert.equal(a.recommendation.kind, "insufficient_evidence");
     assert.deepEqual(a.metricCoverage, [
       { canonicalMetric: "Net Sales", approvedKpiId: "KPI-B1", assetIds: ["AST-4"] },
       { canonicalMetric: "Forecast Variance", approvedKpiId: "KPI-E1", assetIds: [] },
     ]);
     assert.ok(a.recommendation.rationale.some((r) => r.includes("Forecast Variance (KPI-E1)")));
-    assert.ok(a.recommendation.rationale.some((r) => r.includes("Not yet checked")));
+    assert.deepEqual(
+      a.computability.map((c) => [c.kpiId, c.status]),
+      [
+        ["KPI-B1", "unsupported"],
+        ["KPI-E1", "unsupported"],
+      ],
+    );
+    assert.ok(a.recommendation.rationale.some((r) => r.includes("cannot deliver KPI-B1 (unsupported), KPI-E1 (unsupported)")));
   });
 
   it("returns insufficient_evidence when no metric is named", async () => {
