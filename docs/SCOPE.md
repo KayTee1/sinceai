@@ -41,8 +41,10 @@ stateDiagram-v2
   Personal --> LeaseEnd
   Team --> LeaseEnd
   Certified --> LeaseEnd
-  LeaseEnd --> OwnerReview: lease ends (90 days after promotion or renewal)
-  OwnerReview --> Renewed: renew (or reject retire/merge), same tier, new 90 days
+  LeaseEnd --> Renewed: used in the last 90 days, owner active (automatic, D21)
+  LeaseEnd --> OwnerReview: not used, retire proposal (D21)
+  LeaseEnd --> Escalated: used, but owner missing or inactive (Rule 8)
+  OwnerReview --> Renewed: owner rejects retire (keeps it), new 90 days
   Renewed --> LeaseEnd
   OwnerReview --> Merged: merge (redirect to target asset)
   OwnerReview --> Archived: retire
@@ -74,8 +76,19 @@ periods after the asset's `last_modified`. Pack edits run from 2026-01-01 to
 2026-10-28, so the first reviews arrive spread over the first 90 days instead
 of all on day 90.
 
-Owner review at lease end shows usage, owner status and overlap candidates,
-and proposes **renew / merge / retire**. Merge candidates are rule-based in P0
+At lease end the engine checks use (D21). **Used** means any in-app view in the
+last 90 days, or pack telemetry (`Asset_Usage`) averaging at least 10 monthly
+users over its latest 3 months; the pack ends Oct 2026, so its latest months
+stand in for current telemetry (production: live usage). A used asset with an
+active owner **renews automatically** for 90 days in the same tier, logged as a
+policy action; nobody has to approve it. A used asset without an active owner
+goes straight to the region's data steward (Rule 8). Only **unused** assets get
+an owner review. On the pack, a 90-day fast-forward renews about half the
+estate automatically (178), opens 134 retire reviews and sends 52 ownerless
+ones to stewards.
+
+Owner review of an unused asset shows usage, owner status and overlap
+candidates, and proposes **retire** (merge where a candidate exists). Merge candidates are rule-based in P0
 (D13): other active assets on the same semantic model with overlapping KPIs
 (`Asset_KPI_Map`); the owner picks the target. That shows the assets are
 related, not that one can replace the other, so a merge executes only when the

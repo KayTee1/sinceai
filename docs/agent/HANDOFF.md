@@ -2,10 +2,11 @@
 
 - **Now:** master has T14 (#14), T15 (#15), DB-path fix (#16), T5 lifecycle
   (#17), T8 lifecycle UI (#19), usage counts / D17 (#20), T17 build step
-  (#21), the F1 demo request / D18 (#22) and T18 data separation / D19 + D20
-  (#23). T16 is PR #18 (`feat/T16-mastra-steward-integration`), ready for
-  review with Viet requested. It is synced with master at `fb0f298` and
-  includes the T16A request source label. Codex review fixes are applied: the
+  (#21), the F1 demo request / D18 (#22), T18 data separation / D19 + D20
+  (#23) and D21 auto-renew (#24). T16 is PR #18
+  (`feat/T16-mastra-steward-integration`), approved by Viet. It is synced
+  with master at `1f4621a` (D21 / `lifecycle-v4`) and includes the T16A
+  request source label. Codex review fixes are applied: the
   compact view keeps the complete reuse match, and the provenance note is
   honest. Mastra tool adapters over the
   deterministic services, `src/mastra/tools/steward-tools.ts`
@@ -17,6 +18,11 @@
   orchestrator yet:** the tool map and prompt change is a proposal for Viet,
   `docs/agent/T16-orchestrator-proposal.md`. The orchestrator on master has
   only `get-business-request`, `search-assets` and `find-kpi-definitions`.
+  The live wiring is T16B (`feat/T16B-live-orchestrator`, stacked on #18).
+- **D21 auto-renew (`feat/auto-renew-used`, merged #24):** at lease end, used
+  assets (any app view in 90 days, or pack telemetry >= 10 users/month) with
+  an active owner renew automatically; unused ones get a retire proposal;
+  used but ownerless go straight to the steward. Policy `lifecycle-v4`.
 - **D19 + D20 (`feat/T18-data-separation`, merged #23):** Employees see only
   team dashboards (Commercial, Market Access, Supply Chain, Launch wallboards
   on the business facts + built insights). Managers: Team dashboards (with
