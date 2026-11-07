@@ -6,6 +6,8 @@ import { int, leaseLabel } from "@/lib/format";
 import { TierBadge } from "./tier-badge";
 import { useLifecycle } from "../lifecycle/lifecycle-context";
 import { AssetDetail } from "./asset-detail";
+import { TeamBoards } from "./team-boards";
+import { EstateOverview } from "./estate-overview";
 
 const FILTERS: { id: Tier | "all"; label: string }[] = [
   { id: "all", label: "All" },
@@ -14,7 +16,54 @@ const FILTERS: { id: Tier | "all"; label: string }[] = [
   { id: "personal", label: "Personal" },
 ];
 
+type Section = "teams" | "catalog" | "overview";
+
+// Dashboard tab (D20). Employees see only the team dashboards: simple boards on
+// the business facts. Managers also get the analytics catalog (metadata about
+// existing reports) and the estate overview; the two sources are never mixed (D19).
 export function DashboardView({ data, role }: { data: DashboardData; role: Role }) {
+  const [section, setSection] = useState<Section>("teams");
+  if (role === "employee") return <TeamBoards data={data} role={role} />;
+  const sections: { id: Section; label: string; note: string }[] = [
+    { id: "teams", label: "Team dashboards", note: "what employees see, with views" },
+    { id: "catalog", label: "Analytics catalog", note: "existing reports and dashboards" },
+    { id: "overview", label: "Estate overview", note: "usage, duplication, governance" },
+  ];
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <nav
+        className="flex shrink-0 items-end gap-1 border-b border-line bg-surface px-5 pt-2"
+        aria-label="Dashboard sections"
+      >
+        {sections.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => setSection(s.id)}
+            className={`-mb-px border-b-2 px-3 pb-2 pt-1 text-left ${
+              section === s.id ? "border-blue text-ink" : "border-transparent text-ink-3 hover:text-ink"
+            }`}
+          >
+            <div className="text-sm font-semibold">{s.label}</div>
+            <div className="text-[11px]">{s.note}</div>
+          </button>
+        ))}
+      </nav>
+      {section !== "teams" && <BeforeAfter />}
+      <div className="min-h-0 flex-1">
+        {section === "teams" && <TeamBoards data={data} role={role} />}
+        {section === "catalog" && <CatalogView data={data} role={role} />}
+        {section === "overview" && (
+          <div className="h-full overflow-y-auto">
+            <EstateOverview data={data} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CatalogView({ data, role }: { data: DashboardData; role: Role }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Tier | "all">("all");
   const [selectedId, setSelectedId] = useState(data.assets[0]?.id);
@@ -33,7 +82,6 @@ export function DashboardView({ data, role }: { data: DashboardData; role: Role 
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {role === "manager" && <BeforeAfter />}
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-[340px] shrink-0 flex-col border-r border-line bg-surface">
           <div className="space-y-3 border-b border-line p-4">

@@ -36,14 +36,14 @@ export const REQUIRED_COLUMNS: Record<string, string[]> = {
   Business_Requests: [
     "request_id", "request_date", "product_context", "market_context", "request_text", "urgency", "status", // S, M
   ],
-  Products: ["product_id", "product_name"], // S, A
+  Products: ["product_id", "product_name"], // S, A (dashboard also reads therapeutic_area, portfolio_stage)
   Markets: ["market_id", "market_name", "region"], // S, A
   Owners: ["owner_id", "owner_name", "status"], // S, A, M, L
   KPI_Catalog: [
     "kpi_id", "kpi_name", "canonical_metric", "unit", "definition_status", "approval_status", // S, K, M
     "description", // M
   ],
-  Semantic_Models: ["model_id", "refresh_status"], // S
+  Semantic_Models: ["model_id", "refresh_status"], // S (dashboard also reads name, type, endorsement, refresh, AI readiness, counts)
   Analytics_Assets: [
     "asset_id", "asset_name", "product_scope", "market_scope", "model_id", "owner_id", "lifecycle_status", "endorsement", // S, A, M
     "asset_type", "platform", "workspace_id", "last_modified", // A, M
@@ -52,6 +52,11 @@ export const REQUIRED_COLUMNS: Record<string, string[]> = {
   Workspaces: ["workspace_id", "workspace_name"], // A
   Asset_Usage: ["asset_id", "month", "views", "unique_users"], // A, L
   Lineage_Edges: ["source_id", "target_id", "edge_type"], // L
+  // A: estate metadata and business facts read by the dashboard (src/lib/catalog.ts).
+  Governance_Signals: ["signal_id", "asset_id", "signal_code", "severity", "status", "detected_by"],
+  Market_Access: ["product_id", "market_id", "reimbursement_status", "coverage_model", "coverage_pct_syn", "trend_status", "analytics_priority"],
+  Supply_Operations: ["product_id", "market_id", "supply_source", "primary_mode", "otif_pct_syn", "inventory_weeks_syn", "forecast_accuracy_pct_syn", "risk_status"],
+  Launch_Milestones: ["milestone_id", "product_id", "market_id", "milestone_type", "milestone_date", "status", "business_impact"],
   Product_Market_Monthly: [
     "product_id", "market_id", "month", "net_sales_m_eur_syn", "forecast_m_eur_syn",
     "market_access_coverage_pct_syn", // A, K

@@ -15,7 +15,8 @@ export function formatMonth(iso: string) {
 }
 
 export function eurM(v: number, digits = 1) {
-  return `€${v.toLocaleString("en-GB", { minimumFractionDigits: digits, maximumFractionDigits: digits })}m`;
+  const n = Math.abs(v).toLocaleString("en-GB", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return `${v < 0 ? "−" : ""}€${n}m`;
 }
 
 export function pct(v: number, digits = 1) {

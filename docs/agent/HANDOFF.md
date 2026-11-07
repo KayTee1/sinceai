@@ -2,10 +2,10 @@
 
 - **Now:** master has T14 (#14), T15 (#15), DB-path fix (#16), T5 lifecycle
   (#17), T8 lifecycle UI (#19), usage counts / D17 (#20), T17 build step
-  (#21) and the F1 demo request / D18 (#22). Viet's T18 data separation
-  (D19) is open as PR #23.
-  T16 is draft PR #18 (`feat/T16-mastra-steward-integration`). Master was
-  merged into it locally (not pushed). Codex review fixes are applied: the
+  (#21), the F1 demo request / D18 (#22) and T18 data separation / D19 + D20
+  (#23). T16 is PR #18 (`feat/T16-mastra-steward-integration`), ready for
+  review with Viet requested. It is synced with master at `fb0f298` and
+  includes the T16A request source label. Codex review fixes are applied: the
   compact view keeps the complete reuse match, and the provenance note is
   honest. Mastra tool adapters over the
   deterministic services, `src/mastra/tools/steward-tools.ts`
@@ -17,6 +17,13 @@
   orchestrator yet:** the tool map and prompt change is a proposal for Viet,
   `docs/agent/T16-orchestrator-proposal.md`. The orchestrator on master has
   only `get-business-request`, `search-assets` and `find-kpi-definitions`.
+- **D19 + D20 (`feat/T18-data-separation`, merged #23):** Employees see only
+  team dashboards (Commercial, Market Access, Supply Chain, Launch wallboards
+  on the business facts + built insights). Managers: Team dashboards (with
+  views / viewers / last 30 days per board) | Analytics catalog
+  (metadata-only asset pages) | Estate overview. Team boards are lifecycle
+  assets (`origin = 'team'`, `DSH-*`), seeded insert-or-ignore. Loader in
+  `src/lib/catalog.ts` keeps `estate` and `business` apart.
 - **T17 build step (Viet / Claude, merged #21):**
   `src/services/build` turns an analysis that recommends a build into a
   `build_temporary` proposal (Leads in the requester's region, never the
@@ -54,8 +61,14 @@
      found. Both sides are now on master, so this is live. It needs a
      contract decision with Viet: exclude `archived`, include app-built
      assets, and use app tier instead of `endorsement`; in discovery or via a
-     lifecycle query. Add regression tests.
-  2. Fixed (T16A, local commit): the `analyze-request` view now keeps
+     lifecycle query. Add regression tests. The D20 team boards (`DSH-*`,
+     `origin = 'team'`) are also only in `asset_state`, so discovery does not
+     see them either.
+  2. Build-service provenance (T17 owner, not T16):
+     `src/services/build/build.ts:149` hardcodes
+     `{ sheet: "Business_Requests" }`, so a TEAM-REQ-01 build proposal cites
+     the Bayer sheet instead of `Team_Requests (team-authored)`.
+  3. Fixed (T16A, `597b79b`): the `analyze-request` view now keeps
      `request.sourceSheet` and `request.teamAuthored` (no row), so
      TEAM-REQ-01 stays labelled team-authored in model and UI output.
 - **Measured (pack):** for REQ-0001 Nubeqa / Global, the full analysis is
@@ -78,9 +91,9 @@
   provisional until Viet agrees.
 - **Needs:** `ANTHROPIC_API_KEY` in `.env.local` for any live chat run (none
   done for T16).
-- **Next:** push the T16 merge + T16A and get PR #18 reviewed. Then fix the
-  discovery issue above with Viet, and wire the steward tools plus a
-  build-proposal tool (`proposeBuild`) into the orchestrator.
+- **Next:** Viet reviews PR #18. Then fix the discovery issue above with
+  Viet, and wire the steward tools plus a build-proposal tool
+  (`proposeBuild`) into the orchestrator.
 - **Open:** one agent vs. three (D11/R17); free-text requests have no
   governed entry point; IP / external AI terms (more catalog data reaches
   Anthropic once wired); meaning of `value_type` per row vs. per column;

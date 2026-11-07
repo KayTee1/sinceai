@@ -213,7 +213,8 @@ describe("portfolio counts", () => {
   it("compares the seeded state with now and counts applied changes", async () => {
     const start = await getPortfolioCounts(db);
     assert.deepEqual(start.before, start.now);
-    assert.deepEqual(start.before, { certified: 1, team: 1, personal: 4, temporary: 0, archived: 0, underReview: 0 });
+    // 1 certified pack asset + 4 team dashboards (D20)
+    assert.deepEqual(start.before, { certified: 5, team: 1, personal: 4, temporary: 0, archived: 0, underReview: 0 });
 
     await advance(7); // AST-LOW review opens
     const p = (await listPendingProposals(db)).find((x) => x.assetIds[0] === "AST-LOW")!;

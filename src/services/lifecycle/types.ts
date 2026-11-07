@@ -7,7 +7,7 @@ export type AssetStatus = "active" | "lease_due" | "archived";
 
 export type AssetState = {
   assetId: string;
-  origin: "pack" | "app";
+  origin: "pack" | "app" | "team";
   name: string | null; // only for app-created assets; pack names stay in Analytics_Assets
   ownerId: string | null;
   tier: Tier;

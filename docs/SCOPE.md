@@ -187,9 +187,12 @@ under that identity. This is simulated, not real authentication.
 
 **Employee: as simple as possible.** Sees only the Dashboard tab; the
 Agentic tab is hidden. A small **"viewing as"** picker selects a simulated
-person from the pack's owners (D13). Browses existing dashboards (certified
-first), each with tier badge, owner and expiry. Opening a dashboard logs an app
-usage event for that person (feeds promotion). App events are stored separately from Bayer's imported usage
+person from the pack's owners (D13). Sees only **team dashboards** (D20):
+Commercial, Market Access, Supply Chain and Launch wallboards on the pack's
+business facts (big KPI tiles, four charts), plus built insights. No catalog
+metadata. Opening a board logs one app usage event for that person; managers
+see those views per board to judge relevance, and the boards' 90-day lease
+reviews use them as evidence. App events are stored separately from Bayer's imported usage
 and never added to it.
 Clicking a chart or number opens a simple lineage view (D6). Employees do not
 ask the agents questions.
