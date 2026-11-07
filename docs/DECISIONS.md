@@ -212,3 +212,30 @@ Alternatives considered: one picked lead per region; silent reuse; review
 stays open after a rejection; restore Temporary as Personal; Lead reassigns
 owners; owner moves up on promotion; no build order; no test set.
 Agreed by: KayTee; Viet pending
+
+D15: KPI computation policies for T15 (2026-11-07)
+Status: proposed / pending owner approval (KayTee, Viet). Refines D14; the
+D14 mapping itself is still proposed.
+Choice and why:
+- Value types: `Product_Market_Monthly` labels each row actual-like or
+  forecast-like. One `value_type` per calculation, `actual_like_synthetic`
+  by default; forecast-like only on request and labelled (DATA_SOURCES:
+  don't blend). A row of the other type makes the result insufficient_data;
+  it is never dropped from an aggregate, which would change the population.
+- Aggregation: M EUR measures are summed; growth is a ratio of sums over the
+  same cells; coverage % is computed per product and market only, because
+  the pack has no weights (SCOPE: percentages are never summed).
+- Latest-month probe: the steward analysis checks computability per market
+  at the latest month in the pack (not of the scope, so missing recent rows
+  show), on actual-like rows, and reports statuses, values and provenance.
+  It approves and builds nothing.
+- Every-market build gate: a build is proposed only when every requested
+  approved KPI computes for every requested market; otherwise the result is
+  insufficient_evidence with per-market reasons (SCOPE: builds use the
+  computable mapping only).
+- Known effect: on the pack, no real request reaches a build proposal
+  (REVIEW F1); the demo strategy is an open owner decision.
+Alternatives considered: blend value types; drop mismatched cells; average
+percentages; probe the scope's own latest month; allow a build when some
+markets compute (partial build).
+Agreed by: pending (proposed by KayTee / Claude Code)

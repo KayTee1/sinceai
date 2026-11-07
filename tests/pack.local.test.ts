@@ -171,7 +171,12 @@ describe("Bayer pack (local)", { skip }, () => {
       const markets = c.probe!.byMarket;
       const ok = markets.filter((m) => m.status === "computed").length;
       assert.equal(c.status, ok === markets.length ? "computable" : ok > 0 ? "incomplete" : "insufficient_data", c.kpiId);
-      for (const m of markets) assert.equal(m.value !== null, m.status === "computed", `${c.kpiId} ${m.marketId}`);
+      for (const m of markets) {
+        assert.equal(m.value !== null, m.status === "computed", `${c.kpiId} ${m.marketId}`);
+        const direct = await computeKpi(db, { kpiId: c.kpiId, productIds: c.probe!.productIds, marketIds: [m.marketId], month: c.probe!.month });
+        assert.deepEqual([m.value, m.filters, m.provenance], [direct.value, direct.filters, direct.provenance], `${c.kpiId} ${m.marketId}`);
+        if (m.status === "computed") assert.ok(m.provenance.rows.length > 0 && m.provenance.query !== null);
+      }
     }
     assert.notEqual(a.recommendation.kind, "build_proposal"); // assets map every metric
   });

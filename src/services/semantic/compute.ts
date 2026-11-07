@@ -17,7 +17,8 @@ import { isApprovedCanonical } from "../steward/kpis";
 import { D14_MAPPING, D14_NOT_IMPLEMENTED, MAPPING_LABEL, type FactColumn, type MappingEntry, type Method } from "./d14-mapping";
 import { DEFAULT_VALUE_TYPE, VALUE_TYPES, type DataIssue, type KpiQuery, type KpiResult, type ValueType } from "./types";
 
-const MONTH = /^(\d{4})-(\d{2})-01$/;
+/** A calendar month as stored: "YYYY-MM-01" with MM from 01 to 12. */
+const MONTH = /^(\d{4})-(0[1-9]|1[0-2])-01$/;
 const SHEET = "Product_Market_Monthly";
 
 export class InvalidKpiQueryError extends Error {}

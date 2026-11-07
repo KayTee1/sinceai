@@ -98,6 +98,8 @@ export async function checkComputability(
           unit: r.unit,
           issues: r.issues,
           reasons: r.reasons,
+          filters: r.filters,
+          provenance: r.provenance,
         })),
       },
       reasons,

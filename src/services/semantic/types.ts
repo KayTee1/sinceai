@@ -82,8 +82,12 @@ export type KpiComputability = {
     month: string;
     valueType: ValueType;
     productIds: string[];
-    /** Every requested market, including the successful values. */
-    byMarket: { marketId: string; status: ComputeStatus; value: number | null; unit: string | null; issues: DataIssue[]; reasons: string[] }[];
+    /**
+     * Every requested market, including the successful values. filters and
+     * provenance are copied unchanged from computeKpi for that market, so each
+     * value traces to its formula, catalog row, query and source rows.
+     */
+    byMarket: ({ marketId: string } & Pick<KpiResult, "status" | "value" | "unit" | "issues" | "reasons" | "filters" | "provenance">)[];
   } | null;
   reasons: string[];
 };

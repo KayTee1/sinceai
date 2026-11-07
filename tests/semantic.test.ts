@@ -190,7 +190,24 @@ describe("inputs and helpers", () => {
 
   it("finds the prior month across a year boundary", () => {
     assert.equal(priorMonth("2026-01-01"), "2025-12-01");
+    assert.equal(priorMonth("2026-12-01"), "2026-11-01");
     assert.equal(priorMonth("2026-10-01"), "2026-09-01");
+  });
+
+  it("regression: rejects calendar months outside 01-12 instead of reporting missing data", async () => {
+    for (const month of ["2026-00-01", "2026-13-01", "2026-1-01", "2026-10-02"]) {
+      assert.throws(() => priorMonth(month), InvalidKpiQueryError, month);
+      for (const kpiId of ["KPI-001", "KPI-004"]) {
+        await assert.rejects(computeKpi(db, { ...q(kpiId, ["P-ALP"], ["DE"]), month }), InvalidKpiQueryError, `${kpiId} ${month}`);
+      }
+    }
+  });
+
+  it("accepts January and asks for the previous December", async () => {
+    const r = await computeKpi(db, { ...q("KPI-004", ["P-ALP"], ["DE"]), month: "2026-01-01" });
+    assert.equal(r.filters.priorMonth, "2025-12-01");
+    assert.equal(r.status, "insufficient_data"); // valid input; the fixture simply has no such rows
+    assert.deepEqual(r.provenance.query?.args, ["P-ALP", "DE", "2025-12-01", "2026-01-01"]);
   });
 
   it("maps exactly the KPIs REQ-0001 needs plus their base", () => {
@@ -239,6 +256,46 @@ describe("computability in the steward analysis", () => {
     const units = a.computability.find((c) => c.kpiId === "KPI-014")!;
     assert.equal(units.status, "unsupported");
     assert.ok(a.recommendation.rationale.some((r) => r.includes("cannot deliver KPI-014 (unsupported)")));
+  });
+
+  it("regression: analysis-level per-market results carry the same provenance as computeKpi", async () => {
+    for (const id of ["REQ-S01", "REQ-S04"]) {
+      const a = await analyzeRequest(db, id);
+      for (const c of a.computability) {
+        for (const m of c.probe!.byMarket) {
+          const direct = await computeKpi(db, {
+            kpiId: c.kpiId,
+            productIds: c.probe!.productIds,
+            marketIds: [m.marketId],
+            month: c.probe!.month,
+            valueType: c.probe!.valueType,
+          });
+          const { marketId, ...fromAnalysis } = m;
+          assert.equal(marketId, direct.filters.marketIds[0]);
+          assert.deepEqual(fromAnalysis, {
+            status: direct.status,
+            value: direct.value,
+            unit: direct.unit,
+            issues: direct.issues,
+            reasons: direct.reasons,
+            filters: direct.filters,
+            provenance: direct.provenance,
+          }, `${id} ${c.kpiId} ${marketId}`);
+        }
+      }
+    }
+    // A computed value is traceable without rerunning: formula, catalog row, query and source rows.
+    const a = await analyzeRequest(db, "REQ-S01");
+    const de = a.computability.find((c) => c.kpiId === "KPI-004")!.probe!.byMarket.find((m) => m.marketId === "DE")!;
+    assert.equal(de.value, 25);
+    assert.match(de.provenance.formula!, /Net Sales Growth =/);
+    assert.deepEqual(de.provenance.catalog, { sheet: "KPI_Catalog", row: 3, id: "KPI-004" });
+    assert.deepEqual(de.provenance.query?.args, ["P-ALP", "DE", "2026-09-01", OCT]);
+    assert.deepEqual(de.provenance.rows, [
+      { sheet: "Product_Market_Monthly", row: 2, id: "P-ALP|DE|2026-09-01" },
+      { sheet: "Product_Market_Monthly", row: 3, id: "P-ALP|DE|2026-10-01" },
+    ]);
+    assert.deepEqual(de.filters, { productIds: ["P-ALP"], marketIds: ["DE"], month: OCT, priorMonth: "2026-09-01", valueType: "actual_like_synthetic" });
   });
 
   it("regression: one of three markets computable is incomplete and blocks a governed build", async () => {
