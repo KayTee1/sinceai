@@ -7,7 +7,7 @@
 import type { Client } from "@libsql/client";
 import { ALL_PRODUCTS, GLOBAL, type Vocabulary } from "../steward/requests";
 import type { Scope } from "../steward/types";
-import { computeKpiByMarket, mappingFor } from "./compute";
+import { computeKpiByMarket, latestFactMonth, mappingFor } from "./compute";
 import { DEFAULT_VALUE_TYPE, type DataIssue, type KpiComputability } from "./types";
 
 const ISSUE_TEXT: Record<DataIssue, string> = {
@@ -36,15 +36,11 @@ export async function checkComputability(
   vocab: Vocabulary,
 ): Promise<KpiComputability[]> {
   const ids = scopeIds(scope, vocab);
-  // Latest month of the whole fact table, not of the scope: a scope whose
-  // newest rows are missing must show that gap, not fall back to older data.
-  // Read only when a KPI is mapped, so unsupported KPIs never touch the facts.
+  // Latest month of the whole fact table (latestFactMonth), read only when a
+  // KPI is mapped, so unsupported KPIs never touch the facts.
   let month: string | null | undefined;
   const latestMonth = async () => {
-    if (month === undefined) {
-      const latest = await db.execute(`SELECT max(month) AS month FROM Product_Market_Monthly`);
-      month = latest.rows[0]?.month ? String(latest.rows[0].month) : null;
-    }
+    if (month === undefined) month = await latestFactMonth(db);
     return month;
   };
 
