@@ -201,12 +201,17 @@ under that identity. This is simulated, not real authentication.
 
 **Employee: as simple as possible.** Sees only the Dashboard tab; the
 Agentic tab is hidden. A small **"viewing as"** picker selects a simulated
-person from the pack's owners (D13). Sees only **team dashboards** (D20):
-Commercial, Market Access, Supply Chain and Launch wallboards on the pack's
-business facts (big KPI tiles, four charts), plus built insights. No catalog
-metadata. Opening a board logs one app usage event for that person; managers
-see those views per board to judge relevance, and the boards' 90-day lease
-reviews use them as evidence. App events are stored separately from Bayer's imported usage
+person from the pack's owners (D13). Sees **their team's dashboards** (D22):
+the team (Commercial, Finance, Market Access, Supply Chain, Launch Excellence
+or BI Governance, plus a region) comes from the person's role and region and
+can be switched. The list holds the real catalog dashboards whose primary KPIs
+belong to that domain, in that region or Global, certified first. Opening one
+fills the screen with a wallboard (big tiles, two charts) built from that
+dashboard's own KPIs over the pack's facts for its product and market;
+unapproved KPI variants it uses are flagged. The pack has no report layouts,
+so the layout is ours and labelled. Each open logs one app view on that real
+dashboard; managers see views per dashboard, and its lease review uses them
+(D21). App events are stored separately from Bayer's imported usage
 and never added to it.
 Clicking a chart or number opens a simple lineage view (D6). Employees do not
 ask the agents questions.

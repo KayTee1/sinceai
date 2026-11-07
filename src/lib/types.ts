@@ -25,6 +25,10 @@ export type AssetSummary = {
   origin: "pack" | "app";
   modelId: string | null;
   estimatedAudience: number | null;
+  /** Team domain: the most common domain among the asset's primary KPIs (D22). */
+  domain: string | null;
+  /** Region of the market scope, or "Global". */
+  region: string;
   /** KPIs the catalog maps to this asset (Asset_KPI_Map + KPI_Catalog). */
   kpis: AssetKpi[];
   /** Governance_Signals rows for this asset. */
@@ -34,6 +38,7 @@ export type AssetSummary = {
 export type AssetKpi = {
   id: string;
   name: string;
+  domain: string; // KPI_Catalog.domain: Commercial, Finance, Market Access, Supply Chain, Launch Excellence, BI Governance
   role: string; // primary | secondary
   canonicalMetric: string;
   definitionStatus: string;
@@ -58,7 +63,7 @@ export type SemanticModel = {
 /** Analytics estate: metadata about analytics products. Never business performance. */
 export type EstateData = {
   models: Record<string, SemanticModel>;
-  kpiCatalog: { id: string; name: string; canonicalMetric: string; definitionStatus: string; approvalStatus: string }[];
+  kpiCatalog: { id: string; name: string; canonicalMetric: string; domain: string; definitionStatus: string; approvalStatus: string }[];
 };
 
 export type Product = { id: string; name: string; therapeuticArea: string; stage: string };
