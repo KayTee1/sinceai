@@ -72,6 +72,11 @@ async function defaultRequester(db: Client, region: string): Promise<string | nu
   return (r.rows[0]?.owner_id as string | undefined) ?? null;
 }
 
+/** D12 requester for a scope's market: our labelled team mapping, shared by builds and reuse confirmations. */
+export async function mappedRequester(db: Client, market: string): Promise<string | null> {
+  return defaultRequester(db, await scopeRegion(db, market));
+}
+
 async function ownerRow(db: Client, id: string) {
   const r = await db.execute({ sql: `SELECT owner_id, scope, status FROM Owners WHERE owner_id = ?`, args: [id] });
   return r.rows[0];

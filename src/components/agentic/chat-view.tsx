@@ -4,50 +4,83 @@ import { useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import ReactMarkdown from "react-markdown";
+import type { AnalysisView, KpiChecksView } from "@/mastra/tools/steward-views";
+import type { BuildProposalView } from "@/mastra/tools/build-tools";
+import type { ProposalListView } from "@/mastra/tools/inbox-tools";
 import { useLifecycle } from "../lifecycle/lifecycle-context";
+import { AnalysisCards, BuildProposalCards, KpiChecksCards, ProposalListCards } from "./chat-cards";
 
 const SUGGESTIONS = [
   { title: "Run business request REQ-0001", prompt: "Handle business request REQ-0001." },
   { title: "Run team demo request TEAM-REQ-01", prompt: "Handle business request TEAM-REQ-01." },
-  { title: "Find existing Nubeqa sales dashboards", prompt: "Is there already a dashboard for Nubeqa net sales vs forecast in Germany?" },
+  { title: "What's waiting for approval?", prompt: "What's waiting for approval?" },
   { title: "Check the Net Sales definition", prompt: "Which Net Sales KPI should we use, and are there conflicting definitions?" },
 ];
 
-// Tool calls are shown as pipeline steps. Keys cover both tool ids and agent tool names.
-const STEP_LABEL: Record<string, { agent: string; action: string }> = {
-  "get-business-request": { agent: "Orchestrator", action: "Loaded business request" },
-  getBusinessRequest: { agent: "Orchestrator", action: "Loaded business request" },
-  "search-assets": { agent: "Discovery", action: "Searched existing assets" },
-  searchAssets: { agent: "Discovery", action: "Searched existing assets" },
-  "find-kpi-definitions": { agent: "Conflict detector", action: "Compared KPI definitions" },
-  findKpiDefinitions: { agent: "Conflict detector", action: "Compared KPI definitions" },
-  // T16B governed tools (deterministic services).
-  "analyze-request": { agent: "Steward", action: "Analysed business request" },
-  analyzeRequest: { agent: "Steward", action: "Analysed business request" },
-  "compute-kpi": { agent: "Semantic layer", action: "Computed KPI" },
-  computeKpi: { agent: "Semantic layer", action: "Computed KPI" },
-  "check-kpi-definitions": { agent: "Conflict detector", action: "Checked KPI definitions" },
-  checkKpiDefinitions: { agent: "Conflict detector", action: "Checked KPI definitions" },
-  "propose-build": { agent: "Build", action: "Build proposal for approval" },
-  proposeBuild: { agent: "Build", action: "Build proposal for approval" },
+// Short, plain step names. Keys cover both tool ids and agent tool names.
+const STEP: Record<string, string> = {
+  "get-business-request": "Loaded the request",
+  getBusinessRequest: "Loaded the request",
+  "search-assets": "Searched assets",
+  searchAssets: "Searched assets",
+  "find-kpi-definitions": "Looked up KPI definitions",
+  findKpiDefinitions: "Looked up KPI definitions",
+  "analyze-request": "Checked the catalog",
+  analyzeRequest: "Checked the catalog",
+  "compute-kpi": "Computed the KPI",
+  computeKpi: "Computed the KPI",
+  "check-kpi-definitions": "Checked KPI definitions",
+  checkKpiDefinitions: "Checked KPI definitions",
+  "propose-build": "Submitted for approval",
+  proposeBuild: "Submitted for approval",
+  "list-pending-proposals": "Read the approval inbox",
+  listPendingProposals: "Read the approval inbox",
 };
 
-const PROPOSE_TOOLS = new Set(["propose-build", "proposeBuild"]);
+type ToolPart = { id: string; name: string; state: string; output?: unknown };
 
-/** Tool call IDs of build proposals stored in this chat (the inbox should show them). */
+function toolPart(part: UIMessage["parts"][number], i: number): ToolPart | null {
+  const p = part as { type: string; toolName?: string; toolCallId?: string; state?: string; output?: unknown };
+  const name = p.type === "dynamic-tool" ? p.toolName : p.type.startsWith("tool-") ? p.type.slice(5) : undefined;
+  if (!name) return null;
+  return { id: p.toolCallId ?? String(i), name, state: p.state ?? "", output: p.output };
+}
+
+function toolParts(m: UIMessage): ToolPart[] {
+  return m.parts.flatMap((part, i) => {
+    const t = toolPart(part, i);
+    return t ? [t] : [];
+  });
+}
+
+const viewOf = (t: ToolPart) => (t.state === "output-available" ? (t.output as { view?: string } | undefined)?.view : undefined);
+
+/** Proposals stored in this chat (tool call IDs), so the side inbox can re-read once per new one. */
 function storedProposalCalls(messages: UIMessage[]): string[] {
-  const ids: string[] = [];
-  for (const m of messages) {
-    for (const part of m.parts) {
-      const p = part as { type: string; toolName?: string; toolCallId?: string; state?: string; output?: unknown };
-      const name = p.type === "dynamic-tool" ? p.toolName : p.type.startsWith("tool-") ? p.type.slice(5) : undefined;
-      const status = (p.output as { status?: unknown } | undefined)?.status;
-      if (name && PROPOSE_TOOLS.has(name) && p.state === "output-available" && p.toolCallId && status === "proposed") {
-        ids.push(p.toolCallId);
-      }
+  return messages.flatMap((m) =>
+    toolParts(m)
+      .filter((t) => viewOf(t) === "build-proposal/v1" && (t.output as { status?: string }).status === "proposed")
+      .map((t) => t.id),
+  );
+}
+
+/** Follow-up chips for the latest answer, from what its tools returned. */
+function followUps(m: UIMessage): string[] {
+  const chips: string[] = [];
+  for (const t of toolParts(m)) {
+    const view = viewOf(t);
+    if (view === "steward-analysis/v1") {
+      const a = t.output as AnalysisView;
+      if (a.kpiChecks.some((k) => k.conflict)) chips.push(`Why are the KPI definitions for ${a.request.id} in conflict?`);
+      if (a.recommendation.kind === "reuse_candidates") chips.push(`What is unknown about the top candidate for ${a.request.id}?`);
+    }
+    if (view === "build-proposal/v1" && ["proposed", "already_proposed"].includes((t.output as { status: string }).status)) {
+      chips.push("What else is waiting for approval?");
     }
   }
-  return ids;
+  if (!chips.some((c) => c.includes("waiting"))) chips.push("What's waiting for approval?");
+  chips.push("Any escalated reviews?");
+  return [...new Set(chips)].slice(0, 3);
 }
 
 export function ChatView() {
@@ -79,6 +112,8 @@ export function ChatView() {
     setInput("");
   }
 
+  const last = messages.at(-1);
+
   return (
     <div className="flex h-full flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -88,9 +123,10 @@ export function ChatView() {
           ) : (
             <div className="space-y-6">
               {messages.map((m) => (
-                <Message key={m.id} message={m} />
+                <Message key={m.id} message={m} send={send} busy={busy} />
               ))}
               {status === "submitted" && <Thinking />}
+              {!busy && last?.role === "assistant" && <Chips items={followUps(last)} onPick={send} />}
             </div>
           )}
           {error && (
@@ -120,7 +156,7 @@ export function ChatView() {
               }
             }}
             rows={1}
-            placeholder="Describe what you need, or give a request ID (e.g. REQ-0001)"
+            placeholder="Ask about a request (e.g. REQ-0001), a KPI, or what's waiting for approval"
             className="max-h-40 min-h-[44px] flex-1 resize-none rounded-sm border border-line-strong px-3 py-2.5 text-sm placeholder:text-ink-3 focus:border-blue focus:outline-none focus:ring-2 focus:ring-blue/20"
           />
           {busy ? (
@@ -142,7 +178,7 @@ export function ChatView() {
           )}
         </form>
         <p className="mx-auto max-w-[760px] px-6 pb-3 text-[11px] text-ink-3">
-          Agents only propose; a human decides. Answers use synthetic challenge data.
+          I only propose; a person approves. Answers use synthetic challenge data.
         </p>
       </div>
     </div>
@@ -152,13 +188,13 @@ export function ChatView() {
 function Empty({ onPick }: { onPick: (prompt: string) => void }) {
   return (
     <div className="pt-10">
-      <div className="label">Agentic</div>
+      <div className="label">Analytics Steward</div>
       <h1 className="mt-2 text-2xl font-semibold tracking-tight">Ask before you build.</h1>
       <p className="mt-2 max-w-[560px] text-sm text-ink-2">
-        The steward searches what already exists, checks KPI definitions for conflicts, and recommends reuse
-        before anything new gets built.
+        Give me a request and I&apos;ll tell you whether something already answers it, which KPI definition to trust, and
+        what&apos;s waiting for your decision.
       </p>
-      <div className="mt-6 grid gap-2">
+      <div className="mt-6 grid gap-2 sm:grid-cols-2">
         {SUGGESTIONS.map((s) => (
           <button
             key={s.title}
@@ -166,10 +202,7 @@ function Empty({ onPick }: { onPick: (prompt: string) => void }) {
             onClick={() => onPick(s.prompt)}
             className="group flex items-center justify-between rounded-sm border border-line bg-surface px-4 py-3 text-left text-sm hover:border-blue"
           >
-            <span>
-              <span className="font-medium">{s.title}</span>
-              <span className="mt-0.5 block text-xs text-ink-3">{s.prompt}</span>
-            </span>
+            <span className="font-medium">{s.title}</span>
             <span className="text-ink-3 group-hover:text-blue" aria-hidden>
               →
             </span>
@@ -180,7 +213,7 @@ function Empty({ onPick }: { onPick: (prompt: string) => void }) {
   );
 }
 
-function Message({ message }: { message: UIMessage }) {
+function Message({ message, send, busy }: { message: UIMessage; send: (t: string) => void; busy: boolean }) {
   if (message.role === "user") {
     const text = message.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
     return (
@@ -190,48 +223,88 @@ function Message({ message }: { message: UIMessage }) {
     );
   }
 
+  const tools = toolParts(message);
+  const text = message.parts.map((p) => (p.type === "text" ? p.text : "")).join("\n\n").trim();
   return (
     <div className="space-y-3">
-      <div className="label">Analytics Steward</div>
-      {message.parts.map((part, i) => {
-        if (part.type === "text") {
-          return part.text ? (
-            <div key={i} className="prose-steward text-sm leading-relaxed text-ink">
-              <ReactMarkdown>{part.text}</ReactMarkdown>
-            </div>
-          ) : null;
-        }
-        if (part.type === "dynamic-tool") {
-          return <Step key={i} name={part.toolName} state={part.state} output={part.output} />;
-        }
-        if (part.type.startsWith("tool-")) {
-          const p = part as { type: string; state: string; output?: unknown };
-          return <Step key={i} name={p.type.slice(5)} state={p.state} output={p.output} />;
-        }
-        return null;
-      })}
+      {tools.length > 0 && <Steps tools={tools} />}
+      {text && (
+        <div className="prose-steward text-sm leading-relaxed text-ink">
+          <ReactMarkdown>{text}</ReactMarkdown>
+        </div>
+      )}
+      {tools.map((t) => (
+        <ToolCards key={t.id} t={t} send={send} busy={busy} />
+      ))}
     </div>
   );
 }
 
-function Step({ name, state, output }: { name: string; state: string; output?: unknown }) {
-  const label = STEP_LABEL[name] ?? { agent: "Agent", action: name };
-  const done = state === "output-available";
-  const failed = state === "output-error";
+function ToolCards({ t, send, busy }: { t: ToolPart; send: (t: string) => void; busy: boolean }) {
+  switch (viewOf(t)) {
+    case "steward-analysis/v1":
+      return <AnalysisCards v={t.output as AnalysisView} send={send} busy={busy} />;
+    case "kpi-checks/v1":
+      return <KpiChecksCards v={t.output as KpiChecksView} />;
+    case "build-proposal/v1":
+      return <BuildProposalCards v={t.output as BuildProposalView} />;
+    case "proposal-list/v1":
+      return <ProposalListCards v={t.output as ProposalListView} />;
+    default:
+      return null;
+  }
+}
+
+/** One quiet line for all tool steps; expands to the list. */
+function Steps({ tools }: { tools: ToolPart[] }) {
+  const [open, setOpen] = useState(false);
+  const running = tools.some((t) => t.state !== "output-available" && t.state !== "output-error");
+  const failed = tools.filter((t) => t.state === "output-error").length;
+  const names = [...new Set(tools.map((t) => STEP[t.name] ?? t.name))];
   return (
-    <div className="flex items-center gap-3 rounded-sm border border-line bg-surface px-3 py-2 text-xs">
-      <StatusDot done={done} failed={failed} />
-      <span className="w-[120px] shrink-0 font-semibold text-ink">{label.agent}</span>
-      <span className="flex-1 text-ink-2">{label.action}</span>
-      <span className="tabular text-ink-3">{failed ? "failed" : done ? summarize(output) : "running…"}</span>
+    <div className="text-xs text-ink-3">
+      <button type="button" onClick={() => setOpen(!open)} className="flex items-center gap-2 hover:text-ink-2">
+        <span
+          className={`h-1.5 w-1.5 rounded-full ${running ? "animate-pulse bg-sky" : failed ? "bg-danger" : "bg-green"}`}
+          aria-hidden
+        />
+        <span>
+          {running ? `${names.at(-1)}…` : names.join(" · ")}
+          {failed ? ` · ${failed} failed` : ""}
+        </span>
+        <span aria-hidden>{open ? "▴" : "▾"}</span>
+      </button>
+      {open && (
+        <ul className="mt-1.5 space-y-0.5 border-l border-line pl-3">
+          {tools.map((t) => (
+            <li key={t.id} className="flex gap-2">
+              <span className="text-ink-2">{STEP[t.name] ?? t.name}</span>
+              <span className="tabular">
+                {t.state === "output-error" ? "failed" : t.state === "output-available" ? summarize(t.output) : "running…"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
 
-function StatusDot({ done, failed }: { done: boolean; failed: boolean }) {
-  if (failed) return <span className="h-2 w-2 rounded-full bg-danger" aria-label="failed" />;
-  if (done) return <span className="h-2 w-2 rounded-full bg-green" aria-label="done" />;
-  return <span className="h-2 w-2 animate-pulse rounded-full bg-sky" aria-label="running" />;
+function Chips({ items, onPick }: { items: string[]; onPick: (t: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {items.map((c) => (
+        <button
+          key={c}
+          type="button"
+          onClick={() => onPick(c)}
+          className="rounded-full border border-line-strong bg-surface px-3 py-1 text-xs text-ink-2 hover:border-blue hover:text-blue"
+        >
+          {c}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function summarize(output: unknown): string {
@@ -239,24 +312,21 @@ function summarize(output: unknown): string {
   const o = output as Record<string, unknown>;
   if (o.error === true) return "invalid input";
   if (o.view === "steward-analysis/v1") {
-    const kind = (o.recommendation as { kind?: string }).kind ?? "done";
-    const team = (o.request as { teamAuthored?: boolean } | undefined)?.teamAuthored ? " · team-authored" : "";
-    return `${kind.replace(/_/g, " ")}${team}`;
+    const a = o as unknown as AnalysisView;
+    return `${a.request.id} · ${a.candidates.total} assets · ${a.kpiChecks.length} KPIs · ${a.recommendation.kind.replace(/_/g, " ")}`;
   }
   if (o.view === "build-proposal/v1") {
-    if (o.status === "proposed" || o.status === "already_proposed") {
-      return `${(o.proposal as { id?: string }).id} · awaiting approval`;
-    }
+    if (o.status === "proposed" || o.status === "already_proposed") return `${(o.proposal as { id?: string }).id} · awaiting approval`;
     return String(o.status).replace(/_/g, " ");
   }
   if (o.view === "kpi-checks/v1" && Array.isArray(o.checks)) {
     const conflicts = o.checks.filter((c) => (c as { conflict?: boolean }).conflict).length;
     return `${o.checks.length} metrics${conflicts ? ` · ${conflicts} conflict` : ""}`;
   }
+  if (o.view === "proposal-list/v1") return `${o.total} waiting`;
   if (o.view === "kpi-result/v1" && typeof o.status === "string") return o.status.replace(/_/g, " ");
   if (o.view === "kpi-by-market/v1") return "by market";
   if (Array.isArray(o.assets)) return `${o.assets.length} candidates`;
-  if (Array.isArray(o.kpis)) return `${o.kpis.length} definitions${o.conflict ? " · conflict" : ""}`;
   if ("found" in o) return o.found ? "found" : "not found";
   return "done";
 }
@@ -264,8 +334,8 @@ function summarize(output: unknown): string {
 function Thinking() {
   return (
     <div className="flex items-center gap-2 text-xs text-ink-3">
-      <span className="h-2 w-2 animate-pulse rounded-full bg-sky" />
-      Orchestrator is planning…
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sky" />
+      Looking into it…
     </div>
   );
 }
