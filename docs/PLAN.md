@@ -1,5 +1,37 @@
 # Plan
 
+## Current documentation task and baseline
+
+Implementation snapshot: `43a1157d49702f8b7a285e8f82a4d2059554c584`
+(`integrate/T24-scheduler`), inspected 2026-11-08. Later commits are outside this refresh.
+Local `master` remains at `85c8494`. The already-available `origin/master` ref is
+`a93248f46542165dd3a64be283b78e9a835e7ba4` (#37), whose committed tree exactly matches this
+snapshot; B1–B4 are therefore also present in that mainline snapshot. No fetch was
+performed.
+
+Owner assigned and approved documentation execution on
+`docs/mvp-repository-refresh`, isolated worktree `/private/tmp/sinceai-docs-refresh`.
+This completes the repository documentation part of T9; video, submission and
+runtime acceptance remain owner tasks. The older table below is historical task
+tracking, not an authoritative release-status inventory. It is retained to
+preserve IDs/ownership and avoid claiming another developer's reviews complete.
+
+| ID | Current snapshot status / remaining work |
+| --- | --- |
+| T9 | Documentation refresh completed; human review/publication pending; no video recorded |
+| T16/T16B | Steward tool adapters and live orchestrator in baseline; live model acceptance unverified here |
+| T17 | Approved build with stored provenance in baseline; historical F5 fix included |
+| T19 | Synthetic sprawl direction only; implementation not assigned |
+| T21/T22/T23 | Chat cards, estate tools and persisted request pipeline in baseline |
+| T24/T25 | B0–B4 integration present; finding proposal POST disabled; independent reviews and Certified replacement policy remain open |
+| T26 | Separate simulated-time scheduler branch exists; excluded from this baseline; reconcile before publication |
+
+No old review finding is closed by this refresh. No implementation task is
+claimed or changed. Final PR must target the owner-approved integrated MVP
+baseline after divergence assessment; no automatic merge/rebase.
+
+## Historical plan
+
 Status: challenge chosen (D1). Scope follows the Miro pipeline and UI vision
 (SCOPE, D7–D9). Lanes and tasks below are proposed until both developers agree.
 

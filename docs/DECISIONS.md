@@ -533,3 +533,24 @@ timestamp-based reset detection (not reliable); a stale-run timeout (no
 evidence for any value); persisting `keep_both`/`partial` overlaps as findings
 (suggestMerge itself treats them as no action).
 Agreed by: KayTee (proposed); Viet pending
+
+## Documentation snapshot interpretation (2026-11-08; no new product decision)
+
+Implementation snapshot: `43a1157d49702f8b7a285e8f82a4d2059554c584`
+(`integrate/T24-scheduler`), inspected 2026-11-08. Later commits are outside this refresh.
+Local `master` remains at `85c8494`. The already-available `origin/master` ref is
+`a93248f46542165dd3a64be283b78e9a835e7ba4` (#37), whose committed tree exactly matches this
+snapshot; B1–B4 are therefore also present in that mainline snapshot. No fetch was
+performed.
+
+Owner approved this documentation refresh and the isolated branch
+`docs/mvp-repository-refresh`. This note records implementation facts, not
+agreement on outstanding product decisions. Earlier entries and their agreed-by
+fields remain historical. D16 supersedes silence-driven lease archival; D22
+supersedes invented DSH team boards; D23 limits telemetry to the review window.
+D24 synthetic sprawl remains direction only. D25 monitoring B1/B2 is manual,
+B3 submission remains disabled, and B4 UI is present on the integration snapshot.
+Approval waits persist in application tables, not Mastra snapshots. The D14/D15
+mapping retains its provisional label. See [GOVERNANCE](GOVERNANCE.md) for current
+semantics and gaps. Independent review and Certified replacement policy remain
+open; documentation approval does not clear those gates.

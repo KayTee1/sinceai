@@ -1,5 +1,31 @@
 # Analytics Steward — scope
 
+## Implementation status at the documentation snapshot
+
+Implementation snapshot: `43a1157d49702f8b7a285e8f82a4d2059554c584`
+(`integrate/T24-scheduler`), inspected 2026-11-08. Later commits are outside this refresh.
+Local `master` remains at `85c8494`. The already-available `origin/master` ref is
+`a93248f46542165dd3a64be283b78e9a835e7ba4` (#37), whose committed tree exactly matches this
+snapshot; B1–B4 are therefore also present in that mainline snapshot. No fetch was
+performed.
+
+The sections below preserve product targets and historical planning. They are
+not a checklist of delivered functionality. Current behavior is specified in
+[ARCHITECTURE](ARCHITECTURE.md), [MASTRA](MASTRA.md), [API](API.md),
+[GOVERNANCE](GOVERNANCE.md) and the executable [DEMO](DEMO.md) runbook.
+D16 supersedes default lease auto-archive: silence escalates to a steward.
+
+Implemented: persisted request Pipeline, chat drafts, governed build/reuse,
+four mapped KPIs, usage/lease/TTL services, inbox, restore and merge proposals.
+Partial: catalog-only discovery remains separate from lifecycle-aware estate
+checks; lineage is catalog metadata plus built-value provenance, not a complete
+graph; counts do not establish KPI conflict resolution; owner reassignment,
+proposal editing and complete certification promotion are unfinished.
+B0 merge comparator is in mainline ancestry; B1/B2 manual jobs, B3 disabled
+proposal bridge and B4 Scheduler UI are on this integration snapshot. No automatic
+clock/cron monitoring or full-estate sweep. Synthetic sprawl generation remains
+planned. External BI/SSO integration and regulatory certification are absent.
+
 Updated 2026-11-06 from Viet's Miro board ("Replaced by AI", 3 diagrams; PDF
 kept outside Git) and the UI/stack vision (D7–D9). Builds on the final-brief
 intake (D5): [CHALLENGE](CHALLENGE.md) holds organizer facts,
