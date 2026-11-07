@@ -284,3 +284,22 @@ Alternatives considered: partial builds for computable markets (changes D15);
 no live build in the demo.
 Agreed by: Viet
 
+D19: Business performance and analytics estate are separate views (2026-11-07)
+Status: accepted. Refines D8 (screen layout).
+Choice and why: asset pages used to draw Product_Market_Monthly charts filtered
+by the asset's scope, which presented business facts as if they were a
+report's content (the pack has no report contents). The Dashboard tab now has
+three sections: Business performance (both roles: Commercial, Market access,
+Supply, Launch built on Product_Market_Monthly + Products + Markets,
+Market_Access, Supply_Operations, Launch_Milestones, plus steward-built
+Temporary insights); Analytics catalog (both roles: asset list; asset pages
+show metadata only: KPIs with status, semantic model, governance signals,
+usage, lifecycle); Estate overview (Manager: landscape, low usage,
+duplication, KPI variants, governance, model health). Actual-like and
+forecast-like rows are never summed together; coverage % is never averaged
+(D15). The agent's discovery stays on estate metadata; values come only from
+the facts via KPI computation.
+Alternatives considered: two views (catalog + overview on one page);
+employees see business performance only.
+Agreed by: Viet
+

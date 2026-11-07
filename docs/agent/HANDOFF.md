@@ -1,5 +1,10 @@
 # Handoff
 
+- **D19 data separation (`feat/T18-data-separation`):** Dashboard tab =
+  Business performance (pack facts; 4 boards + built insights; product /
+  market filters; actual-like vs forecast-like toggle) | Analytics catalog
+  (metadata-only asset pages) | Estate overview (Manager). Loader in
+  `src/lib/catalog.ts` keeps `estate` and `business` apart.
 - **T17 build step (Viet / Claude, merged #21):**
   `src/services/build` turns an analysis that recommends a build into a
   `build_temporary` proposal (Leads in the requester's region, never the

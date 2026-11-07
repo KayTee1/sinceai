@@ -6,6 +6,8 @@ import { int, leaseLabel } from "@/lib/format";
 import { TierBadge } from "./tier-badge";
 import { useLifecycle } from "../lifecycle/lifecycle-context";
 import { AssetDetail } from "./asset-detail";
+import { BusinessView } from "./business-view";
+import { EstateOverview } from "./estate-overview";
 
 const FILTERS: { id: Tier | "all"; label: string }[] = [
   { id: "all", label: "All" },
@@ -14,7 +16,55 @@ const FILTERS: { id: Tier | "all"; label: string }[] = [
   { id: "personal", label: "Personal" },
 ];
 
+type Section = "business" | "catalog" | "overview";
+
+// Dashboard tab: business performance (pack facts) is kept apart from the
+// analytics estate (metadata about reports, models, KPIs, usage, governance).
 export function DashboardView({ data, role }: { data: DashboardData; role: Role }) {
+  const [section, setSection] = useState<Section>("business");
+  const active: Section = section === "overview" && role !== "manager" ? "business" : section;
+  const sections: { id: Section; label: string; note: string }[] = [
+    { id: "business", label: "Business performance", note: "sales, access, supply, launch" },
+    { id: "catalog", label: "Analytics catalog", note: "existing reports and dashboards" },
+    ...(role === "manager"
+      ? [{ id: "overview" as const, label: "Estate overview", note: "usage, duplication, governance" }]
+      : []),
+  ];
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <nav
+        className="flex shrink-0 items-end gap-1 border-b border-line bg-surface px-5 pt-2"
+        aria-label="Dashboard sections"
+      >
+        {sections.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => setSection(s.id)}
+            className={`-mb-px border-b-2 px-3 pb-2 pt-1 text-left ${
+              active === s.id ? "border-blue text-ink" : "border-transparent text-ink-3 hover:text-ink"
+            }`}
+          >
+            <div className="text-sm font-semibold">{s.label}</div>
+            <div className="text-[11px]">{s.note}</div>
+          </button>
+        ))}
+      </nav>
+      {role === "manager" && active !== "business" && <BeforeAfter />}
+      <div className="min-h-0 flex-1">
+        {active === "business" && <BusinessView data={data} built={data.assets.filter((a) => a.origin === "app")} />}
+        {active === "catalog" && <CatalogView data={data} role={role} />}
+        {active === "overview" && (
+          <div className="h-full overflow-y-auto">
+            <EstateOverview data={data} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CatalogView({ data, role }: { data: DashboardData; role: Role }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Tier | "all">("all");
   const [selectedId, setSelectedId] = useState(data.assets[0]?.id);
@@ -33,7 +83,6 @@ export function DashboardView({ data, role }: { data: DashboardData; role: Role 
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {role === "manager" && <BeforeAfter />}
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-[340px] shrink-0 flex-col border-r border-line bg-surface">
           <div className="space-y-3 border-b border-line p-4">
