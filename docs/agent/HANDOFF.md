@@ -26,10 +26,25 @@
   (#17), T8 lifecycle UI (#19), usage counts / D17 (#20), T17 build step
   (#21), the F1 demo request / D18 (#22), T18 data separation / D19 + D20
   (#23), D21 auto-renew (#24), T16 / T16A steward tool adapters (#18),
-  D22 team catalog dashboards (#25) and D23 telemetry window (#27). Open:
-  T16B live orchestrator (PR #28; Viet with Claude takes over, agreed with
-  KayTee; master merged in up to T19 `1409a31`) and the F5 build provenance fix (PR #29).
-- **T16B (PR #28):** Codex reviewed `be5e560` (CHANGES
+  D22 team catalog dashboards (#25), D23 telemetry window (#27), T19 docs
+  (#26) and T16B live orchestrator (#28). Open: F5 build provenance (PR #29)
+  and T21 (`feat/T21-chat-assistant`, Viet / Claude, not pushed).
+- **T21 chat assistant (`feat/T21-chat-assistant`):** colleague tone in the
+  prompt (verdict first, no process narration, cards carry the detail).
+  Chat collapses tool steps into one line and renders cards
+  (`src/components/agentic/chat-cards.tsx`): reuse (Use this / Not right),
+  KPI conflicts, build (Submit build proposal sends the exact T16B command),
+  and inbox proposals, which reuse the side inbox's `ProposalCard`
+  (Approve / Reject = human click on the decision API). New read-only tool
+  `listPendingProposals` (`src/mastra/tools/inbox-tools.ts`); the model has
+  no decide tool. "Use this" calls `POST /api/reuse` → `confirmReuse`
+  (`src/services/build/reuse.ts`): re-runs the analysis, requires
+  reuse_candidates and a listed asset, logs an app use for the D12 mapped
+  requester and a `reuse_confirmed` audit row. Verified on the pack:
+  REQ-0026 → AST-0335 logged; wrong asset / build request refused.
+  The inbox card shows only the rationale for an unknown proposal type
+  (e.g. a T20 `merge` left in a local DB) instead of crashing.
+- **T16B (merged #28):** Codex reviewed `be5e560` (CHANGES
   REQUIRED; report in `docs/agent/REVIEW.md`). P1 F2/F3 are fixed in
   `4e10510` and **verified fixed by Codex**:
   `proposeBuild` now stores a proposal only if the latest user message (from
@@ -145,14 +160,12 @@
   provisional until Viet agrees.
 - **Needs:** `ANTHROPIC_API_KEY` in `.env.local` for any live chat run (none
   done for T16 or T16B).
-- **Next:** Viet reviews T16B (PR #28: steward tools plus a build-proposal
-  tool wired into the orchestrator) and F5 (PR #29); both are open. Codex's
-  independent review of T16B and its verification of the P1 authorization
-  fix are done. Live Sonnet / browser verification of T16B is still
-  outstanding. Once F5 merges, PR #28 needs the follow-up listed in PR #29
-  (provenance assertion, `BUILD_SOURCE_DEFECT` warning, stored provenance in
-  the build-proposal view). Then fix the discovery issue above with Viet.
-  T19 (D24) planning comes after T16B and the golden path.
+- **Next:** live Sonnet + browser check of T21 (REQ-0026 for reuse,
+  TEAM-REQ-01 for build, "What's waiting for approval?"), then PR. F5
+  (PR #29) still open; once merged, add its follow-up (provenance assertion,
+  `BUILD_SOURCE_DEFECT` warning, stored provenance in the build-proposal
+  view). Then fix the discovery issue above with Viet. T19 (D24) after the
+  golden path.
 - **MVP limit:** chat history is client-supplied, not authenticated server
   state; the latest user message is trusted as typed by the person at the
   keyboard. The command syntax is English-only and strict by design.

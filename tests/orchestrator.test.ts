@@ -21,7 +21,8 @@ import { openDb } from "../src/db/open";
 import { ORCHESTRATOR_INSTRUCTIONS, createOrchestratorTools } from "../src/mastra/agents/orchestrator-config";
 import { BUILD_SOURCE_DEFECT, authorizeSubmission, parseSubmitCommand, type BuildProposalView } from "../src/mastra/tools/build-tools";
 import { analysisView, isToolValidationError, type AnalysisView } from "../src/mastra/tools/steward-views";
-import { decideBuild, getInsight } from "../src/services/build";
+import { decideBuild, getInsight, proposeBuild } from "../src/services/build";
+import type { ProposalListResult, ProposalListView } from "../src/mastra/tools/inbox-tools";
 import { getAssetState, getProposal, listPendingProposals, resetLifecycle, type BuildEvidence } from "../src/services/lifecycle";
 import { analyzeRequest } from "../src/services/steward/analyze";
 import { TEAM_REQUEST_SHEET } from "../src/services/steward/team-requests";
@@ -67,7 +68,7 @@ before(async () => {
   const dest = join(dir, "orchestrator.db");
   await importWorkbook({ sheets: SHEETS, dest, expected: EXPECTED });
   db = openDb(dest);
-  tools = createOrchestratorTools(() => db, { today: async () => DAY });
+  tools = createOrchestratorTools(() => db, { today: async () => DAY, sync: async () => {} });
 });
 
 beforeEach(async () => {
@@ -112,11 +113,17 @@ async function storedBuildProposals() {
 }
 
 describe("production tool map", () => {
-  it("exposes the governed steward tools and propose-build, and no approval or register tool", () => {
-    assert.deepEqual(Object.keys(tools).sort(), ["analyzeRequest", "checkKpiDefinitions", "computeKpi", "proposeBuild"]);
+  it("exposes the governed steward tools, propose-build and the read-only inbox, and no approval or register tool", () => {
+    assert.deepEqual(Object.keys(tools).sort(), [
+      "analyzeRequest",
+      "checkKpiDefinitions",
+      "computeKpi",
+      "listPendingProposals",
+      "proposeBuild",
+    ]);
     assert.deepEqual(
       Object.values(tools).map((t) => (t as { id: string }).id).sort(),
-      ["analyze-request", "check-kpi-definitions", "compute-kpi", "propose-build"],
+      ["analyze-request", "check-kpi-definitions", "compute-kpi", "list-pending-proposals", "propose-build"],
     );
     for (const name of Object.keys(tools)) assert.doesNotMatch(name, /approve|reject|decide|register/i);
   });
@@ -303,6 +310,46 @@ describe("gates the build proposal on the deterministic analysis", () => {
     );
     assert.equal((out as { status: string }).status, "intent_required");
     assert.deepEqual(await storedBuildProposals(), []);
+  });
+});
+
+// T21: the assistant can read the approval inbox but never decide.
+describe("approval inbox in chat (read-only)", () => {
+  async function seedBuildProposal() {
+    const r = await proposeBuild(db, { requestId: "TEAM-REQ-01" }, DAY);
+    assert.equal(r.status, "proposed");
+    return (r as { proposal: { id: string } }).proposal.id;
+  }
+
+  it("lists open proposals as a compact view, with decisions left to a human", async () => {
+    const id = await seedBuildProposal();
+    const { byCall, prompts } = await turn("What's waiting for approval?", [
+      { toolCalls: [{ id: "c1", name: "listPendingProposals", input: {} }] },
+      { text: "One build proposal is waiting." },
+    ]);
+    const v = byCall.c1.output as ProposalListView;
+    assert.equal(v.view, "proposal-list/v1");
+    const item = v.proposals.find((p) => p.id === id);
+    assert.ok(item, "seeded proposal is listed");
+    assert.equal(item.type, "build_temporary");
+    assert.equal(item.requestId, "TEAM-REQ-01");
+    assert.deepEqual(item.requiredApprovers, ["OWN-NL"]);
+    assert.match(v.next, /human/i);
+    // The model sees the same compact view.
+    const modelView = toolResults(prompts[1]).c1.value as ProposalListView;
+    assert.equal(modelView.view, "proposal-list/v1");
+    // Listing changes nothing.
+    assert.deepEqual(await storedBuildProposals(), [{ id, status: "open" }]);
+  });
+
+  it("filters by type and by escalation", async () => {
+    await seedBuildProposal();
+    const exec = (tools.listPendingProposals as unknown as { execute: (i: unknown, c: unknown) => Promise<unknown> }).execute;
+    const builds = (await exec({ type: "build_temporary" }, {})) as ProposalListResult;
+    assert.ok(builds.proposals.length >= 1);
+    assert.ok(builds.proposals.every((p) => p.type === "build_temporary"));
+    const retire = (await exec({ type: "retire", escalatedOnly: true }, {})) as ProposalListResult;
+    assert.ok(retire.proposals.every((p) => p.type === "retire" && p.status === "escalated"));
   });
 });
 
