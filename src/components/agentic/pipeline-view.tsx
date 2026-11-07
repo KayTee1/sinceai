@@ -5,10 +5,11 @@
 // status of its latest event: grey = not reached, blue = done, amber pulsing
 // = waiting for a person, red = failed. The branch not taken is dimmed.
 import { useEffect, useState } from "react";
+import { Storyboard } from "./storyboard-view";
 
-type StepStatus = "running" | "done" | "waiting_input" | "waiting_approval" | "failed" | "skipped";
-type StepEvent = { id: number; step: string; agent: string; status: StepStatus; summary: string; evidence: string[]; ts: string };
-type Run = {
+export type StepStatus = "running" | "done" | "waiting_input" | "waiting_approval" | "failed" | "skipped";
+export type StepEvent = { id: number; step: string; agent: string; status: StepStatus; summary: string; evidence: string[]; ts: string };
+export type Run = {
   runId: string;
   requestId: string;
   scope: { product: string; market: string } | null;
@@ -92,8 +93,11 @@ function useLatestRun(): Run | null {
   return run;
 }
 
+type Mode = "steps" | "diagram";
+
 export function PipelineView() {
   const run = useLatestRun();
+  const [mode, setMode] = useState<Mode>("steps");
   if (!run) {
     return (
       <div className="flex h-full items-center justify-center p-8 text-center text-sm text-ink-3">
@@ -101,7 +105,15 @@ export function PipelineView() {
       </div>
     );
   }
+  return (
+    <div className="flex h-full flex-col">
+      <RunHeader run={run} mode={mode} onMode={setMode} />
+      <div className="min-h-0 flex-1 overflow-auto">{mode === "steps" ? <Storyboard run={run} /> : <SequenceDiagram run={run} />}</div>
+    </div>
+  );
+}
 
+function SequenceDiagram({ run }: { run: Run }) {
   const latest = new Map<string, StepEvent>();
   for (const e of run.events) latest.set(`${e.step}/${e.agent}`, e);
   const path = run.path;
@@ -114,9 +126,8 @@ export function PipelineView() {
   const buildStart = shown.findIndex((a) => a.branch === "build");
 
   return (
-    <div className="flex h-full flex-col">
-      <RunHeader run={run} />
-      <div className="min-h-0 flex-1 overflow-auto px-3 pb-4">
+    <div>
+      <div className="px-3 pb-4 pt-2">
         <svg viewBox={`0 0 ${W} ${height}`} className="w-full" role="img" aria-label={`Pipeline run ${run.runId}`}>
           <defs>
             {Object.entries(COLOR).map(([k, c]) => (
@@ -216,11 +227,11 @@ const STATUS_TEXT: Record<string, string> = {
   failed: "Stopped",
 };
 
-function RunHeader({ run }: { run: Run }) {
+function RunHeader({ run, mode, onMode }: { run: Run; mode: Mode; onMode: (m: Mode) => void }) {
   const waiting = run.status === "waiting_input" || run.status === "waiting_approval";
   return (
     <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <div className="label">Pipeline</div>
         <div className="truncate text-sm font-semibold text-ink">
           {run.runId} · {run.requestId}
@@ -240,6 +251,18 @@ function RunHeader({ run }: { run: Run }) {
       >
         {STATUS_TEXT[run.status] ?? run.status}
       </span>
+      <div className="flex shrink-0 rounded-sm border border-line p-0.5">
+        {(["steps", "diagram"] as Mode[]).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => onMode(m)}
+            className={`rounded-sm px-2 py-0.5 text-[11px] font-medium capitalize ${mode === m ? "bg-navy text-white" : "text-ink-2 hover:bg-canvas"}`}
+          >
+            {m}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

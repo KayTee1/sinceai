@@ -16,7 +16,7 @@ import { ORCHESTRATOR_INSTRUCTIONS, createOrchestratorTools } from "../src/mastr
 import type { PipelineRunView } from "../src/mastra/tools/pipeline-tools";
 import { createRequestPipeline, type Summarize } from "../src/mastra/workflows/request-pipeline";
 import { confirmReuse, decideBuild, proposeBuild } from "../src/services/build";
-import { resetLifecycle } from "../src/services/lifecycle";
+import { getAssetAudit, getAssetState, processDue, recordUsage, resetLifecycle } from "../src/services/lifecycle";
 import { getRun, latestRun, type RunWithEvents } from "../src/services/pipeline";
 import { FACT_SHEETS } from "./fixtures/facts";
 import { runChat, userMessage } from "./helpers/mock-agent";
@@ -29,7 +29,12 @@ const OWNERS: ParsedSheet = {
     ["OWN-R", "Fixture Requester", "Analyst", "EMEA", "active"],
   ],
 };
-const SHEETS = FACT_SHEETS.map((s) => (s.sheet === "Owners" ? OWNERS : s));
+// Lease reviews read usage telemetry and lineage once the clock moves on; empty sheets here.
+const SHEETS = [
+  ...FACT_SHEETS.map((s) => (s.sheet === "Owners" ? OWNERS : s)),
+  { sheet: "Asset_Usage", data: [["asset_id", "month", "views", "unique_users"]] },
+  { sheet: "Lineage_Edges", data: [["source_id", "target_id", "edge_type", "relationship"]] },
+].filter((s, i, all) => all.findIndex((x) => x.sheet === s.sheet) === i);
 const EXPECTED = Object.fromEntries(SHEETS.filter((s) => s.sheet !== "START_HERE").map((s) => [s.sheet, s.data.length - 1]));
 const DAY = "2026-11-03";
 
@@ -119,6 +124,34 @@ describe("build path", () => {
     const again = await pipeline().run({ requestId: "REQ-S01" });
     assert.deepEqual([again.path, again.status], ["reuse", "done"]);
     assert.equal(again.duplicate?.verdict, "reuse");
+  });
+});
+
+describe("after the build: Temporary TTL", () => {
+  it("expires when only someone else opened it, says so, and refuses opens once archived", async () => {
+    await pipeline().run({ requestId: "REQ-S01" });
+    const proposed = await proposeBuild(db, { requestId: "REQ-S01", requesterId: "OWN-R" }, DAY);
+    const { insight } = await decideBuild(db, { proposalId: (proposed as { proposal: { id: string } }).proposal.id, actor: "OWN-1", action: "approve" }, DAY);
+    const id = insight!.id;
+    await recordUsage(db, { assetId: id, userId: "OWN-1" }, "2026-11-10"); // not the owner (OWN-R)
+    await recordUsage(db, { assetId: id, userId: "OWN-1" }, "2026-11-20");
+    assert.equal((await getAssetState(db, id))?.tier, "temporary");
+
+    await processDue(db, "2026-12-04");
+    assert.equal((await getAssetState(db, id))?.status, "archived");
+    const expired = (await getAssetAudit(db, id)).find((e) => e.action === "ttl_expired");
+    assert.match(expired!.rationale, /opened 2 time\(s\) by 1 other person \(1 in EMEA\), never by its owner/);
+    assert.match(expired!.rationale, /owner \(OWN-R\) to open it again, or 3 people in EMEA/);
+
+    await assert.rejects(recordUsage(db, { assetId: id, userId: "OWN-1" }, "2026-12-05"), /archived/);
+  });
+
+  it("the owner opening it again promotes it to Personal", async () => {
+    await pipeline().run({ requestId: "REQ-S01" });
+    const proposed = await proposeBuild(db, { requestId: "REQ-S01", requesterId: "OWN-R" }, DAY);
+    const { insight } = await decideBuild(db, { proposalId: (proposed as { proposal: { id: string } }).proposal.id, actor: "OWN-1", action: "approve" }, DAY);
+    const s = await recordUsage(db, { assetId: insight!.id, userId: "OWN-R" }, "2026-11-10");
+    assert.deepEqual([s.tier, s.ttlEnd], ["personal", null]);
   });
 });
 

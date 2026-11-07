@@ -43,7 +43,9 @@ Stored business requests (an ID such as REQ-0001 or TEAM-REQ-01):
    - reuse_candidates: recommend the best listed asset with its main gap or unknown. The user confirms with
      "Use this" on its card. Do not offer a build. If the user says a candidate is not right, suggest the next
      listed candidate; if none is left, say so plainly (a build needs an analysis that recommends one).
-   - insufficient_evidence: say what is missing. Do not offer a build.
+   - insufficient_evidence: the reason is recommendation.rationale[0]; say it in plain words and name the partial
+     candidates it refers to. Do not offer a build. Never invent another cause: computability limits (missing
+     markets, insufficient_data) are facts to mention, not the reason, unless rationale[0] says so.
    - build_proposal: say no existing asset covers the gap and that a Temporary insight on the approved KPIs
      can go to a Lead for approval. Tell the user to press "Submit build proposal" on the card, which sends
      exactly: "Submit a build proposal for <ID>" (or, after a clarification, "Submit a build proposal for <ID>

@@ -126,7 +126,8 @@ export function createRequestPipeline(deps: PipelineDeps) {
         agent: "Metadata catalog",
         status: "done",
         summary,
-        evidence: a.candidates.slice(0, 5).map((x) => x.assetId),
+        // "#name=value" entries are counts for the storyboard's counters.
+        evidence: [...a.candidates.slice(0, 5).map((x) => x.assetId), `#dashboards=${a.candidates.length}`, `#definitions=${definitions}`],
       });
       return c;
     },
@@ -169,7 +170,7 @@ export function createRequestPipeline(deps: PipelineDeps) {
         agent: "Semantic layer",
         status: "done",
         summary,
-        evidence: conflicts.flatMap((k) => k.variants.map((v) => v.id)),
+        evidence: [...conflicts.flatMap((k) => k.variants.map((v) => v.id)), `#conflicts=${conflicts.length}`],
       });
       return c;
     },
@@ -185,12 +186,24 @@ export function createRequestPipeline(deps: PipelineDeps) {
       const db = deps.getDb();
       const a = c.analysis;
       const d = await checkDuplicate(db, { scope: a.clarification.resolved!, kpiIds: approvedIds(a) });
-      const kind = a.recommendation.kind.replace(/_/g, " ");
+      const kind = {
+        reuse_candidates: "catalog: reuse candidates found",
+        build_proposal: "catalog: no full match",
+        insufficient_evidence: "catalog: not enough evidence",
+        clarify: "catalog: scope unclear",
+      }[a.recommendation.kind];
+      const estate = {
+        reuse: "an active asset already covers it",
+        pending: "the same build already waits for approval",
+        restore: "only an archived asset covers it",
+        partial: "partial overlaps only",
+        none: "nothing similar",
+      }[d.verdict];
       await emit(db, c.runId, {
         step: "duplicate",
         agent: "Discovery agent",
         status: "done",
-        summary: `Candidates + conflict + reasoning: ${kind}; estate check ${d.verdict}`,
+        summary: `Candidates + conflict + reasoning: ${kind} · estate: ${estate}`,
         evidence: [...a.recommendation.evidence.map((e) => e.id).filter((x): x is string => !!x).slice(0, 5), ...d.active.map((x) => x.assetId)],
       });
       return { ...c, duplicate: d };
@@ -231,6 +244,7 @@ export function createRequestPipeline(deps: PipelineDeps) {
         await emit(db, c.runId, { step: "propose", agent: "Orchestrator", status: "waiting_input", summary: "Submit build proposal?" });
         await updateRun(db, c.runId, { status: "waiting_input", path: "build" });
       } else {
+        // rationale[0] is the analysis's decision reason; later lines are supporting facts.
         await emit(db, c.runId, { step: "recommend", agent: "Orchestrator", status: "done", summary: `Not enough evidence: ${a.recommendation.rationale[0] ?? kind}` });
         await emit(db, c.runId, { step: "done", agent: "Orchestrator", status: "done", summary: "No reuse or build suggested" });
         await updateRun(db, c.runId, { status: "done", path: "insufficient" });
