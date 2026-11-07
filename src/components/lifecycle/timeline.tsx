@@ -27,6 +27,8 @@ const LABEL: Record<string, string> = {
   temporary_registered: "Temporary insight created",
   promoted: "Promoted",
   promotion_proposed: "Proposed for Team",
+  build_proposed: "Build proposed",
+  insight_built: "Insight built",
 };
 
 // Per-asset audit timeline (Manager), with Restore for archived assets.

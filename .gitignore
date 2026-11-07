@@ -13,8 +13,8 @@ Thumbs.db
 # Common dependency and build output (we don't know the stack yet)
 node_modules/
 .next/
-dist/
-build/
+/dist/
+/build/
 __pycache__/
 *.pyc
 .venv/

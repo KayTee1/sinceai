@@ -4,7 +4,7 @@ import { useState } from "react";
 import { formatDate } from "@/lib/format";
 import { useLifecycle, type PendingProposal } from "./lifecycle-context";
 
-type Filter = "all" | "escalated" | "retire" | "renew" | "promote";
+type Filter = "all" | "escalated" | "retire" | "renew" | "promote" | "build_temporary";
 
 // Approval inbox (Manager). Approval follows each proposal's required approvers
 // (Rule 11), so every card offers only its own approvers to decide as (D12).
@@ -26,11 +26,11 @@ export function Inbox() {
           <span className="tabular text-xs text-ink-3">{data.pending.length} waiting</span>
         </div>
         <p className="text-xs text-ink-3">
-          You decide as one of each card&apos;s approvers: the owner (lease reviews), a team Lead (promotions), or the
-          data steward once escalated.
+          You decide as one of each card&apos;s approvers: the owner (lease reviews), a team Lead (promotions and
+          builds), or the data steward once escalated.
         </p>
         <div className="flex gap-1">
-          {(["all", "escalated", "retire", "renew", "promote"] as Filter[]).map((f) => (
+          {(["all", "escalated", "retire", "renew", "promote", "build_temporary"] as Filter[]).map((f) => (
             <button
               key={f}
               type="button"
@@ -39,7 +39,7 @@ export function Inbox() {
                 filter === f ? "bg-navy text-white" : "text-ink-2 hover:bg-canvas"
               }`}
             >
-              {f}
+              {f === "build_temporary" ? "build" : f}
             </button>
           ))}
         </div>
@@ -92,10 +92,12 @@ function ProposalCard({ p }: { p: PendingProposal }) {
                   ? "bg-[#fdf3e6] text-warn"
                   : p.type === "promote"
                     ? "bg-[#eef7e4] text-green-deep"
-                    : "bg-[#e6f4fc] text-[#00609a]"
+                    : p.type === "build_temporary"
+                      ? "bg-navy text-white"
+                      : "bg-[#e6f4fc] text-[#00609a]"
               }`}
             >
-              {p.type}
+              {p.type === "build_temporary" ? "build" : p.type}
             </span>
             {p.status === "escalated" && (
               <span className="rounded-sm bg-[#fdeeee] px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-danger">
@@ -111,7 +113,26 @@ function ProposalCard({ p }: { p: PendingProposal }) {
         </span>
       </div>
 
-      {"kind" in ev ? (
+      {"kind" in ev && ev.kind === "build" ? (
+        <div className="mt-2 space-y-1.5 text-ink-2">
+          <p className="italic">&ldquo;{ev.requestText}&rdquo;</p>
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+            <dt className="text-ink-3">Scope</dt>
+            <dd>
+              {ev.scope.product} · {ev.scope.market}
+            </dd>
+            <dt className="text-ink-3">Certified KPIs</dt>
+            <dd>{ev.kpis.map((k) => k.name ?? k.kpiId).join(", ")}</dd>
+            <dt className="text-ink-3">Gap (no asset)</dt>
+            <dd className="text-warn">{ev.gaps.join(", ") || "–"}</dd>
+            <dt className="text-ink-3">Requester</dt>
+            <dd>
+              {people[ev.requesterId]?.name ?? ev.requesterId}
+              {ev.requesterSource === "team_mapping" ? " (our mapping)" : ""}
+            </dd>
+          </dl>
+        </div>
+      ) : "kind" in ev ? (
         <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-0.5 text-ink-2">
           <dt className="text-ink-3">Used by ({ev.region})</dt>
           <dd>
@@ -176,7 +197,9 @@ function ProposalCard({ p }: { p: PendingProposal }) {
                 ? "Why keep it? (renews the lease)"
                 : p.type === "promote"
                   ? "Why not promote? (expiry resumes)"
-                  : "Why not renew? (retires it)"
+                  : p.type === "build_temporary"
+                    ? "Why not build? (nothing is built)"
+                    : "Why not renew? (retires it)"
             }
             className="w-full resize-none rounded-sm border border-line-strong px-2 py-1.5 text-xs focus:border-blue focus:outline-none"
           />

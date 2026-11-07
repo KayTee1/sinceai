@@ -4,7 +4,16 @@ import type { Client } from "@libsql/client";
 import { CLOCK_START, LEASE_DAYS, POLICY_VERSION, TTL_DAYS, seededLeaseEnd } from "./policy";
 import type { Tier } from "./types";
 
-const APP_TABLES = ["app_clock", "asset_state", "proposals", "decisions", "audit_log", "archive_snapshots", "usage_events"];
+const APP_TABLES = [
+  "app_clock",
+  "asset_state",
+  "proposals",
+  "decisions",
+  "audit_log",
+  "archive_snapshots",
+  "usage_events",
+  "insights",
+];
 
 const DDL = [
   `CREATE TABLE IF NOT EXISTS app_clock (
@@ -32,6 +41,11 @@ const DDL = [
      BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END`,
   `CREATE TABLE IF NOT EXISTS archive_snapshots (
      asset_id TEXT NOT NULL, sim_date TEXT NOT NULL, snapshot TEXT NOT NULL)`,
+  // Temporary insights built by the app (step 4): computed values with their
+  // query, filters and source rows, so every number traces to source rows.
+  `CREATE TABLE IF NOT EXISTS insights (
+     id TEXT PRIMARY KEY, proposal_id TEXT NOT NULL, request_id TEXT NOT NULL, name TEXT NOT NULL,
+     owner_id TEXT NOT NULL, scope TEXT NOT NULL, results TEXT NOT NULL, built_on TEXT NOT NULL, built_by TEXT NOT NULL)`,
   // App-generated usage, kept apart from the pack's Asset_Usage (D10).
   `CREATE TABLE IF NOT EXISTS usage_events (
      asset_id TEXT NOT NULL, user_id TEXT NOT NULL, sim_date TEXT NOT NULL, origin TEXT NOT NULL)`,
@@ -48,7 +62,11 @@ export async function hasLifecycle(db: Client): Promise<boolean> {
 
 /** Creates and seeds the lifecycle tables once. Safe to call on every request. */
 export async function ensureLifecycle(db: Client, nowMs = Date.now()): Promise<void> {
-  if (await hasLifecycle(db)) return;
+  if (await hasLifecycle(db)) {
+    // Already seeded: only add tables introduced since (all CREATE IF NOT EXISTS).
+    await db.batch(DDL, "write");
+    return;
+  }
   await seed(db, nowMs);
 }
 

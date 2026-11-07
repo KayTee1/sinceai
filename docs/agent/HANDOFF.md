@@ -1,5 +1,13 @@
 # Handoff
 
+- **T17 build step (Viet / Claude, `feat/T17-build-temporary`):**
+  `src/services/build` turns an analysis that recommends a build into a
+  `build_temporary` proposal (Leads in the requester's region, never the
+  requester); approval computes each KPI per market with `computeKpiByMarket`
+  (unchanged), stores values + provenance in `insights`, registers Temporary.
+  Dashboard lists built insights first; clicking a value shows formula,
+  filters, query and source rows. `POST /api/builds` is the entry point for
+  the T16 agent tool. Real pack data still never reaches a build (F1 open).
 - **Usage + counts (Viet / Claude, `feat/T7-usage-counts`):** Employee
   "viewing as" picker (D13); opening a dashboard logs an app open for that
   person (manager browsing is not logged). Manager before/after panel on the

@@ -1,6 +1,7 @@
 import "server-only";
 import { db, rows } from "@/db/client";
 import { ensureLifecycle, listAssetStates, tick } from "@/services/lifecycle";
+import { listInsights } from "@/services/build";
 import type { AssetSummary, DashboardData, Market, ProductMarketRow, Tier } from "./types";
 
 const TIER_ORDER: Record<Tier, number> = { certified: 0, team: 1, personal: 2, temporary: 3 };
@@ -56,29 +57,67 @@ export async function getDashboardData(): Promise<DashboardData> {
   const assets: AssetSummary[] = assetRows.map((a) => {
     const state = states.get(a.asset_id);
     return {
-    id: a.asset_id,
-    name: a.asset_name,
-    type: a.asset_type,
-    platform: a.platform,
-    productScope: a.product_scope,
-    marketScope: a.market_scope,
-    workspace: a.workspace_name,
-    ownerName: a.owner_name,
-    ownerActive: a.owner_status === "active",
-    lifecycleStatus: a.lifecycle_status,
-    endorsement: a.endorsement,
-    tier: (state?.tier ?? "personal") as Tier,
-    status: state?.status ?? "active",
-    leaseEnd: state?.leaseEnd ?? state?.ttlEnd ?? null,
-    lastModified: a.last_modified,
-    monthlyViews: usage.get(a.asset_id) ?? [],
+      id: a.asset_id,
+      name: a.asset_name,
+      type: a.asset_type,
+      platform: a.platform,
+      productScope: a.product_scope,
+      marketScope: a.market_scope,
+      workspace: a.workspace_name,
+      ownerName: a.owner_name,
+      ownerActive: a.owner_status === "active",
+      lifecycleStatus: a.lifecycle_status,
+      endorsement: a.endorsement,
+      tier: (state?.tier ?? "personal") as Tier,
+      status: state?.status ?? "active",
+      leaseEnd: state?.leaseEnd ?? state?.ttlEnd ?? null,
+      lastModified: a.last_modified,
+      monthlyViews: usage.get(a.asset_id) ?? [],
+      origin: "pack" as const,
     };
   });
 
   assets.sort((x, y) => TIER_ORDER[x.tier] - TIER_ORDER[y.tier] || x.name.localeCompare(y.name));
 
+  // Insights built by the steward (step 4) are listed first; they are app-owned, not pack assets.
+  const insights = await listInsights(db());
+  const owners = new Map(
+    (
+      await rows<{ owner_id: string; owner_name: string; status: string }>(
+        `SELECT owner_id, owner_name, status FROM Owners`,
+      )
+    ).map((o) => [o.owner_id, o]),
+  );
+  const built: AssetSummary[] = insights.flatMap((i) => {
+    const state = states.get(i.id);
+    if (!state) return [];
+    const owner = owners.get(i.ownerId);
+    return [
+      {
+        id: i.id,
+        name: i.name,
+        type: "Insight",
+        platform: "Analytics Steward",
+        productScope: i.scope.product,
+        marketScope: i.scope.market,
+        workspace: "Built by Analytics Steward",
+        ownerName: owner?.owner_name ?? null,
+        ownerActive: owner?.status === "active",
+        lifecycleStatus: "app_built",
+        endorsement: "none",
+        tier: state.tier as Tier,
+        status: state.status,
+        leaseEnd: state.leaseEnd ?? state.ttlEnd ?? null,
+        lastModified: i.builtOn,
+        monthlyViews: [],
+        origin: "app" as const,
+      },
+    ];
+  });
+
   return {
-    assets,
+    assets: [...built, ...assets],
+    insights: Object.fromEntries(insights.map((i) => [i.id, i])),
     productMarket: pm.map((r) => ({ ...r })),
     markets: markets.map((m) => ({ ...m })),
     clockDate: clock.date,
