@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import ReactMarkdown from "react-markdown";
+import { useLifecycle } from "../lifecycle/lifecycle-context";
 
 const SUGGESTIONS = [
   { title: "Run business request REQ-0001", prompt: "Handle business request REQ-0001." },
+  { title: "Run team demo request TEAM-REQ-01", prompt: "Handle business request TEAM-REQ-01." },
   { title: "Find existing Nubeqa sales dashboards", prompt: "Is there already a dashboard for Nubeqa net sales vs forecast in Germany?" },
   { title: "Check the Net Sales definition", prompt: "Which Net Sales KPI should we use, and are there conflicting definitions?" },
 ];
@@ -19,7 +21,34 @@ const STEP_LABEL: Record<string, { agent: string; action: string }> = {
   searchAssets: { agent: "Discovery", action: "Searched existing assets" },
   "find-kpi-definitions": { agent: "Conflict detector", action: "Compared KPI definitions" },
   findKpiDefinitions: { agent: "Conflict detector", action: "Compared KPI definitions" },
+  // T16B governed tools (deterministic services).
+  "analyze-request": { agent: "Steward", action: "Analysed business request" },
+  analyzeRequest: { agent: "Steward", action: "Analysed business request" },
+  "compute-kpi": { agent: "Semantic layer", action: "Computed KPI" },
+  computeKpi: { agent: "Semantic layer", action: "Computed KPI" },
+  "check-kpi-definitions": { agent: "Conflict detector", action: "Checked KPI definitions" },
+  checkKpiDefinitions: { agent: "Conflict detector", action: "Checked KPI definitions" },
+  "propose-build": { agent: "Build", action: "Build proposal for approval" },
+  proposeBuild: { agent: "Build", action: "Build proposal for approval" },
 };
+
+const PROPOSE_TOOLS = new Set(["propose-build", "proposeBuild"]);
+
+/** Tool call IDs of build proposals stored in this chat (the inbox should show them). */
+function storedProposalCalls(messages: UIMessage[]): string[] {
+  const ids: string[] = [];
+  for (const m of messages) {
+    for (const part of m.parts) {
+      const p = part as { type: string; toolName?: string; toolCallId?: string; state?: string; output?: unknown };
+      const name = p.type === "dynamic-tool" ? p.toolName : p.type.startsWith("tool-") ? p.type.slice(5) : undefined;
+      const status = (p.output as { status?: unknown } | undefined)?.status;
+      if (name && PROPOSE_TOOLS.has(name) && p.state === "output-available" && p.toolCallId && status === "proposed") {
+        ids.push(p.toolCallId);
+      }
+    }
+  }
+  return ids;
+}
 
 export function ChatView() {
   const [input, setInput] = useState("");
@@ -28,6 +57,16 @@ export function ChatView() {
   });
   const busy = status === "submitted" || status === "streaming";
   const endRef = useRef<HTMLDivElement>(null);
+  const { refresh } = useLifecycle();
+  const seenProposals = useRef(new Set<string>());
+
+  // A proposal submitted from chat lands in the approval inbox: re-read it once per new proposal.
+  useEffect(() => {
+    const fresh = storedProposalCalls(messages).filter((id) => !seenProposals.current.has(id));
+    if (fresh.length === 0) return;
+    fresh.forEach((id) => seenProposals.current.add(id));
+    refresh();
+  }, [messages, refresh]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -198,6 +237,24 @@ function StatusDot({ done, failed }: { done: boolean; failed: boolean }) {
 function summarize(output: unknown): string {
   if (!output || typeof output !== "object") return "done";
   const o = output as Record<string, unknown>;
+  if (o.error === true) return "invalid input";
+  if (o.view === "steward-analysis/v1") {
+    const kind = (o.recommendation as { kind?: string }).kind ?? "done";
+    const team = (o.request as { teamAuthored?: boolean } | undefined)?.teamAuthored ? " · team-authored" : "";
+    return `${kind.replace(/_/g, " ")}${team}`;
+  }
+  if (o.view === "build-proposal/v1") {
+    if (o.status === "proposed" || o.status === "already_proposed") {
+      return `${(o.proposal as { id?: string }).id} · awaiting approval`;
+    }
+    return String(o.status).replace(/_/g, " ");
+  }
+  if (o.view === "kpi-checks/v1" && Array.isArray(o.checks)) {
+    const conflicts = o.checks.filter((c) => (c as { conflict?: boolean }).conflict).length;
+    return `${o.checks.length} metrics${conflicts ? ` · ${conflicts} conflict` : ""}`;
+  }
+  if (o.view === "kpi-result/v1" && typeof o.status === "string") return o.status.replace(/_/g, " ");
+  if (o.view === "kpi-by-market/v1") return "by market";
   if (Array.isArray(o.assets)) return `${o.assets.length} candidates`;
   if (Array.isArray(o.kpis)) return `${o.kpis.length} definitions${o.conflict ? " · conflict" : ""}`;
   if ("found" in o) return o.found ? "found" : "not found";
