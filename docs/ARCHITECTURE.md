@@ -1,349 +1,159 @@
 # Architecture
 
-Status: stack and UI accepted (D7–D9); contract **proposed** (D12, D13), based
-on the Miro architecture diagram and not yet agreed by both developers. Facts and data limits: CHALLENGE,
-DATA_SOURCES; product scope: SCOPE.
+Implementation snapshot: `1beff2ebd1e4df5393bc6b065795ca1ddb845edc` (`origin/master`, T26 merged in #38),
+verified 2026-11-08. Original refresh baseline: `43a1157`; reconciled against the
+committed final master revision. Local `master` is stale and was not moved.
 
-## Stack (D7)
+This describes committed behavior. [SCOPE](SCOPE.md) and historical decisions
+also contain targets; they do not imply every target is implemented.
 
-TypeScript everywhere.
+## Runtime and boundaries
 
-- **App:** Next.js (App Router) for both tabs and the API routes.
-- **Agents:** Mastra (agents, tools, one workflow with a suspend/resume step for
-  human approval). P0 agents: Orchestrator, Discovery, Conflict detector;
-  Builder and Lease steward in P1 (D11). Model: Claude via Mastra's model routing.
-- **Storage:** SQLite through libSQL (Mastra supports it natively). One file.
-- **Search:** keyword + local word-overlap (TF-IDF) vectors, in process (about
-  500 objects; no vector DB, no external embeddings service in P0; D13).
-- **UI:** React; a graph library for the Pipeline and lineage views (e.g.
-  React Flow) and a chart library (e.g. Recharts). Not chosen yet.
-- **Import:** a TypeScript script reads the Bayer XLSX into SQLite once.
-
-Check exact Mastra APIs against its docs when scaffolding; don't rely on memory.
-
-## Components (Miro layers)
+Next.js 16.4.5 App Router serves React 19.3 UI and route handlers. TypeScript
+services use SQLite via `@libsql/client`; scheduler writes use dedicated
+short-lived `libsql` connections. Recharts draws business charts. Pipeline
+storyboard/diagram components are repository UI, not a selected React Flow stack.
 
 ```text
-Client (Next.js)
-  Top middle: [Agentic | Dashboard]      Top right: [Employee | Manager]
-  Agentic (Manager only): Chat view <-> Pipeline view, Approval inbox,
-    "acting as" approver picker, God-mode clock panel
-  Dashboard: dashboard list, charts, lineage panel, "viewing as" picker
-    (Employee), counts panel (Manager)
-        |
-API routes (toggle = visibility; approvals checked against required approvers)
-        |
-Agent layer (Mastra)
-  P0: Orchestrator (incl. intent parsing) -> Discovery agent -> Conflict detector
-  P1: Builder agent, Lease steward (P0 uses deterministic build/lease tools)
-        | tool calls only
-Platform services (plain TS, deterministic)
-  Lifecycle engine | Policy engine | Semantic layer | Scheduler + sim clock
-  Audit writer (called by the backend, never an agent tool)
-        |
-Data (SQLite)
-  Imported read-only: Bayer pack tables (assets, KPIs, models, owners,
-    lineage, usage, signals, migration backlog, requests, product facts)
-  App-owned: asset_state (tier, lease_end, status), usage_events,
-    proposals, approvals, audit_log, archive_snapshots, clock, vectors
+Employee: team dashboards + built insights + viewing-as usage
+Manager: dashboards / catalog / estate + Agentic chat
+                              Pipeline | Scheduler | Inbox
+                                  |
+Next.js routes / server catalog loader
+                                  |
+Mastra orchestrator -> request-pipeline workflow -> service facts
+  tools: explore, compute, draft request, propose; no decision tool
+                                  |
+Deterministic steward | semantic | estate | build | lifecycle | pipeline
+Manual / explicit simulated-date scheduler -> findings, never approval
+                                  |
+SQLite: imported workbook tables + app-owned state/evidence/audit
 ```
 
-Suggested folders (to agree): `app/` (Next.js routes and UI), `src/mastra/`
-(agents, tools, workflow), `src/services/` (lifecycle, policy, semantic,
-scheduler, audit, lineage), `src/db/` (schema, import), `data/private/`
-(ignored; local copy of the XLSX). The semantic layer holds the computable
-KPI mapping from SCOPE (D14).
+`src/components/steward-app.tsx` controls visibility. Role and identity
+selectors provide demo attribution only. [API](API.md) lists actual handlers;
+there is no implemented generic assets API or lineage endpoint.
 
-## Contract to agree before both lanes start
+## Request execution
 
-1. **Step events** (one stream, read by both Agentic views):
-   `{ runId, step, agent, status: running|done|waiting_approval|failed, summary, evidence[], ts }`.
-   Steps: intent, clarify, discovery, conflict, confirm_reuse, propose, approve, build,
-   register, done. The scheduler emits the same shape with `runId: "clock"`
-   and `agent` set to the service (scheduler, lifecycle) for steps expire,
-   lease_review, archive and restore, so the Pipeline view can light them up.
-2. **Proposal:** `{ id, version, type, assetIds[], rationale, evidence[], lineageSnapshot, requiredApprovers[], status }`.
-   Types: build_temporary, promote, renew, merge, retire, restore,
-   reassign_owner. Reuse is not a proposal: the requester confirms the reuse
-   candidate (no approver) and it is logged as a usage event plus an audit
-   row (D13, D14). Merge proposals add
-   `candidates[]` (same model + overlapping KPIs) and the owner's chosen
-   `targetAssetId`; execution requires an active target whose scope covers
-   the source and redirects the source's downstream assets. Required approvers (D13, D14): build_temporary → any active
-   Lead in the requester's region; promote to Team → any active Lead in the
-   owner's region; promote to Certified → the region's data steward; renew /
-   merge / retire / restore → asset owner; reassign_owner → the region's data
-   steward (Global steward for Asia Pacific). Temporary → Personal is
-   automatic and logged. Promotion never changes the owner. Any decision
-   closes a lease review; rejecting retire or merge renews the lease.
-3. **Decision:** `{ proposalId, version, actor, action: approve|reject|edit, reason }`.
-   `actor` is the identity from the "acting as" picker; the API rejects an
-   approve when `actor` is not in `requiredApprovers`.
-4. **Asset state:** `{ assetId, tier: temporary|personal|team|certified, previousTier, status: active|lease_due|archived|merged, owner, requester, leaseStart, leaseEnd, leaseSeeded, reviewDeadline, ttlEnd, sourceEndorsement }`.
-   Leases are per asset: `leaseEnd = leaseStart + 90` simulated days; renew
-   keeps `tier` and resets `leaseStart`. Restore sets `tier = previousTier`,
-   `status = active` and starts a new lease; a restored Temporary gets a
-   fresh 30-day `ttlEnd` instead. Imported assets get a seeded lease
-   (`leaseSeeded: true`): `leaseStart` is the latest date on or before the
-   clock start that equals `last_modified` + k × 90 days. `reviewDeadline =
-   leaseEnd + 14` days; silence past it applies the default archive.
-5. **Clock:** `{ simDate, startDate: "2026-11-01", running, msPerDay: 1000, reviewWindowDays: 14, nextDueEvent }`. 1 simulated
-   day = 1 s while running; starts paused after reset. Actions: pause, resume,
-   advance by N days, advance to next due event. Forward only; no rewind.
-   Advancing processes every due event in date order.
-6. **Lineage:** `trace_lineage(objectId, direction, depth)` → nodes (id, type,
-   name, owner, tier/endorsement, refresh, AI readiness, risk flags), edges
-   (source `Lineage_Edges` rows), distinct affected asset count, per-asset
-   monthly users, missing mappings and truncation. Handle cycles; deduplicate
-   nodes. Imported assets expose catalog edges only; app-computed values return
-   the actual stored query/parameters, units, filters, period, `value_type` and
-   source rows. No inferred fact-to-asset links. Snapshot stored per proposal
-   version.
-7. **Endpoints (draft):** `POST /api/runs` (start run; body includes
-   `requesterId`), `GET /api/runs/:id/events`
-   (stream), `GET /api/proposals`, `POST /api/proposals/:id/decision`,
-   `GET /api/assets`, `GET /api/assets/:id/lineage`, `GET /api/assets/:id/audit`,
-   `POST /api/usage` (`{ assetId, viewerId }`), `GET /api/clock`, `POST /api/clock/pause`,
-   `POST /api/clock/resume`, `POST /api/clock/advance` (`{ days }` or
-   `{ toNextEvent: true }`), `GET /api/portfolio`.
-   Built in T5 (beyond the draft): `GET /api/lifecycle` (clock, inbox,
-   counts, recent audit for the UI), `POST /api/lifecycle/reset` (demo reset of
-   app-owned tables) and `POST /api/assets/:id/restore` (`{ actor, reason? }`).
-   Built in T17: `POST /api/builds` (`{ requestId, answer?, requesterId? }`)
-   runs the steward analysis and stores a `build_temporary` proposal only when
-   it recommends a build; `POST /api/proposals/:id/decision` on that proposal
-   computes the insight (per market, latest month, actual-like) and registers
-   it as Temporary. Built insights live in the app-owned `insights` table.
+`src/mastra/index.ts` registers only `orchestrator`. Its tool map starts
+`createRequestPipeline` for stored request IDs. The workflow steps are intent,
+discovery, conflict, duplicate, recommend. Intent invokes `analyzeRequest`,
+which already computes deterministic candidate/definition/computability facts;
+subsequent steps expose those facts and check the lifecycle-aware estate.
+Discovery and Conflict agents word short summaries with template fallbacks.
+They do not independently search, adjudicate KPI definitions or compute values.
+See [MASTRA](MASTRA.md) for registrations, tool names and command gates.
 
-Role toggle controls visibility only; approval checks the proposal's required
-approvers (owner / team lead / steward) against the acting identity. Runs are
-started by the manager for a named requester; employees never start runs. App open events are stored apart from
-imported usage. The UI lane can build against fixtures of these shapes until
-the backend is ready.
+The workflow's analysis leg completes; human waits persist in app tables
+`runs` and `run_events`, not Mastra suspend/resume snapshots. Build proposal,
+build decision and reuse hooks continue the application run. The Pipeline view
+polls `/api/runs/latest`; chat uses a separate AI SDK UI message stream.
+Run events include `waiting_input` and `waiting_approval`. There is no
+`POST /api/runs` or per-run SSE events route. This is not a unified stream of
+lifecycle clock events and chat events.
 
-## Configuration
+## Services and persistence
 
-Names only; values go in `.env` (ignored):
+| Source | Responsibility |
+| --- | --- |
+| `src/services/steward` | Load pack/team/chat requests, resolve scope, canonical KPI checks, catalog candidates, computability gate |
+| `src/services/semantic` | Whitelisted mapping and calculations with units, filters, SQL/args and source rows |
+| `src/services/estate` | Catalog plus app-built assets and lifecycle state; duplicates, merges, restore offers, portfolio |
+| `src/services/build` | Revalidate build/reuse, persist proposals, compute approved insight and provenance |
+| `src/services/lifecycle` | Clock, leases, usage, proposals/decisions, TTL, escalation, archive/restore, audit |
+| `src/services/pipeline` | Request run state and ordered events, continuation hooks |
+| `src/services/scheduler` | Incremental overlap detection and known-finding reassessment; manual or explicit simulated-date triggers |
+| `src/lib/catalog.ts` | Server loader separating estate metadata from business facts for dashboard UI |
 
-- `ANTHROPIC_API_KEY`
-- `DATABASE_URL` (libSQL file path)
-- `SCHEDULER_DEMO_ACTIONS` (optional, `1` enables scheduler run / dismiss /
-  abandon over HTTP for the demo `manager` actor; off by default, D25)
-- `SCHEDULER_SIM_TRIGGER` (optional, `1`, with `SCHEDULER_DEMO_ACTIONS=1`:
-  clock actions run the governance jobs due at the new simulated date; D26)
-- `SCHEDULER_SIM_REASSESS_DAYS` (optional demo cadence, 1-365: minimum
-  simulated days between simulated periodic reassessments; unset = none; D26)
+The imported workbook tables remain source records, including catalog assets,
+KPI/model/owner metadata, lineage, usage and product facts. App state lives in
+`asset_state`, `usage_events`, `proposals`, `audit_log`, `insights`, clock,
+`chat_requests`, request runs/events and `scheduler_*` tables. Schema creation
+is lazy through service initializers. Audit update/delete triggers protect the
+current generation; a deliberate demo reset drops app tables, including audit
+and scheduler state, then reseeds. It is not an immutable cross-reset archive.
 
-## Run commands
+Build values are stored only after approval with their provenance. Chat/model
+views omit structured SQL and row-level references; built insight detail can
+show that stored evidence. Imported lineage remains catalog edges. There is no
+complete interactive lineage graph/on-demand evidence API or automatic proof
+that an imported dashboard uses the business fact calculations.
 
-Tested on 2026-11-06 (Node 22):
+## Search and coverage limits
 
-```sh
-npm install
-mkdir -p data/private && cp <path>/Bayer_..._FINAL_Builder_Data_Pack.xlsx data/private/pack.xlsx
-npm run db:import      # XLSX -> data/private/steward.db (one table per sheet)
-npm test               # fixture tests; add PACK_XLSX=<path> for the local workbook checks
-cp .env.example .env.local   # add ANTHROPIC_API_KEY for the chat
-npm run dev            # http://localhost:3000
-npm run lint && npx tsc --noEmit && npm run build
-```
+`steward/discovery.ts` ranks catalog candidates by mapped approved/variant
+KPIs, scope fit and endorsement with explicit team-authored weights. It still
+reads imported `Analytics_Assets`, independently of app lifecycle state.
+`estate` search/duplicate checks cover app-built and archived assets separately.
+Do not claim the catalog candidate list is fully lifecycle-aware. Hybrid
+keyword/local vector terminology appears in the UI and estate tools; it does
+not mean external embeddings, a vector database, or that every retrieval path
+uses TF-IDF. Catalog period, dimensions, filters and answer fitness remain unknown.
 
-`db:import` is non-destructive (T14): it validates the workbook (sheet set,
-headers, DATA_SOURCES row counts), writes a temporary file and publishes it
-only if `steward.db` does not exist. It never deletes or overwrites a
-database; to reimport, delete the file first. Every table keeps its original
-columns plus `_source_row`, the exact Excel row (header = row 1).
-Backend services (`src/services/steward`) take a libSQL client as a parameter
-(`src/db/open.ts`), so they run in tests and scripts without Next.js:
-`npx tsx src/services/steward/cli.ts REQ-0001 [product market]` prints the
-structured analysis.
-KPI computation (T15, `src/services/semantic`) applies the D14 mapping
-(team-authored, proposed) to `Product_Market_Monthly`: one `value_type` per
-calculation, additive M EUR measures summed, growth as a ratio of sums,
-coverage % per product and market only. Results are `computed`,
-`unsupported` or `insufficient_data`, with units, filters, the query and
-source rows: `npx tsx src/services/semantic/cli.ts KPI-004 P-NUB DE
-2026-10-01` (add `--by-market` for one result per market).
+## Governance and monitoring
 
-### Steward tools (T16, provisional until agreed with Viet)
+[Governance](GOVERNANCE.md) specifies supported KPIs, approvers, lease policy
+and gaps. Numbers and mutations come from services; the model has no approve,
+reject, register or direct archive tool. HTTP routes remain directly callable
+in this unauthenticated demo, so chat command gates are not API authorization.
 
-`src/mastra/tools/steward-tools.ts` exposes the services to Mastra as thin
-adapters: `createStewardTools(getDb)` returns three `createTool()` tools. Each
-validates the input shape, calls the service and returns its result unchanged;
-service errors are re-thrown unchanged (Mastra streams them as
-`tool-output-error`). T16B wires them into the live orchestrator; see "Live
-orchestrator (T16B)" below.
+B0 comparator (`estate/merge.ts`) is in the mainline ancestry. B1 incremental
+monitoring, B2 reassessment, B3 gated proposal bridge and B4 Scheduler UI are
+present in master. Both job descriptors permit `manual` and `simulated_clock`
+triggers. T26/B5 invokes the same deterministic runners after explicit clock
+controls when both `SCHEDULER_SIM_TRIGGER=1` and `SCHEDULER_DEMO_ACTIONS=1`, or
+through Check due jobs (`POST /api/scheduler/simulated`, demo action gate only).
+No cron/worker runs jobs as wall time or a freely running clock advances.
 
-| Tool (id / key) | Input | Calls | Errors |
-| --- | --- | --- | --- |
-| `analyze-request` / `analyzeRequest` | `requestId`, optional `answer {product, market}` (an offered option) | `analyzeRequest` | unknown ID: `RequestNotFoundError`; answer not offered: `Error` |
-| `compute-kpi` / `computeKpi` | `kpiId`, `product` (name or All Pharma), `market` (ID, region or Global), optional `month`, `valueType`, `breakdown` (total / by_market) | `scopeIds`, `latestFactMonth`, `computeKpi` / `computeKpiByMarket` | unknown scope: `StewardToolInputError`; bad month: `InvalidKpiQueryError` |
-| `check-kpi-definitions` / `checkKpiDefinitions` | `text` | `checkKpis` | none |
+Checks use one stored date per invocation; incremental runs first, then periodic.
+Incremental is due when watched audit rows remain after the checkpoint; periodic
+requires open/dismissed findings and no successful reassessment at the current
+date (optional demo cadence can delay it). Each job runs at most once successfully
+per simulated date through this trigger; failed runs can retry at that date.
+Results are `ran`, `not_due`, `already_processed`, `deferred`. `ran` must still be
+checked for failed status. Another writer, a lost claim race or a moved clock can
+defer work. Same-day changes after success remain pending until the next date or
+a manual Run now. Fast-forward checks the resulting date, not every intermediate
+day, although lifecycle events themselves are processed in date order.
 
-Malformed input (empty ID, unknown `valueType`) returns Mastra's validation
-object `{ error: true, message }` instead of a result.
+The Scheduler card shows stored date, settings, due/pending state and last
+evaluation per job; history identifies simulated runs (`trigger: simulated_clock`,
+actor `simulated-clock`). Status-load errors leave the other sections available.
+Clock actions keep their successful state even when scheduler checks fail/defer;
+responses include a scheduler outcome/error and the clock bar explains retry via
+Check due jobs. This does not mean a successful clock action proves governance
+checks succeeded. `scheduler_sim_state` stores latest evaluation and resets with
+other scheduler tables. [API](API.md) specifies payloads and gates.
 
-Payloads: the full results keep row-level provenance (REQ-0001 Nubeqa / Global
-is ~55 KB) and are what `execute` returns. The model (`toModelOutput`) and the
-chat UI stream (`transform.display`) both receive the same compact view from
-`steward-views.ts` (`steward-analysis/v1`, `kpi-result/v1`,
-`kpi-by-market/v1`, `kpi-checks/v1`): values, statuses, reasons, IDs, formula
-text and source-row counts. Structured provenance (SourceRefs, SQL and its
-arguments, source-row lists) is omitted, and every view's `omitted` note says
-so. Human-readable diagnostic reasons are kept verbatim and may name a workbook
-row (e.g. "… is forecast_like_synthetic (row 11)"); no raw source records are
-included. `steward-analysis/v1` keeps the request's origin as
-`request.sourceSheet` (`Business_Requests` or `Team_Requests (team-authored)`)
-and `request.teamAuthored`, without a row, so TEAM-REQ-01 (D18) is never shown
-as Bayer data. Reuse candidates are cut to 5 with the same rule as discovery
-(`presentCandidates`): if none of the top 5 is a complete match, the best one
-takes the last slot, so the asset behind `reuse_candidates` is always shown. Validation errors pass through
-both projections unchanged. Measured on the pack: REQ-0001 Nubeqa / Global
-55 KB full → 12.3 KB view; a follow-up turn's model-visible replay is the view
-(12.7 KB), because Mastra keeps the model output in
-`providerOptions.mastra.modelOutput`. That copy doubles the browser-held
-message (~25 KB); whether the model provider sends it on the wire is not
-verified (no Anthropic provider package to inspect; no live run).
+Incremental scans audit IDs since its committed checkpoint, watching
+`temporary_registered`, `insight_built`, `restored`, `promoted`. It records
+eligible overlap findings using the estate merge comparator. It does not sweep
+the full estate or close vanished overlaps. Reassessment rechecks only open or
+dismissed findings, resolves vanished overlaps and reports stale proposals
+without changing them. `superseded` is reserved but never produced.
 
-Future evidence detail (not built): the services are deterministic over the
-read-only imported pack, so an endpoint such as
-`GET /api/evidence/analysis?requestId=&product=&market=` or
-`GET /api/evidence/kpi?kpiId=&product=&market=&month=&valueType=` can recompute
-the full result with the inputs echoed in the view (`request.id`,
-`clarification.resolved`, KPI `filters`) and return provenance on demand. Once
-app-owned state (lifecycle, proposals) affects results, evidence must come from
-the snapshot stored per proposal version (contract §6), not a recompute.
+One finding-writing run can be active at a time. Claim, evaluation and atomic
+commit/checkpoint stages prevent partial success; failures do not advance the
+checkpoint. A stuck run requires manual abandon with a reason, with no automatic
+timeout. Findings preserve latest observation and separate dismissed evidence,
+not every historical observation. Source changes outside app audit are invisible.
+Finding proposal previews exist but submission always returns 409 pending
+`MERGE-APPROVERS` and `CODEX-REVIEW`. The merge approver fix is committed but
+independent review remains required. Certified replacement policy is unresolved.
 
-### Live orchestrator (T16B, provisional until agreed with Viet)
+## Configuration and operating limits
 
-`src/mastra/agents/orchestrator-config.ts` holds the production prompt
-(`ORCHESTRATOR_INSTRUCTIONS`) and governed tool map
-(`createOrchestratorTools(getDb)`); `orchestrator.ts` binds them to the
-server DB and adds `search-assets`. Production tools: `analyzeRequest`,
-`computeKpi`, `checkKpiDefinitions`, `proposeBuild`, `searchAssets`.
-`get-business-request` and `find-kpi-definitions` left the map (still
-exported in `catalog-tools.ts`): `analyzeRequest` loads the request, and the
-LIKE-based KPI check conflated Net Sales with Net Sales Growth.
-
-| Tool (id / key) | Input | Calls | Output (model and UI) |
-| --- | --- | --- | --- |
-| `propose-build` / `proposeBuild` | `requestId`, optional `answer {product, market}` | `proposeBuild` (T17) at the lifecycle clock date (`ensureLifecycle` + `tick`, as `POST /api/builds`) | `build-proposal/v1`: `proposed` / `already_proposed` (proposal ID, insight ID, scope, KPIs, gaps, requester, approvers, request source label, `knownIssues`), `not_proposed` (recommendation, rationale), or `intent_required` (`reason`: `no_command` / `request_mismatch` / `scope_mismatch`, message with the accepted syntax) |
-
-Governance of `propose-build`:
-
-- The service re-runs the steward analysis; only `build_proposal` with a
-  resolved scope stores a `build_temporary` proposal. Clarification (an
-  offered `answer` only) and eligibility stay in the services.
-- Submission authorization (ours, after Codex F2/F3): the tool reads the
-  latest user message from the agent execution context (never the model's
-  arguments) and stores nothing unless the whole message is one command:
-
-  ```text
-  Submit a build proposal for <REQUEST-ID>
-  Submit a build proposal for <REQUEST-ID> with product <PRODUCT> and market <MARKET>
-  ```
-
-  Case-insensitive; spaces collapse; one optional final period. No question
-  mark, quote, newline, prefix or second sentence, so questions, negations,
-  quotations, hypotheticals and discussion are refused (`no_command`). The
-  command's request ID must equal the call's `requestId` after trim and
-  upper-casing (`request_mismatch`). The call's `answer` must equal the
-  command's product and market (case-insensitive), and is allowed only when
-  the command names them (`scope_mismatch`). A confirmed scope must also be
-  the analysis's resolved scope, so a fixed-scope request cannot store a
-  different confirmed scope. Use the scope form only for a request that needed
-  clarification, with one of the offered options. Missing or invalid
-  execution context refuses. All refusals return `intent_required` before
-  `proposeBuild` runs. The services stay authoritative for eligibility.
-  `parseSubmitCommand` / `authorizeSubmission` in `build-tools.ts`.
-- No `requesterId` input: the chat has no identity, so the requester comes
-  from the D12 region mapping (`team_mapping`). The model cannot choose the
-  requester and so cannot steer the approvers.
-- No approve, reject or register tool exists. A proposal is decided only in
-  the approval inbox (`POST /api/proposals/:id/decision` → `decideBuild`).
-- Service errors (unknown request, answer not offered, no requester) are
-  tool errors; malformed input returns the validation object.
-- Request provenance (F5): `build.ts` stores the sheet the loader read the
-  request from (`Business_Requests` or `Team_Requests (team-authored)`) in
-  the proposal evidence and `build_proposed` audit row, and refuses a request
-  without one. The chat view labels the request from that stored evidence,
-  never from the ID; a missing sheet shows as `unknown` with a `knownIssues`
-  entry. The inbox still labels `TEAM-` IDs by prefix (display only).
-
-Chat UI: step labels and summaries for the new tools; when a
-`propose-build` output is `proposed`, the chat calls the lifecycle context's
-`refresh()` so the inbox shows it without a clock tick.
-
-Code layout: `src/app` (page + `api/chat`), `src/components` (shell, dashboard,
-agentic chat), `src/lib` (catalog loader, shared types), `src/mastra` (agent +
-read-only catalog tools), `src/db` (SQLite client, import).
-
-### Governance scheduler (T25, D25)
-
-`src/services/scheduler` (no Mastra, no LLM). Jobs `incremental_overlap`
-(mode `incremental`) and `periodic_reassessment` (mode `reassessment`), both
-triggers `manual` and `simulated_clock` (B5, D26); finding-writing runs are
-serialised (409 while one runs).
-UI: Scheduler tab in the Agentic side panel (Pipeline | Scheduler | Inbox,
-`src/components/agentic/scheduler-view.tsx`). Routes, errors as `{ error }`
-with 400 / 403 / 404 / 409:
-
-- `GET /api/scheduler`: job descriptor (rules, watched actions,
-  limitations), checkpoint, run counts, latest run, finding counts.
-- `GET /api/scheduler/runs?limit=` and `GET /api/scheduler/runs/[id]`: run
-  history with window, assessments per changed asset, finding counts, error.
-- `GET /api/scheduler/runs?jobId=` filters by job.
-- `POST /api/scheduler/runs` `{ actor, jobId? }` (default
-  `incremental_overlap`): run now; 200 with the finished run
-  (succeeded, or failed with `error.code` `evaluation_failed` /
-  `commit_failed`), 409 while another runs or the database stayed locked,
-  and 409 with `outcome` `abandoned` / `reset` / `unrecorded`, `runId` and
-  the original `failure` when the failure could not be settled as a failed
-  run (`unrecorded`: the run is still running; abandon it).
-- `POST /api/scheduler/runs/[id]/abandon` `{ actor, reason }`: recovery.
-- `GET /api/scheduler/findings?status=open|dismissed|resolved|superseded|any&assetId=&limit=`,
-  `GET /api/scheduler/findings/[id]`,
-  `POST /api/scheduler/findings/[id]/dismiss` `{ actor, reason }`.
-  A finding carries `evidence` (latest observation), `dismissal` (with the
-  evidence it was dismissed on), `resolution`, `proposalId` (only while its
-  proposal is open/escalated) and `proposal` `{ proposalId, outcome,
-  sourceId, targetId }` derived from the lifecycle `proposals` row.
-- `GET /api/scheduler/findings/[id]/proposal?sourceId=&targetId=`:
-  read-only eligibility preview per direction, comparator preference as
-  evidence, `enabled: false` and `blockedBy`.
-- `POST /api/scheduler/findings/[id]/proposal`: disabled, always 409
-  `{ error, blockedBy: ["MERGE-APPROVERS", "CODEX-REVIEW"], blockers }`.
-
-- B5 (T26, D26): `GET /api/scheduler/simulated`: stored sim date, settings
-  (`autoOnClock`, `reassessEveryDays`), per job the last simulated
-  evaluation (`simDate`, `decision` ran / not_due / already_processed /
-  deferred, `reason`, `runId`, `source` clock_action / manual_check) and
-  whether it is due now. `POST /api/scheduler/simulated` `{ actor }`: run
-  the jobs due at the stored date (never ticks the clock); 200
-  `{ result: { simDate, source, decisions } }`. With
-  `SCHEDULER_SIM_TRIGGER=1`, `POST /api/clock/*` responses add
-  `scheduler` (the same result, or `{ error }`; the clock action is kept;
-  the client reports an error, failed run or deferred job, D26). Due
-  preview per job: `{ due, reason, pendingChanges?, nextOn? }`; changes
-  after the day's successful simulated run are pending, not due. A
-  `deferred` decision can mean the clock moved during the trigger.
-  Simulated runs have `trigger: "simulated_clock"`, actor `simulated-clock`.
-
-POST routes need `SCHEDULER_DEMO_ACTIONS=1` and `actor: "manager"`; the
-check runs before any database access. Scheduler writes use their own
-short-lived `libsql` connections, never the shared client (D25).
-Operator CLI: `npx tsx src/services/scheduler/cli.ts status | run <actor> |
-findings | dismiss <id> <actor> <reason> | abandon <id> <actor> <reason> |
-sim | sim-status`.
-
-## Demo reset and fallback
-
-Reset: rebuild SQLite from the XLSX, reseed synthetic usage with a fixed seed,
-reset the clock to its start date, paused. Fallback: a recorded run of the step events can be replayed in
-both views if the model API fails; label it as a replay.
-
-## Production path (for the README note)
-
-Replace the imported pack with the approved catalog and Power BI/Fabric APIs
-(workspaces, semantic models, lineage, usage); real SSO/RBAC instead of the
-role toggle; scheduler as a real cron. No live integration in the prototype.
+See [README](../README.md#run-locally) for installation and actual environment
+variables. Lifecycle time advances via `tick` on service/HTTP activity and UI
+polling, with one simulated day per second when running. Forward advancement
+processes due lifecycle events in order. T26 hooks explicit clock actions only;
+`tick()` and GET polling do not invoke governance checks. Server settings are
+`SCHEDULER_DEMO_ACTIONS`, `SCHEDULER_SIM_TRIGGER`, and optional
+`SCHEDULER_SIM_REASSESS_DAYS` (integer 1–365, otherwise ignored). No cadence by
+default; the optional cadence affects simulated periodic checks only, not
+manual Run now, 90-day leases or 30-day TTL. T26 flags are absent from
+`.env.example`; the README explains adding/exporting them.
+No external BI API, production scheduler, authenticated user sessions or server
+chat-history store is implemented. See [DEMO](DEMO.md) for a disposable reset
+and deterministic fallback; recorded replay is a proposed fallback, not a feature.

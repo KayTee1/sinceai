@@ -583,3 +583,26 @@ real-time semantics and run on every GET); a fixed production cadence (no
 evidence for a value); client-only triggering from the Scheduler tab (would
 not run when the tab is closed).
 Agreed by: KayTee (proposed); Viet pending
+
+## Documentation snapshot interpretation (2026-11-08; no new product decision)
+
+Implementation snapshot: `1beff2ebd1e4df5393bc6b065795ca1ddb845edc` (`origin/master`, T26 merged in #38),
+verified 2026-11-08. Original refresh baseline: `43a1157`; reconciled against the
+committed final master revision. Local `master` is stale and was not moved.
+
+Owner approved this documentation refresh and the isolated branch
+`docs/mvp-repository-refresh`. This note records implementation facts, not
+agreement on outstanding product decisions. Earlier entries and their agreed-by
+fields remain historical. D16 supersedes silence-driven lease archival; D22
+supersedes invented DSH team boards; D23 limits telemetry to the review window.
+D24 synthetic sprawl remains direction only. D25 initially added manual B1/B2;
+B3 submission remains disabled, and B4 UI is present in the verified master.
+Approval waits persist in application tables, not Mastra snapshots. The D14/D15
+mapping retains its provisional label. See [GOVERNANCE](GOVERNANCE.md) for current
+semantics and gaps. Independent review and Certified replacement policy remain
+open; documentation approval does not clear those gates.
+
+T26 reconciliation: D26 is implemented in master #38; its original proposed/
+agreed-by labels above are retained as decision history, not overwritten by
+this documentation update. B5 supports explicit simulated-date checks and
+opt-in clock-action hooks, not background scheduling. B3 remains disabled.

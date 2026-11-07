@@ -1,5 +1,34 @@
 # Plan
 
+## Current documentation task and baseline
+
+Implementation snapshot: `1beff2ebd1e4df5393bc6b065795ca1ddb845edc` (`origin/master`, T26 merged in #38),
+verified 2026-11-08. Original refresh baseline: `43a1157`; reconciled against the
+committed final master revision. Local `master` is stale and was not moved.
+
+Owner assigned and approved documentation execution on
+`docs/mvp-repository-refresh`, isolated worktree `/private/tmp/sinceai-docs-refresh`.
+This completes the repository documentation part of T9; video, submission and
+runtime acceptance remain owner tasks. The older table below is historical task
+tracking, not an authoritative release-status inventory. It is retained to
+preserve IDs/ownership and avoid claiming another developer's reviews complete.
+
+| ID | Current snapshot status / remaining work |
+| --- | --- |
+| T9 | Documentation refresh completed; human review/publication pending; no video recorded |
+| T16/T16B | Steward tool adapters and live orchestrator in baseline; live model acceptance unverified here |
+| T17 | Approved build with stored provenance in baseline; historical F5 fix included |
+| T19 | Synthetic sprawl direction only; implementation not assigned |
+| T21/T22/T23 | Chat cards, estate tools and persisted request pipeline in baseline |
+| T24/T25 | B0–B4 integration present; finding proposal POST disabled; independent reviews and Certified replacement policy remain open |
+| T26 | Merged #38; gated explicit clock-action checks and manual Check due jobs documented; no background worker |
+
+No old review finding is closed by this refresh. No implementation task is
+claimed or changed. Final PR must target the owner-approved integrated MVP
+baseline after divergence assessment. Owner authorized integration of final master and publication; PR is for review, never automatic merge.
+
+## Historical plan
+
 Status: challenge chosen (D1). Scope follows the Miro pipeline and UI vision
 (SCOPE, D7–D9). Lanes and tasks below are proposed until both developers agree.
 

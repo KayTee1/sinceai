@@ -1,8 +1,32 @@
 # Requirements
 
+## Implementation status at the documentation snapshot
+
+Implementation snapshot: `1beff2ebd1e4df5393bc6b065795ca1ddb845edc` (`origin/master`, T26 merged in #38),
+verified 2026-11-08. Original refresh baseline: `43a1157`; reconciled against the
+committed final master revision. Local `master` is stale and was not moved.
+
+The sections below preserve product targets and historical planning. They are
+not a checklist of delivered functionality. Current behavior is specified in
+[ARCHITECTURE](ARCHITECTURE.md), [MASTRA](MASTRA.md), [API](API.md),
+[GOVERNANCE](GOVERNANCE.md) and the executable [DEMO](DEMO.md) runbook.
+D16 supersedes default lease auto-archive: silence escalates to a steward.
+
+Implemented: persisted request Pipeline, chat drafts, governed build/reuse,
+four mapped KPIs, usage/lease/TTL services, inbox, restore and merge proposals.
+Partial: catalog-only discovery remains separate from lifecycle-aware estate
+checks; lineage is catalog metadata plus built-value provenance, not a complete
+graph; counts do not establish KPI conflict resolution; owner reassignment,
+proposal editing and complete certification promotion are unfinished.
+B0–B5 are in the verified master snapshot: B1/B2 runners support manual runs,
+B3 proposal bridge stays disabled, B4 supplies Scheduler UI, and T26/B5 adds
+opt-in checks after explicit clock actions plus manual Check due jobs. No cron,
+background worker, freely ticking clock trigger or full-estate sweep. Synthetic sprawl generation remains
+planned. External BI/SSO integration and regulatory certification are absent.
+
 Organizer facts: [CHALLENGE](CHALLENGE.md). Dataset semantics:
 [DATA_SOURCES](DATA_SOURCES.md). Product scope: [SCOPE](SCOPE.md) (Miro
-pipeline + UI vision, D7–D9). Team must still agree the contract and lanes.
+pipeline + UI vision, D7–D9). Historical contract/lanes agreement remains a coordination item; actual interfaces are documented in API.
 
 "Must" means the demo fails without it. "Stretch" means build it if time remains after P0/P1.
 
@@ -13,7 +37,7 @@ pipeline + UI vision, D7–D9). Team must still agree the contract and lanes.
 | R3 | Discovery: hybrid search (keyword + local word-overlap vectors; embeddings API only if needed, D13) over assets, KPIs and models; reuse before build; returns reuse candidates with known/unknown coverage; requester confirms reuse (no approver) and it is logged | W1 rule 1; Miro seq.; D14 | must | Ranked candidates with score parts, source IDs and coverage gaps; nothing reused without requester confirmation |
 | R4 | Conflict detector: same canonical metric, different definition/status; no invented formulas or monetary gaps | W1 KPI_Catalog; Miro seq. | must | For REQ-0001: Net Sales Growth (KPI-004) vs. Net Sales Growth Local (KPI-005) flagged with KPI IDs and status; Net Sales group (KPI-001/002/003) detected the same way |
 | R5 | Build path: an active Lead in the requester's region approves → build step (deterministic in P0, Builder agent in P1) on KPIs in the computable mapping only → Temporary insight with TTL 30d and expiry shown | Miro seq.; W1 rule 2; D13, D14 | must | Insight cites only mapped approved KPIs; expiry date visible; approve disabled unless acting as a Lead in that region |
-| R6 | Lifecycle engine: Temporary → Personal → Team → Certified, 90-day lease, owner review renew/merge/retire, default archive after a 14-day review window, restore to the previous tier with a new lease (Temporary: fresh 30-day TTL); Temporary → Personal automatic and logged; promotion keeps the owner; any decision closes a review and rejecting retire/merge renews; leases per asset; renew keeps the tier; imported leases seeded from `last_modified`; rule-based merge candidates (same model + overlapping KPIs), executed only for an active target covering the source's scope with downstream assets redirected | Miro lifecycle; D9, D12, D13, D14 | must | Each transition reachable in demo; renewed and restored assets keep their tier; imported reviews spread over the first 90 days; archive restorable; no deletes; auto-archive logged as policy action and skipped for assets with dependencies or a missing or inactive owner; a rejected retire is never auto-archived |
+| R6 | Lifecycle engine: Temporary → Personal → Team → Certified, 90-day lease, owner review renew/merge/retire, steward escalation after a 14-day review window (D16 supersedes default archive), restore to the previous tier with a new lease (Temporary: fresh 30-day TTL); Temporary → Personal automatic and logged; promotion keeps the owner; any decision closes a review and rejecting retire/merge renews; leases per asset; renew keeps the tier; imported leases seeded from `last_modified`; rule-based merge candidates (same model + overlapping KPIs), executed only for an active target covering the source's scope with downstream assets redirected | Miro lifecycle; D9, D12, D13, D14, D16 | must | Each transition reachable in demo; renewed and restored assets keep their tier; imported reviews spread over the first 90 days; archive restorable; no deletes; silence escalates and never archives; a rejected retire renews |
 | R7 | Simulated clock at 1 day = 1 s; god-mode panel with pause, resume, fast-forward (no rewind); scheduler runs TTL expiry and lease reviews | D9, D12 | must | Running 30 s expires a new Temporary; 90 s after promotion an owner review proposal appears; clock starts paused after reset; clock actions audited; advancing 120 days processes intermediate events in date order |
 | R8 | Per-user app usage events for promotion: seeded team-synthetic events plus opens under the "viewing as" identity; app events and pack monthly usage kept separate | D9, D10, D13; W1 Data_Dictionary | must | Promotion uses app events; UI labels seeded ones team-synthetic; imported usage never incremented; no monthly sums as distinct users |
 | R9 | Approval inbox: approve / reject / edit; reject and edit need a reason; edits reset approvals; authority from required approvers (owner / team lead / steward) via the manager's "acting as" picker, not the role toggle | B1 §04 human-in-the-loop; D10, D12 | must | Reject without reason blocked; rejecting a build or promotion leaves state unchanged; rejecting a retire or merge at lease review renews the lease (D14); Approve disabled when the acting identity is not a required approver; decision logged under that identity |
@@ -59,4 +83,4 @@ production scale, certified compliance.
 | IP, source redistribution, external AI processing terms | Data handling / submission | Organizers / Bayer |
 | Video limit and current portal rules | Demo / submission | Organizers |
 | Whether DSO / 90-day framing resonates with Bayer | Pitch | Bayer Q&A (Sat) |
-| Final contract (step events, proposal JSON, endpoints) and lanes | Implementation | Viet + KayTee |
+| Final agreement on contract and lanes (implemented interfaces now documented in API) | Coordination | Viet + KayTee |
