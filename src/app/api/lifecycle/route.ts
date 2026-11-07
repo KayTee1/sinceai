@@ -37,13 +37,24 @@ export async function GET() {
       nextDue: next?.date ?? null,
       counts,
       leaseDue: states.filter((s) => s.status === "lease_due").length,
-      pending: pending.map((p) => ({ ...p, assetNames: p.assetIds.map((id) => names[id] ?? id) })),
+      pending: pending.map((p) => ({
+        ...p,
+        assetNames:
+          p.type === "build_temporary" && "kind" in p.evidence && p.evidence.kind === "build"
+            ? [`New insight · ${p.evidence.scope.product} · ${p.evidence.scope.market}`]
+            : p.assetIds.map((id) => names[id] ?? id),
+      })),
       audit,
       portfolio,
       people: Object.fromEntries(
         owners.rows.map((o) => [
           o.owner_id as string,
-          { name: o.owner_name as string, role: o.role as string, region: o.scope as string, active: o.status === "active" },
+          {
+            name: o.owner_name as string,
+            role: o.role as string,
+            region: o.scope as string,
+            active: o.status === "active",
+          },
         ]),
       ),
     };

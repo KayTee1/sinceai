@@ -21,13 +21,24 @@ export type PromoteEvidence = {
   ttlEnd: string | null;
 };
 
+export type BuildEvidence = {
+  kind: "build";
+  requestId: string;
+  requestText: string;
+  scope: { product: string; market: string };
+  requesterId: string;
+  requesterSource: "given" | "team_mapping";
+  kpis: { kpiId: string; name: string | null; unit: string | null; status: string }[];
+  gaps: string[];
+};
+
 export type PendingProposal = {
   id: string;
-  type: "renew" | "retire" | "promote";
+  type: "renew" | "retire" | "promote" | "build_temporary";
   assetIds: string[];
   assetNames: string[];
   rationale: string;
-  evidence: ReviewEvidence | PromoteEvidence;
+  evidence: ReviewEvidence | PromoteEvidence | BuildEvidence;
   requiredApprovers: string[];
   status: "open" | "escalated";
   createdOn: string;

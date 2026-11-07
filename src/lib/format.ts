@@ -27,8 +27,9 @@ export function int(v: number) {
 }
 
 /** Short lifecycle label for an asset: archived, under review, or lease/TTL end. */
-export function leaseLabel(status: string, leaseEnd: string | null) {
+export function leaseLabel(status: string, leaseEnd: string | null, tier?: string) {
   if (status === "archived") return "Archived";
   if (status === "lease_due") return "Review due";
-  return leaseEnd ? `Lease ${formatDate(leaseEnd)}` : "No lease";
+  if (!leaseEnd) return "No lease";
+  return `${tier === "temporary" ? "Expires" : "Lease"} ${formatDate(leaseEnd)}`;
 }

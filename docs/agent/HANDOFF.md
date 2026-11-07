@@ -1,5 +1,13 @@
 # Handoff
 
+- **T17 build step (Viet / Claude, merged #21):**
+  `src/services/build` turns an analysis that recommends a build into a
+  `build_temporary` proposal (Leads in the requester's region, never the
+  requester); approval computes each KPI per market with `computeKpiByMarket`
+  (unchanged), stores values + provenance in `insights`, registers Temporary.
+  Dashboard lists built insights first; clicking a value shows formula,
+  filters, query and source rows. `POST /api/builds` is the entry point for
+  the T16 agent tool. Demo trigger: TEAM-REQ-01 (D18, below).
 - **F1 resolved (D18, `feat/F1-team-demo-request`):** demo build trigger is
   TEAM-REQ-01 (team-authored, labelled), "Net sales and forecast variance for
   Xarelto in North America". Reaches build_proposal on the real pack (local

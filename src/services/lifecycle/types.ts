@@ -39,7 +39,23 @@ export type PromoteEvidence = {
   source: { sheet: string; ids: string[] }[];
 };
 
-export type ProposalType = "renew" | "retire" | "promote";
+/** Why a Temporary insight is proposed for building (step 4). Values are computed only after approval. */
+export type BuildEvidence = {
+  kind: "build";
+  requestId: string;
+  requestText: string;
+  scope: { product: string; market: string };
+  requesterId: string;
+  /** How the requester was chosen: given by the caller, or our region mapping (D12). */
+  requesterSource: "given" | "team_mapping";
+  kpis: { kpiId: string; name: string | null; unit: string | null; status: string }[];
+  /** Requested metrics no in-scope asset covers. */
+  gaps: string[];
+  rationale: string[];
+  source: { sheet: string; ids: string[] }[];
+};
+
+export type ProposalType = "renew" | "retire" | "promote" | "build_temporary";
 export type ProposalStatus = "open" | "escalated" | "approved" | "rejected" | "expired";
 
 export type Proposal = {
@@ -48,7 +64,7 @@ export type Proposal = {
   type: ProposalType;
   assetIds: string[];
   rationale: string;
-  evidence: ReviewEvidence | PromoteEvidence;
+  evidence: ReviewEvidence | PromoteEvidence | BuildEvidence;
   requiredApprovers: string[];
   status: ProposalStatus;
   createdOn: string;
