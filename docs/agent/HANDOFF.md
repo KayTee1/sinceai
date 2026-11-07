@@ -120,9 +120,11 @@
   provisional until Viet agrees.
 - **Needs:** `ANTHROPIC_API_KEY` in `.env.local` for any live chat run (none
   done for T16).
-- **Next:** independent review of T16B (PR #28: steward tools plus a
-  build-proposal tool wired into the orchestrator) and Viet's review of F5
-  (PR #29). Once F5 merges, PR #28 needs the follow-up listed in PR #29
+- **Next:** Viet reviews T16B (PR #28: steward tools plus a build-proposal
+  tool wired into the orchestrator) and F5 (PR #29); both are open. Codex's
+  independent review of T16B and its verification of the P1 authorization
+  fix are done. Live Sonnet / browser verification of T16B is still
+  outstanding. Once F5 merges, PR #28 needs the follow-up listed in PR #29
   (provenance assertion, `BUILD_SOURCE_DEFECT` warning, stored provenance in
   the build-proposal view). Then fix the discovery issue above with Viet.
   T19 (D24) planning comes after T16B and the golden path.
