@@ -5,6 +5,9 @@ import type { DashboardData, Role } from "@/lib/types";
 import { formatDate } from "@/lib/format";
 import { DashboardView } from "./dashboard/dashboard-view";
 import { ChatView } from "./agentic/chat-view";
+import { LifecycleProvider, useLifecycle } from "./lifecycle/lifecycle-context";
+import { ClockBar } from "./lifecycle/clock-bar";
+import { Inbox } from "./lifecycle/inbox";
 
 type Tab = "agentic" | "dashboard";
 
@@ -16,22 +19,44 @@ export function StewardApp({ data }: { data: DashboardData }) {
   const activeTab: Tab = role === "employee" ? "dashboard" : tab;
 
   return (
-    <div className="flex h-dvh flex-col">
-      <header className="grid h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center bg-navy px-5 text-white">
-        <Brand />
-        <TabSwitch value={activeTab} onChange={setTab} agenticLocked={role === "employee"} />
-        <div className="flex items-center justify-end gap-4">
-          <span className="hidden text-xs text-white/60 md:inline">
-            Simulated date <span className="tabular text-white/90">{formatDate(data.clockDate)}</span>
-          </span>
-          <RoleSwitch value={role} onChange={setRole} />
-        </div>
-      </header>
+    <LifecycleProvider>
+      <div className="flex h-dvh flex-col">
+        <header className="grid h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center bg-navy px-5 text-white">
+          <Brand />
+          <TabSwitch value={activeTab} onChange={setTab} agenticLocked={role === "employee"} />
+          <div className="flex items-center justify-end gap-4">
+            {role === "employee" ? <ViewerPicker /> : <SimDate fallback={data.clockDate} />}
+            <RoleSwitch value={role} onChange={setRole} />
+          </div>
+        </header>
 
-      <main className="min-h-0 flex-1">
-        {activeTab === "dashboard" ? <DashboardView data={data} role={role} /> : <ChatView />}
-      </main>
-    </div>
+        {role === "manager" && <ClockBar />}
+
+        <main className="min-h-0 flex-1">
+          {activeTab === "dashboard" ? (
+            <DashboardView data={data} role={role} />
+          ) : (
+            <div className="flex h-full">
+              <div className="min-w-0 flex-1">
+                <ChatView />
+              </div>
+              <aside className="w-[380px] shrink-0 border-l border-line bg-surface">
+                <Inbox />
+              </aside>
+            </div>
+          )}
+        </main>
+      </div>
+    </LifecycleProvider>
+  );
+}
+
+function SimDate({ fallback }: { fallback: string }) {
+  const { data } = useLifecycle();
+  return (
+    <span className="hidden text-xs text-white/60 md:inline">
+      Simulated date <span className="tabular text-white/90">{formatDate(data?.clock.date ?? fallback)}</span>
+    </span>
   );
 }
 
@@ -120,5 +145,30 @@ function LockIcon() {
       <rect x="2" y="5.5" width="8" height="5.5" rx="1" fill="currentColor" />
       <path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
     </svg>
+  );
+}
+
+// Employee identity for usage logging (D13). Opens count for this person.
+function ViewerPicker() {
+  const { data, viewer, setViewer } = useLifecycle();
+  if (!data) return null;
+  const people = Object.entries(data.people)
+    .filter(([, p]) => p.active)
+    .sort(([, a], [, b]) => a.name.localeCompare(b.name));
+  return (
+    <label className="flex items-center gap-2 text-xs text-white/60">
+      Viewing as
+      <select
+        value={viewer}
+        onChange={(e) => setViewer(e.target.value)}
+        className="max-w-[180px] rounded-sm border border-white/20 bg-white/10 px-2 py-1 text-xs text-white focus:outline-none"
+      >
+        {people.map(([id, p]) => (
+          <option key={id} value={id} className="text-ink">
+            {p.name} · {p.region}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

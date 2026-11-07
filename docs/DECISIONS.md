@@ -239,3 +239,48 @@ Alternatives considered: blend value types; drop mismatched cells; average
 percentages; probe the scope's own latest month; allow a build when some
 markets compute (partial build).
 Agreed by: pending (proposed by KayTee / Claude Code)
+
+D16: Silence escalates, never archives (2026-11-07)
+Status: accepted. Replaces D9's default archive on silence; refines D13/D14.
+Choice and why: archiving must always follow an approved proposal. When an
+owner does not answer a lease review within 14 days, the review is marked
+escalated and the region's data steward (D14; Global covers Asia Pacific and
+assets with no owner) is added as an approver. The asset stays under review;
+nothing is archived by policy. Temporary insights still expire on their
+30-day TTL, which is the tier's rule rather than a review default. Policy
+version lifecycle-v2.
+Alternatives considered: archive on silence (D9); renew on silence; archive
+only silent retire proposals.
+Agreed by: Viet
+
+D17: Team use of a Temporary insight proposes Team (2026-11-07)
+Status: accepted. Refines D13/D14 (Temporary -> Personal stays owner-only).
+Choice and why: under the original rule only the owner's repeat use saved a
+Temporary insight, so one that colleagues relied on was still archived after
+30 days. Now, once 3 or more distinct people in the owner's region (the team,
+D14) have opened it in the app, a promote proposal goes to the active Leads in
+that region, excluding the owner (no self-approval; the region's data steward
+if no other Lead). The 30-day expiry is held while it waits; approval makes it
+Team with a 90-day lease and the owner unchanged; rejection lets the expiry
+resume. The owner's own repeat use still promotes to Personal automatically.
+Policy version lifecycle-v3.
+Alternatives considered: owner-only (original rule); any repeat use promotes
+to Personal.
+Agreed by: Viet
+
+D18: F1 demo strategy: one team-authored demo request (2026-11-07)
+Status: accepted. Resolves REVIEW F1; D15's every-market build gate is unchanged.
+Choice and why: no request in the pack reaches a build proposal (F1), so the
+demo uses TEAM-REQ-01, written by the team and labelled as ours: "Net sales
+and forecast variance for Xarelto in North America, by country." Checked on
+the real pack: Net Sales is covered by existing assets, Forecast Variance
+(KPI-042) by none in scope, and both KPIs compute for US and CA, so the
+analysis honestly recommends a build. Only the request text is ours; the
+catalog, KPIs, values and rules are the pack's and ours as before. The
+request lives in code (src/services/steward/team-requests.ts), is never
+written into Business_Requests, and every source reference names
+"Team_Requests (team-authored)". The agent says so when it uses one.
+Alternatives considered: partial builds for computable markets (changes D15);
+no live build in the demo.
+Agreed by: Viet
+

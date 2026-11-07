@@ -30,7 +30,7 @@ export const EXPECTED_ROW_COUNTS: Record<string, number> = {
 // Columns read by current SQL queries over the imported tables, by consumer:
 // S = src/services/steward, K = src/services/semantic (KPI computation),
 // A = src/lib/catalog.ts (dashboard),
-// M = src/mastra/tools/catalog-tools.ts. Names match DATA_SOURCES. The
+// M = src/mastra/tools/catalog-tools.ts, L = src/services/lifecycle. Names match DATA_SOURCES. The
 // importer rejects a workbook where any of these is missing or renamed.
 export const REQUIRED_COLUMNS: Record<string, string[]> = {
   Business_Requests: [
@@ -38,7 +38,7 @@ export const REQUIRED_COLUMNS: Record<string, string[]> = {
   ],
   Products: ["product_id", "product_name"], // S, A
   Markets: ["market_id", "market_name", "region"], // S, A
-  Owners: ["owner_id", "owner_name", "status"], // S, A, M
+  Owners: ["owner_id", "owner_name", "status"], // S, A, M, L
   KPI_Catalog: [
     "kpi_id", "kpi_name", "canonical_metric", "unit", "definition_status", "approval_status", // S, K, M
     "description", // M
@@ -50,7 +50,8 @@ export const REQUIRED_COLUMNS: Record<string, string[]> = {
   ],
   Asset_KPI_Map: ["asset_id", "kpi_id", "usage_role"], // S, M
   Workspaces: ["workspace_id", "workspace_name"], // A
-  Asset_Usage: ["asset_id", "month", "views", "unique_users"], // A
+  Asset_Usage: ["asset_id", "month", "views", "unique_users"], // A, L
+  Lineage_Edges: ["source_id", "target_id", "edge_type"], // L
   Product_Market_Monthly: [
     "product_id", "market_id", "month", "net_sales_m_eur_syn", "forecast_m_eur_syn",
     "market_access_coverage_pct_syn", // A, K
