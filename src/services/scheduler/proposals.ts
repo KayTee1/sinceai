@@ -19,14 +19,27 @@
 // serialised by the write lock: the second sees the first's link and gets it
 // back unchanged. A partial unique index allows one pending link per finding.
 //
-// Outcome: read from the proposals table (pending / approved / rejected /
-// expired / missing). syncFindingProposals writes it to the link row and
-// clears the finding's proposal_id once the proposal is closed without
-// approval; the lifecycle engine is not hooked or changed.
+// Outcome (Codex B3-F1): the lifecycle `proposals` row is the only source of
+// truth. Every scheduler read (getFinding / listFindings via findings.ts,
+// previewFindingProposal, listFindingProposals, the raise itself) joins that
+// row and derives pending (open / escalated) / approved / rejected / expired
+// from it on the spot. A link whose proposal row is gone (`missing`, e.g. a
+// partial cleanup) is stale: it is kept as history but never shown as the
+// finding's proposal and never blocks a raise. A demo reset drops the link
+// table together with proposals (lifecycle APP_TABLES), so no link outlives it.
+// The decision path (lifecycle decide, Inbox) is not hooked or changed and
+// never writes scheduler state, so an approval can never fail or look failed
+// because of the scheduler.
+// The stored link outcome and scheduler_findings.proposal_id are a cache that
+// no read uses. They are refreshed only at explicit, idempotent scheduler
+// write boundaries: at the start of every raise (inside its own transaction,
+// so the one-pending-link index reflects live state) and by
+// syncFindingProposals. An interrupted or skipped refresh changes nothing
+// anyone sees.
 //
-// Rejection suppression: a rejected (or expired / missing) proposal blocks a
-// new raise while the finding's fingerprint is the one it was raised on. Only
-// a material evidence change (new fingerprint after a scheduler run) makes it
+// Rejection suppression: a rejected or expired proposal blocks a new raise
+// while the finding's fingerprint is the one it was raised on. Only a
+// material evidence change (new fingerprint after a scheduler run) makes it
 // eligible again.
 //
 // Gate: FINDING_PROPOSALS_ENABLED switches the HTTP POST route. See below.
@@ -81,7 +94,6 @@ type FindingRow = {
   status: string;
   evidence: OverlapEvidence;
   fingerprint: string;
-  proposalId: string | null;
 };
 
 async function readFinding(r: Db, findingId: string): Promise<FindingRow | null> {
@@ -96,7 +108,6 @@ async function readFinding(r: Db, findingId: string): Promise<FindingRow | null>
     status: x.status as string,
     evidence: JSON.parse(x.evidence as string) as OverlapEvidence,
     fingerprint: x.fingerprint as string,
-    proposalId: (x.proposal_id as string | null) ?? null,
   };
 }
 
@@ -185,7 +196,8 @@ async function evaluate(
 
   const pending = links.find((l) => l.outcome === "pending");
   if (pending) general.push(reason("already_pending", `${pending.proposalId} from this finding is waiting in the Inbox`));
-  const done = links.filter((l) => l.fingerprint === f.fingerprint && l.outcome !== "pending");
+  // A `missing` link (its proposal row is gone) is stale and ignored.
+  const done = links.filter((l) => l.fingerprint === f.fingerprint && l.outcome !== "pending" && l.outcome !== "missing");
   for (const l of done) {
     general.push(
       l.outcome === "approved"
@@ -317,16 +329,17 @@ export async function previewFindingProposal(
       findingFingerprint: f.fingerprint,
       currentFingerprint: ev.currentFingerprint,
       directions: ev.directions,
-      link: links.find((l) => l.outcome === "pending") ?? links.at(-1) ?? null,
+      link: links.find((l) => l.outcome === "pending") ?? links.filter((l) => l.outcome !== "missing").at(-1) ?? null,
       links,
     };
   });
 }
 
 /**
- * Writes each pending link's outcome from the proposals table; a proposal
- * closed without approval (rejected, expired, missing) also clears the
- * finding's proposal_id (the link keeps the history). Returns how many links changed.
+ * Refreshes the cache: writes each link's live outcome to the link row; a
+ * proposal closed without approval (rejected, expired, missing) also clears
+ * the cached scheduler_findings.proposal_id (the link keeps the history).
+ * Idempotent; returns how many links changed. No read depends on it.
  */
 async function syncTx(tx: Transaction, nowIso: string, findingId?: string): Promise<number> {
   let changed = 0;
@@ -347,7 +360,7 @@ async function syncTx(tx: Transaction, nowIso: string, findingId?: string): Prom
   return changed;
 }
 
-/** Brings link outcomes (and finding linkage) in line with the proposals table. Safe to call at any time. */
+/** Refreshes the cached link outcomes from the proposals table in a scheduler write. Optional: reads never depend on it. */
 export async function syncFindingProposals(db: Client, input: { findingId?: string } = {}, nowIso = new Date().toISOString()): Promise<{ changed: number }> {
   await ensureScheduler(db);
   return { changed: await writeTx(db, (tx) => syncTx(tx, nowIso, input.findingId)) };

@@ -11,7 +11,10 @@ import type { OverlapEvidence } from "./types";
  */
 export type FindingProposalAction = "merge";
 
-/** Derived from the proposals table on every read; never written by the lifecycle engine. */
+/**
+ * Derived from the lifecycle proposals row on every read (open / escalated =
+ * pending). `missing`: the row is gone; the link is stale history only.
+ */
 export type FindingProposalOutcome = "pending" | "approved" | "rejected" | "expired" | "missing";
 
 export type FindingProposalLink = {
@@ -31,9 +34,9 @@ export type FindingProposalLink = {
   fingerprint: string;
   /** The re-run comparator's evidence the backend validated the raise against. */
   evidence: OverlapEvidence;
-  /** Live outcome, read from the proposals table. */
+  /** Authoritative: derived on read from the lifecycle proposals row. */
   outcome: FindingProposalOutcome;
-  /** Outcome last written to the link row by syncFindingProposals (a cache; `outcome` is authoritative). */
+  /** Cached copy last written at a scheduler write boundary (raise / syncFindingProposals). Diagnostic only; never use it for display or decisions. */
   storedOutcome: FindingProposalOutcome;
   outcomeSyncedAt: string | null;
   /** Decision rows recorded on the proposal, oldest first. */
@@ -78,7 +81,7 @@ export type FindingProposalPreview = {
   currentFingerprint: string | null;
   /** Both directions with their own checks. The comparator's preferred direction is not a recommendation. */
   directions: DirectionCheck[];
-  /** The pending link, else the newest link, else null. */
+  /** The pending link, else the newest link whose proposal row still exists, else null. */
   link: FindingProposalLink | null;
   /** Every link for this finding, oldest first. */
   links: FindingProposalLink[];

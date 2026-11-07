@@ -274,40 +274,73 @@ describe("raising a proposal from a finding", () => {
   });
 });
 
-describe("decision synchronisation", () => {
-  it("approval by both owners: outcome approved, the finding keeps its proposal, and the same evidence cannot be raised again", async () => {
+// Codex B3-F1: outcomes come from the lifecycle proposals row on every read.
+// Decisions go through the real lifecycle services (decide, resetLifecycle);
+// assertions use the functions behind the scheduler GET routes (getFinding,
+// listFindings, previewFindingProposal, listFindingProposals). No sync call
+// precedes these reads unless a test is about the cache itself.
+const SCHEDULER_STATE = ["scheduler_findings", "scheduler_finding_proposals", "scheduler_runs", "scheduler_checkpoints"];
+const snapScheduler = async () =>
+  Promise.all(SCHEDULER_STATE.map(async (t) => JSON.stringify((await db.execute(`SELECT * FROM ${t} ORDER BY rowid`)).rows)));
+
+/** What the Scheduler GET routes show for a finding: the finding itself, its entry in the list, and the preview's link. */
+async function shown(findingId: string) {
+  const one = (await getFinding(db, findingId))!;
+  const listed = (await listFindings(db, { status: "any" })).findings.find((x) => x.findingId === findingId)!;
+  assert.deepEqual([listed.proposalId, listed.proposal], [one.proposalId, one.proposal], "list and detail agree");
+  const pv = await previewFindingProposal(db, { findingId });
+  return { proposalId: one.proposalId, proposal: one.proposal, link: pv.link, pv };
+}
+
+describe("decision synchronisation (outcome derived on read)", () => {
+  it("approval by both owners through decide: pending after one, approved after both; nothing pending is shown", async () => {
     const f = await betavexFinding();
     const r = await raise(f);
     const date = await today();
-    await decide(db, { proposalId: r.proposal.id, actor: "OWN-R", action: "approve" }, date);
-    assert.equal((await listFindingProposals(db, f.findingId))[0].outcome, "pending", "one of two owners");
-    await decide(db, { proposalId: r.proposal.id, actor: "OWN-1", action: "approve" }, date);
+    let s = await shown(f.findingId);
+    assert.equal(s.proposalId, r.proposal.id);
+    assert.deepEqual(s.proposal, { proposalId: r.proposal.id, outcome: "pending", sourceId: "AST-2", targetId: "AST-3" });
 
-    const [live] = await listFindingProposals(db, f.findingId);
-    assert.deepEqual([live.outcome, live.storedOutcome], ["approved", "pending"], "outcome is read live; the stored one is a cache");
-    assert.deepEqual(live.decisions.map((d) => [d.actor, d.action]), [["OWN-R", "approve"], ["OWN-1", "approve"]]);
+    const before = await snapScheduler();
+    await decide(db, { proposalId: r.proposal.id, actor: "OWN-R", action: "approve" }, date);
+    s = await shown(f.findingId);
+    assert.deepEqual([s.proposalId, s.proposal?.outcome, s.link?.outcome], [r.proposal.id, "pending", "pending"], "one of two owners");
+    await decide(db, { proposalId: r.proposal.id, actor: "OWN-1", action: "approve" }, date);
+    assert.deepEqual(await snapScheduler(), before, "the lifecycle decision path writes no scheduler state");
+
+    s = await shown(f.findingId);
+    assert.equal(s.proposalId, null, "no longer waiting in the Inbox");
+    assert.equal(s.proposal?.outcome, "approved");
+    assert.deepEqual([s.link?.outcome, s.link?.storedOutcome], ["approved", "pending"], "the stored outcome is a stale cache and is not used");
+    assert.deepEqual(s.link?.decisions.map((d) => [d.actor, d.action]), [["OWN-R", "approve"], ["OWN-1", "approve"]]);
+    assert.equal(s.pv.eligible, false);
+    assert.ok(s.pv.reasons.some((x) => x.code === "already_approved"));
+    assert.ok(s.pv.reasons.some((x) => x.code === "asset_not_active"), "AST-2 was archived by the governed merge");
+
+    // The cache refresh is optional and idempotent; reads are unchanged by it.
     assert.deepEqual(await syncFindingProposals(db), { changed: 1 });
     assert.deepEqual(await syncFindingProposals(db), { changed: 0 });
-    const [synced] = await listFindingProposals(db, f.findingId);
-    assert.equal(synced.storedOutcome, "approved");
-    assert.equal((await getFinding(db, f.findingId))?.proposalId, r.proposal.id);
-
-    const pv = await previewFindingProposal(db, { findingId: f.findingId });
-    assert.equal(pv.eligible, false);
-    assert.ok(pv.reasons.some((x) => x.code === "already_approved"));
-    assert.ok(pv.reasons.some((x) => x.code === "asset_not_active"), "AST-2 was archived by the governed merge");
+    assert.equal((await listFindingProposals(db, f.findingId))[0].storedOutcome, "approved");
+    assert.deepEqual((await shown(f.findingId)).proposal, s.proposal);
   });
 
-  it("rejection: outcome rejected, linkage cleared, the same evidence is suppressed; changed evidence is eligible again", async () => {
+  it("rejection with a reason through decide: shown as rejected at once (no sync), suppressed on the same evidence, eligible after a material change", async () => {
     const f = await betavexFinding();
     const r = await raise(f);
+    await assert.rejects(decide(db, { proposalId: r.proposal.id, actor: "OWN-1", action: "reject" }, await today()), /reason/i);
     await decide(db, { proposalId: r.proposal.id, actor: "OWN-1", action: "reject", reason: "Keep the US board for the US team." }, await today());
-    assert.deepEqual(await syncFindingProposals(db, { findingId: f.findingId }), { changed: 1 });
-    const [l] = await listFindingProposals(db, f.findingId);
-    assert.deepEqual([l.outcome, l.storedOutcome, l.decisions[0].reason], ["rejected", "rejected", "Keep the US board for the US team."]);
-    assert.equal((await getFinding(db, f.findingId))?.proposalId, null);
 
+    const s = await shown(f.findingId);
+    assert.equal(s.proposalId, null, "a rejected proposal is never displayed as pending");
+    assert.equal(s.proposal?.outcome, "rejected");
+    assert.deepEqual([s.link?.outcome, s.link?.storedOutcome, s.link?.decisions[0].reason], ["rejected", "pending", "Keep the US board for the US team."]);
+    assert.ok(s.pv.reasons.some((x) => x.code === "rejected_same_evidence"));
+    assert.ok(!s.pv.reasons.some((x) => x.code === "already_pending"));
+
+    // The refused raise rolls back its whole transaction, cache refresh included; nothing reads the cache, so nothing changes.
     await refused(raise(f), "rejected_same_evidence");
+    assert.equal((await listFindingProposals(db, f.findingId))[0].storedOutcome, "pending");
+
     // A later run on unchanged evidence does not make it eligible.
     await retireAndRestore("AST-2", "OWN-R", "2026-11-04");
     assert.equal((await run()).summary!.findings.unchanged, 1);
@@ -325,7 +358,48 @@ describe("decision synchronisation", () => {
     assert.equal(again.created, true);
     assert.equal(again.link.fingerprint, changed.fingerprint);
     assert.equal((await listFindingProposals(db, f.findingId)).length, 2);
-    assert.equal((await getFinding(db, f.findingId))?.proposalId, again.proposal.id);
+    // The successful raise refreshed the stale cached 'pending' first (one-pending-link index), in its own transaction.
+    assert.deepEqual((await listFindingProposals(db, f.findingId)).map((l) => l.storedOutcome), ["rejected", "pending"]);
+    const now = await shown(f.findingId);
+    assert.deepEqual([now.proposalId, now.proposal?.outcome], [again.proposal.id, "pending"], "the newest link wins");
+  });
+
+  it("expired and escalated rows are read as they are (merges have no due date, so the status is set directly here)", async () => {
+    // No lifecycle path expires or escalates a merge today (proposeMerge stores due_on NULL);
+    // this only checks the read-side mapping should one appear.
+    const f = await betavexFinding();
+    const r = await raise(f);
+    await db.execute({ sql: `UPDATE proposals SET status = 'escalated' WHERE id = ?`, args: [r.proposal.id] });
+    let s = await shown(f.findingId);
+    assert.deepEqual([s.proposalId, s.proposal?.outcome], [r.proposal.id, "pending"]);
+    await db.execute({ sql: `UPDATE proposals SET status = 'expired' WHERE id = ?`, args: [r.proposal.id] });
+    s = await shown(f.findingId);
+    assert.deepEqual([s.proposalId, s.proposal?.outcome, s.link?.outcome], [null, "expired", "expired"]);
+    assert.ok(s.pv.reasons.some((x) => x.code === "rejected_same_evidence"));
+  });
+
+  it("a link whose proposal row is gone is stale: not shown, not pending, and does not block a raise", async () => {
+    const f = await betavexFinding();
+    const r = await raise(f);
+    await db.execute({ sql: `DELETE FROM proposals WHERE id = ?`, args: [r.proposal.id] });
+    const s = await shown(f.findingId);
+    assert.deepEqual([s.proposalId, s.proposal, s.link], [null, null, null]);
+    assert.deepEqual(s.pv.links.map((l) => l.outcome), ["missing"], "kept as history");
+    assert.equal(s.pv.eligible, true);
+    await db.execute(`UPDATE app_clock SET sim_date = '2026-11-02'`);
+    const again = await raise(f);
+    assert.equal(again.created, true);
+    assert.equal((await shown(f.findingId)).proposalId, again.proposal.id);
+  });
+
+  it("demo reset (resetLifecycle) leaves no finding, link or pending proposal behind", async () => {
+    const f = await betavexFinding();
+    const r = await raise(f);
+    await resetLifecycle(db, 0);
+    assert.equal(await getFinding(db, f.findingId), null);
+    assert.deepEqual((await listFindings(db, { status: "any" })).findings, []);
+    await assert.rejects(previewFindingProposal(db, { findingId: f.findingId }), (e: unknown) => e instanceof SchedulerError && e.code === "not_found");
+    assert.ok(!(await listPendingProposals(db)).some((p) => p.id === r.proposal.id));
   });
 });
 

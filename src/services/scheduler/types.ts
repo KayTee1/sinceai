@@ -156,8 +156,29 @@ export type Finding = {
   lastSeen: { at: string; simDate: string; runId: string };
   observations: number;
   dismissal: { actor: string; reason: string; at: string; simDate: string; fingerprint: string } | null;
-  /** Reserved for a later finding-to-proposal step; always null in B1. */
+  /**
+   * B3: the merge proposal raised from this finding that is waiting for a
+   * decision now (open or escalated in the lifecycle `proposals` table), else
+   * null. Derived on every read from the proposals table; an approved,
+   * rejected, expired or missing proposal never shows here.
+   */
   proposalId: string | null;
+  /**
+   * B3: the newest proposal raised from this finding whose lifecycle row
+   * still exists, with its outcome derived on read from that row; null when
+   * none (never raised, or the row is gone).
+   */
+  proposal: FindingProposalSummary | null;
+};
+
+/** Newest proposal raised from a finding; `outcome` is read from the lifecycle proposals row, never from a cache. */
+export type FindingProposalSummary = {
+  proposalId: string;
+  outcome: "pending" | "approved" | "rejected" | "expired";
+  /** Merged away on approval; chosen by the manager. */
+  sourceId: string;
+  /** Kept; chosen by the manager. */
+  targetId: string;
 };
 
 export class SchedulerError extends Error {

@@ -40,9 +40,37 @@ function toFinding(r: Row): Finding {
           fingerprint: r.dismissed_fingerprint as string,
         }
       : null,
-    proposalId: (r.proposal_id as string | null) ?? null,
+    ...proposalOf(r),
   };
 }
+
+/**
+ * B3 proposal linkage, derived from the lifecycle proposals row joined in by
+ * FINDING_SELECT, never from scheduler_findings.proposal_id (a cache that no
+ * read uses). Rows read without the join (applyObservations) carry none.
+ */
+function proposalOf(r: Row): Pick<Finding, "proposalId" | "proposal"> {
+  const status = r.link_proposal_status as string | null | undefined;
+  if (!r.link_proposal_id || !status) return { proposalId: null, proposal: null };
+  const outcome = status === "open" || status === "escalated" ? "pending" : (status as "approved" | "rejected" | "expired");
+  return {
+    proposalId: outcome === "pending" ? (r.link_proposal_id as string) : null,
+    proposal: { proposalId: r.link_proposal_id as string, outcome, sourceId: r.link_source_id as string, targetId: r.link_target_id as string },
+  };
+}
+
+/**
+ * A finding with its newest proposal link whose lifecycle row still exists
+ * (a link whose proposal row is gone is stale and ignored) and that row's
+ * status. Columns of scheduler_findings are qualified as `f.`.
+ */
+const FINDING_SELECT = `SELECT f.*, lk.proposal_id AS link_proposal_id, lk.source_id AS link_source_id,
+    lk.target_id AS link_target_id, p.status AS link_proposal_status
+  FROM scheduler_findings f
+  LEFT JOIN scheduler_finding_proposals lk ON lk.link_id = (
+    SELECT l.link_id FROM scheduler_finding_proposals l JOIN proposals q ON q.id = l.proposal_id
+    WHERE l.finding_id = f.finding_id ORDER BY l.created_at DESC, l.link_id DESC LIMIT 1)
+  LEFT JOIN proposals p ON p.id = lk.proposal_id`;
 
 export const emptyCounts = (): FindingCounts => ({ created: 0, updated: 0, unchanged: 0, reopened: 0, suppressed: 0 });
 
@@ -153,7 +181,7 @@ export async function dismissFinding(
 
 export async function getFinding(db: Client, findingId: string): Promise<Finding | null> {
   await ensureScheduler(db);
-  const r = await db.execute({ sql: `SELECT * FROM scheduler_findings WHERE finding_id = ?`, args: [findingId] });
+  const r = await db.execute({ sql: `${FINDING_SELECT} WHERE f.finding_id = ?`, args: [findingId] });
   return r.rows[0] ? toFinding(r.rows[0] as Row) : null;
 }
 
@@ -169,17 +197,17 @@ export async function listFindings(
   const where: string[] = [];
   const args: string[] = [];
   if (status !== "any") {
-    where.push("status = ?");
+    where.push("f.status = ?");
     args.push(status);
   }
   if (input.assetId) {
-    where.push("EXISTS (SELECT 1 FROM json_each(asset_ids) WHERE value = ?)");
+    where.push("EXISTS (SELECT 1 FROM json_each(f.asset_ids) WHERE value = ?)");
     args.push(input.assetId.trim().toUpperCase());
   }
   const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const [rows, total, byStatus] = await Promise.all([
-    db.execute({ sql: `SELECT * FROM scheduler_findings ${clause} ORDER BY last_seen_at DESC, finding_id LIMIT ?`, args: [...args, limit] }),
-    db.execute({ sql: `SELECT COUNT(*) AS n FROM scheduler_findings ${clause}`, args }),
+    db.execute({ sql: `${FINDING_SELECT} ${clause} ORDER BY f.last_seen_at DESC, f.finding_id LIMIT ?`, args: [...args, limit] }),
+    db.execute({ sql: `SELECT COUNT(*) AS n FROM scheduler_findings f ${clause}`, args }),
     db.execute(`SELECT status, COUNT(*) AS n FROM scheduler_findings GROUP BY status`),
   ]);
   const counts: Record<FindingStatus, number> = { open: 0, dismissed: 0 };
