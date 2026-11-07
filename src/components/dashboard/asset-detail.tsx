@@ -5,6 +5,7 @@ import type { AssetSummary, DashboardData, Role } from "@/lib/types";
 import { eurM, formatDate, formatMonth, leaseLabel, pct } from "@/lib/format";
 import { TierBadge } from "./tier-badge";
 import { BreakdownChart, SalesTrendChart, UsageChart } from "./charts";
+import { Timeline } from "../lifecycle/timeline";
 
 export function AssetDetail({ asset, data, role }: { asset: AssetSummary; data: DashboardData; role: Role }) {
   const view = useMemo(() => buildView(asset, data), [asset, data]);
@@ -39,6 +40,8 @@ export function AssetDetail({ asset, data, role }: { asset: AssetSummary; data: 
         <span className="h-1.5 w-1.5 rounded-full bg-sky" aria-hidden />
         Synthetic challenge data from the Bayer builder pack ({view.periodLabel}). Not actual Bayer performance.
       </p>
+
+      {role === "manager" && <Timeline assetId={asset.id} />}
 
       {view.rows === 0 ? (
         <div className="rounded-sm border border-line bg-surface p-6 text-sm text-ink-2">
