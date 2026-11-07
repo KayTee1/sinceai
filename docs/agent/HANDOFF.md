@@ -78,10 +78,16 @@
      lifecycle query. Add regression tests. The D20 team boards (`DSH-*`,
      `origin = 'team'`) are also only in `asset_state`, so discovery does not
      see them either.
-  2. Build-service provenance (T17 owner, not T16):
-     `src/services/build/build.ts:149` hardcodes
-     `{ sheet: "Business_Requests" }`, so a TEAM-REQ-01 build proposal cites
-     the Bayer sheet instead of `Team_Requests (team-authored)`.
+  2. Fixed on `fix/T17-build-provenance` (F5, local, awaits Codex review
+     and Viet, who owns `build.ts`): `proposeBuild` cites
+     `analysis.request.source.sheet` in the proposal evidence and its
+     `build_proposed` audit row, and `loadRequest` records the sheet it read
+     the row from (`_source_sheet`) instead of `requestSource` guessing it
+     from the ID. Schemas unchanged. Proposals stored before the fix keep
+     `Business_Requests` (audit log is append-only; no migration); a demo
+     reset drops them. After merge, T16B (#28) must drop `BUILD_SOURCE_DEFECT`
+     and flip its `orchestrator.test.ts` assertion. The inbox still labels
+     `TEAM-` IDs by prefix (`inbox.tsx`, display only).
   3. Fixed (T16A, `597b79b`): the `analyze-request` view now keeps
      `request.sourceSheet` and `request.teamAuthored` (no row), so
      TEAM-REQ-01 stays labelled team-authored in model and UI output.
