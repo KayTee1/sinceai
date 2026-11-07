@@ -43,7 +43,10 @@
   no key, or a number/ID not in the facts. Pipeline view
   (`pipeline-view.tsx`) polls `/api/runs/latest` and draws the sequence;
   Agentic tab = chat + Pipeline | Inbox. Smoke on pack: TEAM-REQ-01 full
-  build path, REQ-0026 reuse path. Not verified: browser, live agents.
+  build path, REQ-0026 reuse path. Storyboard (default) / Diagram switch,
+  checked in a browser on a pack copy. Temporary TTL: the expiry note now
+  says who opened it (owner vs others, in-region count) and opens on
+  archived assets are refused (`recordUsage`).
 - **T22 orchestrator tools (`feat/T22-orchestrator-tools`, not pushed):**
   new estate service (`src/services/estate`) over catalog + app-built
   insights with lifecycle state, exposed as tools in

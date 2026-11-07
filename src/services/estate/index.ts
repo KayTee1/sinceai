@@ -194,7 +194,7 @@ export async function checkDuplicate(db: Client, input: { scope: Scope; kpiIds: 
           : "none";
   const label = `${scope.product} · ${scope.market} with ${kpiIds.join(", ") || "no KPIs"}`;
   const rationale = {
-    reuse: `${active.map((a) => a.assetId).join(", ")} already cover ${label}; reuse instead of building.`,
+    reuse: `${active.map((a) => a.assetId).join(", ")} already ${active.length === 1 ? "covers" : "cover"} ${label}; reuse instead of building.`,
     pending: `A build for ${label} already waits for approval (${pending.map((p) => p.proposalId).join(", ")}).`,
     restore: `Only archived assets cover ${label} (${archived.map((a) => a.assetId).join(", ")}); restore one instead of building.`,
     partial: `No asset covers all of ${label}; ${partial.length} active asset(s) cover part of it.`,

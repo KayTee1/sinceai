@@ -156,6 +156,27 @@ export async function processDue(db: Client, until: string): Promise<number> {
 }
 
 async function expireTemporary(tx: Db, assetId: string, date: string) {
+  // Say who did open it, so "expired" is not read as "nobody looked at it".
+  const state = await getAssetState(tx, assetId);
+  const owner = state?.ownerId ?? null;
+  const region = owner
+    ? ((await tx.execute({ sql: `SELECT scope FROM Owners WHERE owner_id = ?`, args: [owner] })).rows[0]?.scope as string | undefined)
+    : undefined;
+  const opens = await tx.execute({
+    sql: `SELECT u.user_id, o.scope FROM usage_events u LEFT JOIN Owners o ON o.owner_id = u.user_id
+          WHERE u.asset_id = ? AND u.origin = 'app' AND u.sim_date > ?`,
+    args: [assetId, addDays(date, -TTL_DAYS)],
+  });
+  const others = opens.rows.filter((r) => r.user_id !== owner);
+  const people = new Set(others.map((r) => r.user_id as string));
+  const inRegion = new Set(others.filter((r) => region && r.scope === region).map((r) => r.user_id as string));
+  const rule = `Promotion needs the owner${owner ? ` (${owner})` : ""} to open it again, or ${TEAM_USERS} people in ${region ?? "the owner's region"}.`;
+  const rationale =
+    others.length === 0
+      ? `Temporary insight was not opened again within ${TTL_DAYS} days; archived (restorable).`
+      : `Temporary insight expired after ${TTL_DAYS} days: opened ${others.length} time(s) by ${people.size} other ` +
+        `${people.size === 1 ? "person" : "people"} (${inRegion.size} in ${region ?? "the owner's region"}), never by its owner. ` +
+        `${rule} Archived (restorable).`;
   await archiveAsset(tx, assetId, date);
   await appendAudit(tx, {
     simDate: date,
@@ -163,7 +184,7 @@ async function expireTemporary(tx: Db, assetId: string, date: string) {
     action: "ttl_expired",
     assetId,
     policyVersion: POLICY_VERSION,
-    rationale: `Temporary insight was not used again within ${TTL_DAYS} days; archived (restorable).`,
+    rationale,
   });
 }
 
@@ -771,6 +792,8 @@ export async function recordUsage(
   try {
     const s = await getAssetState(tx, input.assetId);
     if (!s) throw new LifecycleError(`Unknown asset ${input.assetId}`, "not_found");
+    // An archived asset is not in use; opening it must not count toward renewal or promotion.
+    if (s.status === "archived") throw new LifecycleError(`${input.assetId} is archived; restore it before using it`, "invalid");
     await tx.execute({
       sql: `INSERT INTO usage_events (asset_id, user_id, sim_date, origin) VALUES (?, ?, ?, 'app')`,
       args: [input.assetId, input.userId, date],

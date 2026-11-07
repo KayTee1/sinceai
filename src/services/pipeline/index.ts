@@ -249,7 +249,7 @@ export async function onBuildDecided(
     agent: "Lifecycle engine",
     status: "done",
     summary: `Insight ${ins?.id ?? ""} ready${ins?.ttlEnd ? `, expires ${ins.ttlEnd}` : ""}`,
-    evidence: ins ? [ins.id] : [],
+    evidence: ins ? [ins.id, ...(ins.ttlEnd ? [`#expires=${ins.ttlEnd}`] : [])] : [],
   });
   await updateRun(db, run.runId, { status: "done", assetId: ins?.id ?? null });
 }
