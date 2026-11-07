@@ -116,6 +116,11 @@ function ProposalCard({ p }: { p: PendingProposal }) {
       {"kind" in ev && ev.kind === "build" ? (
         <div className="mt-2 space-y-1.5 text-ink-2">
           <p className="italic">&ldquo;{ev.requestText}&rdquo;</p>
+          {ev.requestId.startsWith("TEAM-") && (
+            <p className="text-[11px] font-medium text-warn">
+              {ev.requestId}: team-authored demo request, not from the Bayer pack (D18)
+            </p>
+          )}
           <dl className="grid grid-cols-2 gap-x-3 gap-y-0.5">
             <dt className="text-ink-3">Scope</dt>
             <dd>
