@@ -31,7 +31,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 }
 
 // { actor, action: "merge", sourceId (merged away), targetId (kept), expectedFingerprint } -> { created, link, proposal }.
-// DISABLED until the proposeMerge approver fix (MERGE-APPROVERS) is reviewed and in this branch's base and Codex
+// DISABLED until the proposeMerge approver fix (MERGE-APPROVERS, in this branch) is reviewed by Viet and Codex
 // has reviewed the module (B0 is already in the base since master 16c868d; FINDING_PROPOSALS_ENABLED,
 // services/scheduler/proposals.ts): answers 409 { error, blockedBy: ["MERGE-APPROVERS", "CODEX-REVIEW"],
 // blockers: [{ id, description }] } before reading the request or touching the database.
@@ -42,7 +42,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       {
         error:
           "Raising proposals from findings is switched off until the merge approver fix " +
-          "(MERGE-APPROVERS, proposeMerge) is integrated and Codex has reviewed it (CODEX-REVIEW)",
+          "(MERGE-APPROVERS, proposeMerge) is reviewed and Codex has reviewed it (CODEX-REVIEW)",
         blockedBy: FINDING_PROPOSALS_BLOCKED_BY,
         blockers: FINDING_PROPOSALS_BLOCKERS,
       },

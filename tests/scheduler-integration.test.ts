@@ -11,7 +11,16 @@ import type { Client } from "@libsql/client";
 import { importWorkbook, type ParsedSheet } from "../src/db/import-workbook";
 import { openDb } from "../src/db/open";
 import { proposeMerge } from "../src/services/estate";
-import { decide, getProposal, proposeRetire, readClock, resetLifecycle, restore } from "../src/services/lifecycle";
+import {
+  decide,
+  getAssetState,
+  getProposal,
+  proposeRetire,
+  readClock,
+  resetLifecycle,
+  restore,
+  type MergeEvidence,
+} from "../src/services/lifecycle";
 import {
   B1_FINDINGS_DDL,
   dismissFinding,
@@ -178,7 +187,7 @@ describe("schema upgrades across branch shapes", () => {
   });
 });
 
-describe("shared merge approvers (estate/merge.ts, Viet; MERGE-APPROVERS)", () => {
+describe("shared merge approvers (estate/merge.ts; MERGE-APPROVERS)", () => {
   async function withOwners(inactive: string[], fn: () => Promise<void>) {
     const ids = inactive.map(() => "?").join(", ");
     await db.execute({ sql: `UPDATE Owners SET status = 'inactive' WHERE owner_id IN (${ids})`, args: inactive });
@@ -201,16 +210,80 @@ describe("shared merge approvers (estate/merge.ts, Viet; MERGE-APPROVERS)", () =
     });
   });
 
-  it(
-    "inactive source owner and no active steward: proposal creation is refused (no target-only approval)",
-    { todo: "MERGE-APPROVERS: fails on master until Viet's estate/merge.ts fix; finding proposals stay disabled" },
-    async () => {
-      await withOwners(["OWN-R", "OWN-S"], async () => {
-        await assert.rejects(proposeMerge(db, { sourceId: "AST-2", targetId: "AST-3" }, DAY), /approve/i);
-        assert.equal(Number((await db.execute(`SELECT COUNT(*) AS n FROM proposals WHERE type = 'merge'`)).rows[0].n), 0);
+  const count = async (sql: string) => Number((await db.execute(sql)).rows[0].n);
+  const snapshot = async () => ({
+    proposals: await count(`SELECT COUNT(*) AS n FROM proposals`),
+    audit: await count(`SELECT COUNT(*) AS n FROM audit_log`),
+    decisions: await count(`SELECT COUNT(*) AS n FROM decisions`),
+  });
+
+  for (const [what, inactive, side] of [
+    ["the source (owner and steward inactive)", ["OWN-R", "OWN-S"], /source AST-2/],
+    ["the target (owner and steward inactive)", ["OWN-1", "OWN-S"], /target AST-3/],
+    ["both sides", ["OWN-R", "OWN-1", "OWN-S"], /source AST-2 and the target AST-3/],
+  ] as const) {
+    it(`no active approver for ${what}: creation is refused and nothing is written`, async () => {
+      await withOwners([...inactive], async () => {
+        const before = await snapshot();
+        await assert.rejects(proposeMerge(db, { sourceId: "AST-2", targetId: "AST-3" }, DAY), (e: unknown) => {
+          assert.ok(e instanceof Error);
+          assert.match(e.message, side);
+          assert.match(e.message, /no merge proposal was created/);
+          return true;
+        });
+        assert.deepEqual(await snapshot(), before);
+        assert.equal((await getAssetState(db, "AST-2"))?.status, "active");
       });
-    },
-  );
+    });
+  }
+
+  it("one steward legitimately represents both sides: a single approval merges", async () => {
+    await withOwners(["OWN-R", "OWN-1"], async () => {
+      const p = await proposeMerge(db, { sourceId: "AST-2", targetId: "AST-3" }, DAY);
+      assert.deepEqual(p.requiredApprovers, ["OWN-S"]);
+      const ev = p.evidence as MergeEvidence;
+      assert.deepEqual([ev.sourceApprover, ev.targetApprover], ["OWN-S", "OWN-S"]);
+      await decide(db, { proposalId: p.id, actor: "OWN-S", action: "approve" }, DAY);
+      assert.equal((await getAssetState(db, "AST-2"))?.status, "archived");
+    });
+  });
+
+  it("two active owners: the first approval waits, the second merges", async () => {
+    const p = await proposeMerge(db, { sourceId: "AST-2", targetId: "AST-3" }, DAY);
+    await decide(db, { proposalId: p.id, actor: "OWN-1", action: "approve" }, DAY);
+    assert.equal((await getAssetState(db, "AST-2"))?.status, "active");
+    await decide(db, { proposalId: p.id, actor: "OWN-R", action: "approve" }, DAY);
+    assert.equal((await getAssetState(db, "AST-2"))?.status, "archived");
+    assert.equal((await getProposal(db, p.id))?.status, "approved");
+  });
+
+  for (const [what, sourceApprover] of [
+    ["names no source approver", null],
+    ["leaves the source approver out of required_approvers", "OWN-R"],
+  ] as const) {
+    it(`a legacy pending merge that ${what} cannot archive the source; it stays as stored and can be rejected`, async () => {
+      const p = await proposeMerge(db, { sourceId: "AST-2", targetId: "AST-3" }, DAY);
+      // Rewrite it into the shape the pre-fix service could store: target-only.
+      const legacy = { ...(p.evidence as MergeEvidence), sourceApprover };
+      await db.execute({
+        sql: `UPDATE proposals SET evidence = ?, required_approvers = '["OWN-1"]' WHERE id = ?`,
+        args: [JSON.stringify(legacy), p.id],
+      });
+      const stored = await db.execute({ sql: `SELECT evidence, required_approvers, status FROM proposals WHERE id = ?`, args: [p.id] });
+      const before = await snapshot();
+      await assert.rejects(decide(db, { proposalId: p.id, actor: "OWN-1", action: "approve" }, DAY), /cannot be approved/);
+      assert.deepEqual(await snapshot(), before);
+      assert.deepEqual(
+        (await db.execute({ sql: `SELECT evidence, required_approvers, status FROM proposals WHERE id = ?`, args: [p.id] })).rows,
+        stored.rows,
+        "row not rewritten",
+      );
+      assert.equal((await getAssetState(db, "AST-2"))?.status, "active");
+      await decide(db, { proposalId: p.id, actor: "OWN-1", action: "reject", reason: "Legacy proposal without a source approver." }, DAY);
+      assert.equal((await getProposal(db, p.id))?.status, "rejected");
+      assert.equal((await getAssetState(db, "AST-2"))?.status, "active");
+    });
+  }
 });
 
 describe("combined reset and migration (B1 + B2 + B3 schema together)", () => {

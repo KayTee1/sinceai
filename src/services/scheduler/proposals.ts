@@ -5,8 +5,8 @@
 // re-runs the comparator, re-checks both assets and the chosen direction,
 // and only then calls the existing proposeMerge (estate/merge.ts) as is: its
 // D14 checks, its two-owner required approvers (an inactive owner replaced by
-// the region's steward; see MERGE-APPROVERS below for the known gap when
-// there is no steward either) and its merge_proposed audit row. The proposal then
+// the region's steward; a side with neither is refused, see MERGE-APPROVERS
+// below) and its merge_proposed audit row. The proposal then
 // waits in the existing Inbox and is decided there by the lifecycle engine.
 // Nothing here approves, archives, changes KPI definitions or creates a
 // proposal on its own: detection is not permission.
@@ -93,12 +93,12 @@ import { SchedulerError, type OverlapEvidence } from "./types";
  *
  * Turning it on still requires ALL of:
  * 1. MERGE-APPROVERS (Codex P1 on src/services/estate/merge.ts, Viet's code):
- *    proposeMerge drops a side that has no active approver (inactive owner
- *    and no region steward) and still creates the proposal, so one owner can
- *    approve archiving a dashboard nobody represents. The fix belongs in
- *    proposeMerge (refuse unless both sides have an approver); it is
- *    deliberately NOT duplicated here. It must be reviewed and in this
- *    branch's base.
+ *    proposeMerge used to drop a side with no active approver (inactive
+ *    owner and no region steward) and still create the proposal. Fixed in
+ *    the T25 integration: proposeMerge refuses unless both sides have an
+ *    approver, and the engine refuses to approve a stored merge that does
+ *    not require both (tests/scheduler-integration.test.ts). Not duplicated
+ *    here. Still blocking until Viet, who owns merge.ts, has reviewed it.
  * 2. CODEX-REVIEW: a Codex review of this module with B0 and MERGE-APPROVERS in place.
  * Separate, unresolved product policy (not a switch condition; enforced as an
  * eligibility block): a Personal or Team asset replacing a Certified dashboard.
@@ -111,7 +111,7 @@ export const FINDING_PROPOSALS_ENABLED: boolean = false;
 export const FINDING_PROPOSALS_BLOCKERS: readonly FindingProposalBlocker[] = [
   {
     id: "MERGE-APPROVERS",
-    description: "proposeMerge must refuse when either side has no active approver (inactive owner, no region steward) (Viet)",
+    description: "proposeMerge refuses when either side has no active approver (fixed in T25); awaiting review by Viet, owner of estate/merge.ts",
   },
   { id: "CODEX-REVIEW", description: "Codex review of finding proposals with B0 and MERGE-APPROVERS in the base" },
 ];

@@ -418,7 +418,9 @@ D25: Governance scheduler: incremental and periodic runs, findings, proposals fr
 Status: proposed (KayTee, T25 B1-B4 on `integrate/T24-scheduler`; awaiting
 Codex re-review). Needs Viet's agreement on: the reset-list lines in
 `src/services/lifecycle/schema.ts`; the MERGE-APPROVERS fix in
-`src/services/estate/merge.ts` (his code); the sentence B3 appends to
+`src/services/estate/merge.ts` and the merge approval guard in
+`src/services/lifecycle/engine.ts` (his code; made in the T25 integration
+with the owner's authorisation); the sentence B3 appends to
 `proposals.rationale` when a proposal is raised from a finding. B0
 (archiving closes other open proposals; no decision on an archived asset)
 is Viet's and is on master since `16c868d` (#36).
@@ -509,10 +511,17 @@ Choice and why:
   Certified dashboard is blocked as an unresolved product policy (B3-F4).
 - The POST that raises a proposal is hard-disabled
   (`FINDING_PROPOSALS_ENABLED = false`, 409 `blockedBy`
-  `["MERGE-APPROVERS", "CODEX-REVIEW"]`) until `proposeMerge` refuses a
-  merge where either side has no active approver (Codex P1, Viet's code;
-  not duplicated in the scheduler) and Codex has reviewed the module. No
-  UI control raises proposals.
+  `["MERGE-APPROVERS", "CODEX-REVIEW"]`) until Viet has reviewed the
+  MERGE-APPROVERS fix and Codex has reviewed the module. No UI control
+  raises proposals.
+- MERGE-APPROVERS (Codex P1, fixed in the T25 integration): `proposeMerge`
+  resolves the source and target approvers separately (active owner, else
+  the region's active data steward, as before) and refuses, writing
+  nothing, when either side has none. Identities are deduplicated only
+  after both sides are found, so one steward may represent both. The
+  engine refuses to approve a stored merge whose evidence lacks an approver
+  for a side or whose `required_approvers` omit one (a pre-fix proposal);
+  the row is left as stored and can still be rejected or cleared by a reset.
 Not covered (later): clock/cron triggers, a full-estate sweep, external
 catalog changes (imported tables are read-only; nothing to observe), merge
 expiry/escalation (merge proposals have no due date).

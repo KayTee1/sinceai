@@ -1,7 +1,7 @@
 # Handoff
 
-- **T25 governance scheduler (`integrate/T24-scheduler`, KayTee / Claude,
-  not pushed, awaiting Codex re-review):** master `16c868d` + B1 core +
+- **T25 governance scheduler (`integrate/T24-scheduler` -> one PR to master, KayTee / Claude):**
+  master `16c868d` + B1 core +
   B2 periodic + B3 proposals from findings + B4 Scheduler tab (Agentic:
   Pipeline | Scheduler | Inbox). Codex fixes: B2-F1 finding-writing jobs
   serialised by a unique index at claim (409); B2-F2 current evidence
@@ -13,16 +13,18 @@
   an older filter or load (`tests/scheduler-view.test.tsx`, happy-dom render;
   D25 now says `superseded` is reserved, never produced). **Proposal POST stays disabled** (409, blockedBy
   `MERGE-APPROVERS`, `CODEX-REVIEW`). B0 is in the base (master
-  `16c868d`, #36). **Open P1 (Viet, `estate/merge.ts`):** `proposeMerge`
-  drops a side with no active approver and still creates the proposal;
-  `tests/scheduler-integration.test.ts` has it as a `todo` repro. Viet
-  also needs to OK the reset-list lines and the rationale sentence B3
-  appends. Checks: 318 tests without the pack (317 pass, 1 todo), tsc,
-  lint, `next build`;
+  `16c868d`, #36). **MERGE-APPROVERS (P1) fixed here** with the owner's
+  authorisation (Viet's files `estate/merge.ts`, `lifecycle/engine.ts`):
+  `proposeMerge` refuses when either side has no active approver (nothing
+  written); the engine refuses to approve a stored merge that does not
+  require both sides (left as stored; reject or reset closes it). Viet
+  must still review it (blocker stays until then) and OK the reset-list
+  lines and the rationale sentence B3 appends. Checks: 324 tests pass
+  (338 with `PACK_XLSX`), tsc, lint, `next build`, real DB untouched;
   browser smoke on a disposable DB at 1440 and 390 px (header and clock
-  bar overflow on phones, pre-existing). Next: Codex re-review of B2, B3,
-  integration; Viet's MERGE-APPROVERS fix; Certified-replacement policy
-  decision; then PRs B1 -> B2 -> B3 -> B4.
+  bar overflow on phones, pre-existing). Next: Viet's review of the
+  approver fix; Codex review of B3 (CODEX-REVIEW); Certified-replacement
+  policy decision; then enable B3. B5 not started.
 - **New direction (D24, both developers; not implemented):** after T16B and
   the current golden path, plan T19's additional team-authored, LLM-generated
   synthetic estate scenarios (KPI forks, duplicate/overlapping assets, stale
