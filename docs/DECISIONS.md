@@ -340,3 +340,38 @@ Alternatives considered: review every asset (D12-D14); auto-archive unused
 assets (rejected in D16).
 Agreed by: Viet
 
+D22: Employees see their team's real catalog dashboards (2026-11-07)
+Status: accepted. Replaces D20's four invented team boards; refines D19.
+Choice and why: with four boards of our own, employee views never reached
+the 360 real dashboards the lifecycle governs, and the boards were too
+summarized. Now the employee's team (domain + region) is derived from the
+"viewing as" person's role and region (our mapping: Commercial, Finance,
+Market Access, Supply, Launch roles to their KPI domain; platform, model, data
+product owners and stewards to BI Governance) and can be switched. The list
+shows catalog dashboards whose primary KPIs are mostly in that domain, scoped
+to the region or Global (2-45 per team on the pack). Opening one renders a
+wallboard from the dashboard's KPI domain over the pack's facts for its
+product and market (Commercial/Finance: Product_Market_Monthly; Market Access:
+Market_Access; Supply Chain: Supply_Operations; Launch: Launch_Milestones; BI
+Governance: estate metadata). Values follow D15. The pack has no report
+layouts, so the view is labelled as built from the dashboard's catalog KPIs
+with our layout. Each open logs one app view on that dashboard, which feeds
+D21 auto-renewal. The DSH-* team boards are removed from existing databases.
+Alternatives considered: keep the four team boards (D20); show catalog
+metadata to employees (D8).
+Agreed by: Viet
+
+D23: Pack telemetry only counts within the 90 days before a review (2026-11-07)
+Status: accepted. Refines D21.
+Choice and why: the pack's Asset_Usage is a fixed snapshot (Jan-Oct 2026).
+D21 treated its latest months as current, so in a long simulation dashboards
+kept auto-renewing on 2026 data (1,068 renewals by Apr 2028). Now a pack month
+counts only if it starts within the 90 days before the review date, so pack
+telemetry supports reviews until about the end of Jan 2027; after that only
+in-app views keep a dashboard alive. The catalog usage chart labels months
+with the year and warns when the snapshot is older than the simulated 90-day
+window. Policy version lifecycle-v5.
+Alternatives considered: keep the snapshot as current (D21); extrapolate the
+snapshot forward (would invent usage).
+Agreed by: Viet
+

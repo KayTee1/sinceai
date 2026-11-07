@@ -1,8 +1,7 @@
 // App-owned lifecycle tables. Imported pack tables are never written; these
 // live next to them in the same SQLite file and can be reset for the demo.
 import type { Client } from "@libsql/client";
-import { CLOCK_START, LEASE_DAYS, POLICY_VERSION, TTL_DAYS, addDays, seededLeaseEnd } from "./policy";
-import { TEAM_DASHBOARDS } from "./team-dashboards";
+import { CLOCK_START, LEASE_DAYS, POLICY_VERSION, TTL_DAYS, seededLeaseEnd } from "./policy";
 import type { Tier } from "./types";
 
 const APP_TABLES = [
@@ -66,7 +65,7 @@ export async function ensureLifecycle(db: Client, nowMs = Date.now()): Promise<v
   if (await hasLifecycle(db)) {
     // Already seeded: only add tables introduced since (all CREATE IF NOT EXISTS).
     await db.batch(DDL, "write");
-    await seedTeamDashboards(db);
+    await removeTeamBoards(db);
     return;
   }
   await seed(db, nowMs);
@@ -78,21 +77,18 @@ export async function resetLifecycle(db: Client, nowMs = Date.now()): Promise<vo
   await seed(db, nowMs);
 }
 
-// D20: team dashboards are app assets (origin "team") with a 90-day lease from
-// the clock start, owned by the Global Lead for that team. Insert-or-ignore,
-// so existing databases pick them up without a reset.
-async function seedTeamDashboards(db: Client) {
-  for (const t of TEAM_DASHBOARDS) {
-    const owner = await db.execute({
-      sql: `SELECT owner_id FROM Owners WHERE role = ? AND status = 'active' ORDER BY (scope = 'Global') DESC, owner_id LIMIT 1`,
-      args: [t.ownerRole],
-    });
-    await db.execute({
-      sql: `INSERT OR IGNORE INTO asset_state (asset_id, origin, name, owner_id, tier, status, lease_end, source_endorsement)
-            VALUES (?, 'team', ?, ?, 'certified', 'active', ?, 'certified')`,
-      args: [t.id, t.title, (owner.rows[0]?.owner_id as string | undefined) ?? null, addDays(CLOCK_START, LEASE_DAYS)],
-    });
-  }
+// D22 replaces D20: employees open the real catalog dashboards, so the four
+// team boards (origin "team", DSH-*) are no longer seeded. Remove them from
+// databases seeded before; app-owned rows only, the audit log is untouched.
+async function removeTeamBoards(db: Client) {
+  await db.batch(
+    [
+      `DELETE FROM proposals WHERE json_extract(asset_ids, '$[0]') IN (SELECT asset_id FROM asset_state WHERE origin = 'team')`,
+      `DELETE FROM usage_events WHERE asset_id IN (SELECT asset_id FROM asset_state WHERE origin = 'team')`,
+      `DELETE FROM asset_state WHERE origin = 'team'`,
+    ],
+    "write",
+  );
 }
 
 async function seed(db: Client, nowMs: number) {
@@ -128,5 +124,4 @@ async function seed(db: Client, nowMs: number) {
     ],
     "write",
   );
-  await seedTeamDashboards(db);
 }

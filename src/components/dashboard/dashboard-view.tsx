@@ -6,7 +6,7 @@ import { int, leaseLabel } from "@/lib/format";
 import { TierBadge } from "./tier-badge";
 import { useLifecycle } from "../lifecycle/lifecycle-context";
 import { AssetDetail } from "./asset-detail";
-import { TeamBoards } from "./team-boards";
+import { MyDashboards } from "./my-dashboards";
 import { EstateOverview } from "./estate-overview";
 
 const FILTERS: { id: Tier | "all"; label: string }[] = [
@@ -18,14 +18,14 @@ const FILTERS: { id: Tier | "all"; label: string }[] = [
 
 type Section = "teams" | "catalog" | "overview";
 
-// Dashboard tab (D20). Employees see only the team dashboards: simple boards on
-// the business facts. Managers also get the analytics catalog (metadata about
+// Dashboard tab (D22). Employees see their team's real catalog dashboards as
+// simple boards built from each dashboard's KPIs. Managers also get the analytics catalog (metadata about
 // existing reports) and the estate overview; the two sources are never mixed (D19).
 export function DashboardView({ data, role }: { data: DashboardData; role: Role }) {
   const [section, setSection] = useState<Section>("teams");
-  if (role === "employee") return <TeamBoards data={data} role={role} />;
+  if (role === "employee") return <MyDashboards data={data} role={role} />;
   const sections: { id: Section; label: string; note: string }[] = [
-    { id: "teams", label: "Team dashboards", note: "what employees see, with views" },
+    { id: "teams", label: "Team dashboards", note: "employee view, with views per dashboard" },
     { id: "catalog", label: "Analytics catalog", note: "existing reports and dashboards" },
     { id: "overview", label: "Estate overview", note: "usage, duplication, governance" },
   ];
@@ -51,7 +51,7 @@ export function DashboardView({ data, role }: { data: DashboardData; role: Role 
       </nav>
       {section !== "teams" && <BeforeAfter />}
       <div className="min-h-0 flex-1">
-        {section === "teams" && <TeamBoards data={data} role={role} />}
+        {section === "teams" && <MyDashboards data={data} role={role} />}
         {section === "catalog" && <CatalogView data={data} role={role} />}
         {section === "overview" && (
           <div className="h-full overflow-y-auto">

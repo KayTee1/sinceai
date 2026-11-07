@@ -34,3 +34,17 @@ export function leaseLabel(status: string, leaseEnd: string | null, tier?: strin
   if (!leaseEnd) return "No lease";
   return `${tier === "temporary" ? "Expires" : "Lease"} ${formatDate(leaseEnd)}`;
 }
+
+/** "Oct 26" style label, so a fixed telemetry snapshot never reads as recent. */
+export function formatMonthYear(iso: string) {
+  return new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-GB", {
+    month: "short",
+    year: "2-digit",
+    timeZone: "UTC",
+  });
+}
+
+/** True when an ISO date is more than `days` before `now`. */
+export function olderThan(iso: string, now: string, days: number) {
+  return Date.parse(`${now.slice(0, 10)}T00:00:00Z`) - Date.parse(`${iso.slice(0, 10)}T00:00:00Z`) > days * 86_400_000;
+}
