@@ -25,7 +25,16 @@ import {
   whoApproves,
 } from "../src/services/estate";
 import { getAssetAudit } from "../src/services/lifecycle";
-import { LifecycleError, decide, getAssetState, listPendingProposals, proposeRetire, resetLifecycle } from "../src/services/lifecycle";
+import {
+  LifecycleError,
+  decide,
+  getAssetState,
+  getProposal,
+  listPendingProposals,
+  processDue,
+  proposeRetire,
+  resetLifecycle,
+} from "../src/services/lifecycle";
 import { analyzeRequest } from "../src/services/steward/analyze";
 import { CHAT_REQUEST_SHEET, DraftRequestError, draftRequest } from "../src/services/steward/drafts";
 import { FACT_SHEETS } from "./fixtures/facts";
@@ -174,6 +183,26 @@ describe("proposeRetire", () => {
     await resetLifecycle(db, 0);
     await archiveAst1();
     await assert.rejects(proposeRetire(db, { assetId: "AST-1", reason: "x" }, DAY), LifecycleError);
+  });
+
+  it("archiving closes the other open proposal, so rejecting it cannot reactivate the asset", async () => {
+    // A chat retire is open when the lease ends: the lease review opens a second proposal.
+    const chat = await proposeRetire(db, { assetId: "AST-1", reason: "Duplicate of a newer board." }, DAY);
+    const leaseEnd = (await getAssetState(db, "AST-1"))!.leaseEnd!;
+    await processDue(db, leaseEnd);
+    const lease = (await listPendingProposals(db)).find((p) => p.assetIds[0] === "AST-1" && p.id !== chat.id);
+    assert.ok(lease, "the lease review opened its own proposal");
+
+    await decide(db, { proposalId: lease.id, actor: "OWN-1", action: "approve" }, leaseEnd);
+    assert.equal((await getAssetState(db, "AST-1"))?.status, "archived");
+    assert.equal((await getProposal(db, chat.id))?.status, "expired", "the chat retire is closed");
+    await assert.rejects(
+      decide(db, { proposalId: chat.id, actor: "OWN-1", action: "reject", reason: "keep it" }, leaseEnd),
+      /already expired/,
+    );
+    assert.equal((await getAssetState(db, "AST-1"))?.status, "archived", "only restore brings it back");
+    const audit = await getAssetAudit(db, "AST-1");
+    assert.ok(audit.some((e) => e.action === "proposal_closed" && e.proposalId === chat.id));
   });
 
   it("archived assets list when and why", async () => {
