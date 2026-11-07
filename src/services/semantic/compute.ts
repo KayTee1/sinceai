@@ -224,6 +224,16 @@ export async function computeKpi(db: Client, query: KpiQuery): Promise<KpiResult
   return result("computed", [], provenance, round6(value));
 }
 
+/**
+ * Latest month in the whole fact table ("YYYY-MM-01"), or null when it is
+ * empty. Used as the default period: deliberately not the latest month of a
+ * scope, so a scope whose newest rows are missing shows that gap.
+ */
+export async function latestFactMonth(db: Client): Promise<string | null> {
+  const res = await db.execute(`SELECT max(month) AS month FROM ${SHEET}`);
+  return res.rows[0]?.month ? String(res.rows[0].month) : null;
+}
+
 /** One result per market (same products), e.g. for a "by country" request. */
 export async function computeKpiByMarket(db: Client, query: KpiQuery): Promise<{ marketId: string; result: KpiResult }[]> {
   const out: { marketId: string; result: KpiResult }[] = [];

@@ -52,6 +52,19 @@ export function scopeFit(field: "product" | "market", requested: string, asset: 
   return null;
 }
 
+/**
+ * Presentation rule for a ranked candidate list: the first `limit` by score;
+ * if none of them is a complete match, the best complete match takes the last
+ * slot (it scores lowest of the shown list, so order stays by score). Shared
+ * by discovery and the compact chat view (T16), so both truncate the same way.
+ */
+export function presentCandidates<T extends { coversAllMetrics: boolean }>(ranked: T[], limit: number): T[] {
+  const shown = ranked.slice(0, limit);
+  const best = ranked.find((c) => c.coversAllMetrics);
+  if (!best || shown.some((c) => c.coversAllMetrics)) return shown;
+  return [...ranked.slice(0, Math.max(0, limit - 1)), best];
+}
+
 export type DiscoveryResult = {
   /** Presentation list: top `limit` by score, always including the best complete match if one exists. */
   candidates: ReuseCandidate[];
@@ -190,14 +203,9 @@ export async function discoverCandidates(
 
   candidates.sort((x, y) => y.score - x.score || x.assetId.localeCompare(y.assetId));
 
-  // Decisions use the full set; only the returned list is truncated. If no
-  // complete match made the top `limit`, the best one takes the last slot
-  // (it scores lowest of the shown list, so order stays by score).
+  // Decisions use the full set; only the returned list is truncated.
   const complete = candidates.filter((c) => c.coversAllMetrics);
-  let shown = candidates.slice(0, limit);
-  if (complete.length > 0 && !shown.some((c) => c.coversAllMetrics)) {
-    shown = [...candidates.slice(0, Math.max(0, limit - 1)), complete[0]];
-  }
+  const shown = presentCandidates(candidates, limit);
 
   // Per requested metric: which in-scope assets map its approved KPI (all of
   // them, not only the returned top candidates).

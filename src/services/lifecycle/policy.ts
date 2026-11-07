@@ -1,17 +1,18 @@
 // Lifecycle policy (D9, D12–D14). Thresholds are config, not hard rules.
 
-export const POLICY_VERSION = "lifecycle-v4"; // v2 silence escalates (D16); v3 team use of Temporary (D17); v4 auto-renew when used (D21)
+export const POLICY_VERSION = "lifecycle-v5"; // v2 D16; v3 D17; v4 auto-renew when used (D21); v5 telemetry only within 90 days (D23)
 
 export const CLOCK_START = "2026-11-01"; // D13
 export const TTL_DAYS = 30; // Temporary insights
 export const LEASE_DAYS = 90; // Personal, Team, Certified
 export const REVIEW_WINDOW_DAYS = 14; // owner review before escalation to the data steward (D13, D16)
 
-// D21: at lease end an asset counts as used when it had any in-app view in the
-// last 90 days, or its pack telemetry averages at least this many monthly users
-// over the latest months. The pack is a snapshot ending Oct 2026, so its latest
-// months stand in for current telemetry (production: live usage data). Used
-// assets renew automatically; unused ones get a retire proposal.
+// D21/D23: at lease end an asset counts as used when it had any in-app view in
+// the last 90 days, or its pack telemetry from months within those 90 days
+// averages at least this many monthly users. The pack ends Oct 2026, so its
+// telemetry only counts for reviews until about the end of Jan 2027; after
+// that only app views keep an asset alive. Used assets renew automatically;
+// unused ones get a retire proposal.
 export const LOW_USAGE_USERS = 10;
 export const USAGE_MONTHS = 3;
 

@@ -78,8 +78,9 @@ of all on day 90.
 
 At lease end the engine checks use (D21). **Used** means any in-app view in the
 last 90 days, or pack telemetry (`Asset_Usage`) averaging at least 10 monthly
-users over its latest 3 months; the pack ends Oct 2026, so its latest months
-stand in for current telemetry (production: live usage). A used asset with an
+users over its months within those 90 days. The pack ends Oct 2026, so its
+telemetry only counts for reviews until about the end of Jan 2027; later reviews
+rely on in-app views only (D23; production: live usage). A used asset with an
 active owner **renews automatically** for 90 days in the same tier, logged as a
 policy action; nobody has to approve it. A used asset without an active owner
 goes straight to the region's data steward (Rule 8). Only **unused** assets get
@@ -200,12 +201,17 @@ under that identity. This is simulated, not real authentication.
 
 **Employee: as simple as possible.** Sees only the Dashboard tab; the
 Agentic tab is hidden. A small **"viewing as"** picker selects a simulated
-person from the pack's owners (D13). Sees only **team dashboards** (D20):
-Commercial, Market Access, Supply Chain and Launch wallboards on the pack's
-business facts (big KPI tiles, four charts), plus built insights. No catalog
-metadata. Opening a board logs one app usage event for that person; managers
-see those views per board to judge relevance, and the boards' 90-day lease
-reviews use them as evidence. App events are stored separately from Bayer's imported usage
+person from the pack's owners (D13). Sees **their team's dashboards** (D22):
+the team (Commercial, Finance, Market Access, Supply Chain, Launch Excellence
+or BI Governance, plus a region) comes from the person's role and region and
+can be switched. The list holds the real catalog dashboards whose primary KPIs
+belong to that domain, in that region or Global, certified first. Opening one
+fills the screen with a wallboard (big tiles, two charts) built from that
+dashboard's own KPIs over the pack's facts for its product and market;
+unapproved KPI variants it uses are flagged. The pack has no report layouts,
+so the layout is ours and labelled. Each open logs one app view on that real
+dashboard; managers see views per dashboard, and its lease review uses them
+(D21). App events are stored separately from Bayer's imported usage
 and never added to it.
 Clicking a chart or number opens a simple lineage view (D6). Employees do not
 ask the agents questions.
