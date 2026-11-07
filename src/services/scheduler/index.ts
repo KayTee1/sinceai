@@ -25,3 +25,14 @@ export {
   type ReassessmentOptions,
 } from "./reassessment";
 export { DEFAULT_JOB_ID, JOBS, parseJobFilter, parseJobId, runJob } from "./jobs";
+export * from "./proposal-types";
+export {
+  FINDING_PROPOSALS_BLOCKED_BY,
+  FINDING_PROPOSALS_BLOCKERS,
+  FINDING_PROPOSALS_ENABLED,
+  FINDING_PROPOSAL_ACTIONS,
+  listFindingProposals,
+  previewFindingProposal,
+  raiseFindingProposal,
+  syncFindingProposals,
+} from "./proposals";

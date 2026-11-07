@@ -10,7 +10,7 @@ import type { Client, Transaction } from "@libsql/client";
 import { writeTx } from "./db";
 import type { JobId } from "./types";
 
-export const SCHEDULER_TABLES = ["scheduler_runs", "scheduler_checkpoints", "scheduler_findings"] as const;
+export const SCHEDULER_TABLES = ["scheduler_runs", "scheduler_checkpoints", "scheduler_findings", "scheduler_finding_proposals"] as const;
 
 /**
  * Jobs that write findings (incremental observes, periodic resolves). They
@@ -46,6 +46,14 @@ const DDL = [
   `CREATE TABLE IF NOT EXISTS scheduler_checkpoints (
      job_id TEXT PRIMARY KEY, last_audit_id INTEGER NOT NULL, run_id TEXT, updated_at TEXT NOT NULL)`,
   findingsDdl("scheduler_findings"),
+  // B3: proposals raised from findings (proposals.ts). Outcome is a cache of the proposals table, written by syncFindingProposals.
+  `CREATE TABLE IF NOT EXISTS scheduler_finding_proposals (
+     link_id TEXT PRIMARY KEY, finding_id TEXT NOT NULL, proposal_id TEXT NOT NULL UNIQUE,
+     action TEXT NOT NULL CHECK (action IN ('merge')), source_id TEXT NOT NULL, target_id TEXT NOT NULL, actor TEXT NOT NULL,
+     created_at TEXT NOT NULL, sim_date TEXT NOT NULL, fingerprint TEXT NOT NULL, evidence TEXT NOT NULL,
+     outcome TEXT NOT NULL CHECK (outcome IN ('pending', 'approved', 'rejected', 'expired', 'missing')), outcome_synced_at TEXT)`,
+  // At most one pending proposal per finding.
+  `CREATE UNIQUE INDEX IF NOT EXISTS scheduler_finding_proposals_one_pending ON scheduler_finding_proposals (finding_id) WHERE outcome = 'pending'`,
 ];
 
 // B2 (Mode 3): statuses resolved / superseded and the `resolution` column

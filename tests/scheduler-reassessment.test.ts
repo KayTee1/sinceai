@@ -597,7 +597,9 @@ describe("schema migration from B1", () => {
     assert.match(sql, /'resolved', 'superseded'/);
     assert.match(sql, /resolution TEXT/);
     const f = (await getFinding(db, "FND-old"))!;
-    assert.deepEqual([f.status, f.observations, f.dismissal?.reason, f.proposalId, f.resolution], ["dismissed", 3, "why", "PRP-1", null]);
+    // B3-F1: proposalId is derived from a live proposals row, never the legacy column; the rebuild still keeps that column's value.
+    assert.deepEqual([f.status, f.observations, f.dismissal?.reason, f.proposalId, f.proposal, f.resolution], ["dismissed", 3, "why", null, null, null]);
+    assert.equal((await db.execute(`SELECT proposal_id FROM scheduler_findings WHERE finding_id = 'FND-old'`)).rows[0].proposal_id, "PRP-1");
     assert.deepEqual(f.dismissal?.evidence, {}, "B2-F2 backfill: a dismissed row's stored evidence is what it was dismissed on");
     await db.execute(`UPDATE scheduler_findings SET status = 'resolved' WHERE finding_id = 'FND-old'`);
     await assert.rejects(db.execute(`UPDATE scheduler_findings SET status = 'bogus'`), /CHECK constraint/);
