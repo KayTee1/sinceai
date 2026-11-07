@@ -11,7 +11,12 @@
   (`app/api/clock/shared.ts`, Viet's file, additive) and by "Check due jobs"
   (`POST /api/scheduler/simulated`). Never ticks the clock; off by default.
   Same date again -> `already_processed`; a failed run is retried at the next
-  trigger; a running finding writer -> `deferred`. Optional demo cadence
+  trigger; a running finding writer -> `deferred`. Codex B5 fixes: F1 clock
+  bar warns "Clock advanced, but scheduler evaluation failed / deferred"
+  (clock change kept) and the tab shows a status load error; F2 one date per
+  trigger, claim refused if the clock moved (`deferred`, "Clock moved"),
+  saved state never regresses; F3 same-day changes after a successful run
+  show "pending · next <date>", not "due now". Optional demo cadence
   `SCHEDULER_SIM_REASSESS_DAYS` (unset = none). Scheduler tab: "Simulated
   clock" card (sim date, due now, last evaluated day / decision / run) and
   run rows say "triggered by the simulated clock". Real-pack demo path:

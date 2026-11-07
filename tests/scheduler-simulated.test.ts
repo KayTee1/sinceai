@@ -22,7 +22,8 @@ import {
   type Comparator,
   type SimTriggerResult,
 } from "../src/services/scheduler";
-import { runTriggerText, simResultLines } from "../src/lib/scheduler-client";
+import { clockSchedulerNotice, runTriggerText, simResultLines } from "../src/lib/scheduler-client";
+import { addDays } from "../src/services/lifecycle/policy";
 import { FACT_SHEETS } from "./fixtures/facts";
 
 const OWNERS: ParsedSheet = {
@@ -75,11 +76,16 @@ const advance = (days: number) => controlClock(db, { action: "advance", days }, 
 
 /** A real estate change the incremental job watches: AST-2 retired then restored (overlaps AST-3). */
 async function restoreAst2() {
-  const date = await today();
-  const p = await proposeRetire(db, { assetId: "AST-2", reason: "Fixture: retire then restore." }, date);
-  await decide(db, { proposalId: p.id, actor: "OWN-R", action: "approve" }, date);
-  await restore(db, { assetId: "AST-2", actor: "OWN-R" }, date);
+  await retireAndRestore("AST-2", "OWN-R");
 }
+async function retireAndRestore(assetId: string, owner: string) {
+  const date = await today();
+  const p = await proposeRetire(db, { assetId, reason: "Fixture: retire then restore." }, date);
+  await decide(db, { proposalId: p.id, actor: owner, action: "approve" }, date);
+  await restore(db, { assetId, actor: owner }, date);
+}
+/** A second watched change on the same simulated day (another asset, so proposal IDs do not collide). */
+const restoreAst3 = () => retireAndRestore("AST-3", "OWN-1");
 
 const boom: Comparator = async () => {
   throw new Error("fixture: comparison unavailable");
@@ -229,6 +235,181 @@ describe("B5 simulated-clock triggers", () => {
     assert.equal((await listRuns(db)).length, 0);
     assert.equal(Number((await db.execute(`SELECT COUNT(*) AS n FROM scheduler_sim_state`)).rows[0].n), 0);
     assert.deepEqual(decisions(await sim()), { incremental_overlap: "not_due", periodic_reassessment: "not_due" });
+  });
+});
+
+/** Saved simulated state per job: [sim_date, decision, run_id]. */
+async function savedState() {
+  const r = await db.execute(`SELECT job_id, sim_date, decision, run_id FROM scheduler_sim_state ORDER BY job_id`);
+  return Object.fromEntries(r.rows.map((x) => [x.job_id as string, [x.sim_date, x.decision, x.run_id]]));
+}
+
+/** Every simulated run's sim_date equals the date its saved state names (Codex B5-F2 invariant). */
+async function assertStateMatchesRuns() {
+  const runs = await listRuns(db, { limit: 200 });
+  for (const [jobId, [simDate, , runId]] of Object.entries(await savedState())) {
+    if (!runId) continue;
+    const run = runs.find((r) => r.runId === runId);
+    assert.ok(run, `saved run ${runId} exists`);
+    assert.equal(run.simDate, simDate, `${jobId}: saved state date ${simDate} vs run ${run.runId} date ${run.simDate}`);
+  }
+}
+
+describe("Codex B5-F2: one simulated date per trigger under concurrent clock advancement", () => {
+  it("clock advanced between the due decision and the run claim: nothing runs for the old date; the outcome says so", async () => {
+    await restoreAst2();
+    const d = await today();
+    const r = await sim({
+      beforeRun: async (jobId) => {
+        if (jobId === "incremental_overlap") await advance(1); // a manager clock action lands here
+      },
+    });
+    assert.equal(r.simDate, d);
+    const inc = r.decisions.find((x) => x.jobId === "incremental_overlap")!;
+    assert.equal(inc.decision, "deferred");
+    assert.match(inc.reason, new RegExp(`Clock moved: .*from ${d} to ${addDays(d, 1)}.*next trigger evaluates ${addDays(d, 1)}`));
+    assert.equal(inc.run, null);
+    assert.equal((await listRuns(db)).length, 0, "no run claimed at the newer date under the older decision");
+    assert.deepEqual((await savedState()).incremental_overlap, [d, "deferred", null]);
+
+    // The next trigger evaluates the new date; its run, idempotency and saved state agree.
+    const next = await sim();
+    assert.equal(next.simDate, addDays(d, 1));
+    const ran = next.decisions.find((x) => x.jobId === "incremental_overlap")!;
+    assert.deepEqual([ran.decision, ran.run?.status, ran.run?.simDate], ["ran", "succeeded", addDays(d, 1)]);
+    await assertStateMatchesRuns();
+    assert.equal((await sim()).decisions[0].decision, "already_processed");
+  });
+
+  it("Codex's reproduction: a newer trigger completes while an older one is in flight; no run or state mixes the dates", async () => {
+    await restoreAst2();
+    const d = await today();
+    let inner: SimTriggerResult | null = null;
+    const outer = await sim({
+      beforeRun: async (jobId) => {
+        if (jobId !== "incremental_overlap" || inner) return;
+        await advance(1);
+        inner = await sim(); // completes at d+1 while the outer trigger still holds its d decision
+      },
+    });
+    assert.equal(outer.simDate, d);
+    assert.equal(inner!.simDate, addDays(d, 1));
+    const innerInc = inner!.decisions.find((x) => x.jobId === "incremental_overlap")!;
+    assert.deepEqual([innerInc.decision, innerInc.run?.simDate], ["ran", addDays(d, 1)]);
+    assert.equal(outer.decisions.find((x) => x.jobId === "incremental_overlap")!.decision, "deferred");
+    for (const run of await listRuns(db)) assert.equal(run.simDate, addDays(d, 1), `run ${run.runId} recorded the date it evaluated`);
+    // The older trigger finishing last does not overwrite the newer date's saved state.
+    const state = await savedState();
+    assert.equal(state.incremental_overlap[0], addDays(d, 1));
+    assert.equal(state.incremental_overlap[1], "ran");
+    await assertStateMatchesRuns();
+  });
+
+  it("clock advanced after the claim: the run keeps the date it was claimed at, and so does the saved state", async () => {
+    await restoreAst2();
+    const d = await today();
+    const r = await sim({
+      beforeCommit: async (jobId) => {
+        if (jobId === "incremental_overlap") await advance(1);
+      },
+    });
+    const inc = r.decisions.find((x) => x.jobId === "incremental_overlap")!;
+    assert.deepEqual([inc.decision, inc.run?.status, inc.run?.simDate], ["ran", "succeeded", d]);
+    assert.equal(r.decisions[1].decision, "deferred", "the periodic job is not claimed at the newer date under this trigger");
+    await assertStateMatchesRuns();
+    const next = await sim();
+    assert.deepEqual(decisions(next), { incremental_overlap: "not_due", periodic_reassessment: "ran" });
+    assert.equal(next.decisions[1].run?.simDate, addDays(d, 1));
+    await assertStateMatchesRuns();
+  });
+});
+
+describe("Codex B5-F3: same-day watched change after a successful simulated run", () => {
+  it("status says pending until the next simulated date, never due now; the trigger agrees; Run now still works", async () => {
+    await restoreAst2();
+    const d = await today();
+    const first = await sim();
+    assert.equal(first.decisions[0].decision, "ran");
+    await restoreAst3(); // another watched change the same simulated day
+
+    const status = await simulatedStatus(db);
+    const inc = status.jobs.find((j) => j.jobId === "incremental_overlap")!;
+    assert.equal(inc.due.due, false, "not 'Due now': today was already processed");
+    assert.ok((inc.due.pendingChanges ?? 0) > 0, "the outstanding change is still reported");
+    assert.equal(inc.due.nextOn, addDays(d, 1));
+    assert.match(inc.due.reason, new RegExp(`already ran from the simulated clock at ${d}.*next simulated date \\(${addDays(d, 1)}\\).*Run now`));
+    // The trigger does what the status says.
+    assert.equal((await sim({ source: "manual_check" })).decisions[0].decision, "already_processed");
+
+    // Every job the status calls due, the trigger runs (and vice versa) at this date.
+    for (const j of (await simulatedStatus(db)).jobs) {
+      const dec = (await sim()).decisions.find((x) => x.jobId === j.jobId)!;
+      assert.equal(j.due.due, dec.decision === "ran", `${j.jobId}: status due=${j.due.due}, trigger ${dec.decision}`);
+    }
+
+    // Manual Run now picks the change up today (same-day policy only limits the simulated clock).
+    const manual = await runIncremental(db, { actor: "manager" });
+    assert.equal(manual.status, "succeeded");
+    assert.equal((await simulatedStatus(db)).jobs[0].due.pendingChanges, 0);
+  });
+
+  it("without Run now, the pending change runs at the next simulated date", async () => {
+    await restoreAst2();
+    await sim();
+    await restoreAst3();
+    await advance(1);
+    const before = (await simulatedStatus(db)).jobs[0].due;
+    assert.equal(before.due, true);
+    const r = await sim();
+    assert.deepEqual([r.decisions[0].decision, r.decisions[0].run?.status], ["ran", "succeeded"]);
+    assert.equal((await simulatedStatus(db)).jobs[0].due.pendingChanges, 0);
+  });
+});
+
+describe("Codex B5-F1: a clock action that succeeded with a scheduler that did not", () => {
+  const clock = (date: string) => ({ clock: { date, running: false }, processed: 0 });
+
+  it("B5 gates off (no scheduler field): no notice, behaviour as before", () => {
+    assert.equal(clockSchedulerNotice(clock("2026-05-01")), null);
+    assert.equal(clockSchedulerNotice({}), null);
+    assert.equal(clockSchedulerNotice(null), null);
+  });
+
+  it("a scheduler error is reported as clock advanced but evaluation failed, with the reason and recovery", () => {
+    const n = clockSchedulerNotice({ ...clock("2026-05-01"), scheduler: { error: "database is locked" } })!;
+    assert.equal(n.tone, "bad");
+    assert.match(n.summary, /^Clock advanced to 2026-05-01, but scheduler evaluation failed\. Governance checks did not run\.$/);
+    assert.match(n.detail, /database is locked/);
+    assert.match(n.detail, /Check due jobs/);
+    assert.doesNotMatch(n.detail, /succeeded/);
+    const odd = clockSchedulerNotice({ scheduler: { unexpected: true } }, "Clock updated")!;
+    assert.match(odd.summary, /^Clock updated, but scheduler evaluation failed/);
+  });
+
+  it("a failed run in the trigger result is reported, not hidden behind the 200", async () => {
+    await restoreAst2();
+    const scheduler = await sim({ compare: boom });
+    const n = clockSchedulerNotice({ ...clock(scheduler.simDate), scheduler })!;
+    assert.equal(n.tone, "bad");
+    assert.match(n.summary, new RegExp(`Clock advanced to ${scheduler.simDate}, but scheduler evaluation failed at ${scheduler.simDate}`));
+    assert.match(n.detail, /Incremental overlap: run SCH-\S+ failed \(evaluation_failed: .*comparison unavailable\)/);
+    assert.match(n.detail, /Check due jobs/);
+  });
+
+  it("a deferred job (clock moved, or another run in progress) is reported as deferred with its reason", async () => {
+    await restoreAst2();
+    const scheduler = await sim({ beforeRun: async (j) => void (j === "incremental_overlap" && (await advance(1))) });
+    const n = clockSchedulerNotice({ ...clock(scheduler.simDate), scheduler })!;
+    assert.equal(n.tone, "attention");
+    assert.match(n.summary, /but scheduler evaluation was deferred/);
+    assert.match(n.detail, /Incremental overlap: deferred\. Clock moved/);
+  });
+
+  it("all jobs succeeded, not due or already processed: no warning", async () => {
+    await restoreAst2();
+    const ok = await sim();
+    assert.equal(clockSchedulerNotice({ ...clock(ok.simDate), scheduler: ok }), null);
+    assert.equal(clockSchedulerNotice({ ...clock(ok.simDate), scheduler: await sim() }), null);
   });
 });
 

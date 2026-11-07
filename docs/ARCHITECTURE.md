@@ -322,7 +322,11 @@ with 400 / 403 / 404 / 409:
   the jobs due at the stored date (never ticks the clock); 200
   `{ result: { simDate, source, decisions } }`. With
   `SCHEDULER_SIM_TRIGGER=1`, `POST /api/clock/*` responses add
-  `scheduler` (the same result, or `{ error }`; the clock action is kept).
+  `scheduler` (the same result, or `{ error }`; the clock action is kept;
+  the client reports an error, failed run or deferred job, D26). Due
+  preview per job: `{ due, reason, pendingChanges?, nextOn? }`; changes
+  after the day's successful simulated run are pending, not due. A
+  `deferred` decision can mean the clock moved during the trigger.
   Simulated runs have `trigger: "simulated_clock"`, actor `simulated-clock`.
 
 POST routes need `SCHEDULER_DEMO_ACTIONS=1` and `actor: "manager"`; the

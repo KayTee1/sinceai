@@ -46,6 +46,7 @@ export {
   simulatedStatus,
   type SimDecision,
   type SimDecisionKind,
+  type SimDue,
   type SimJobState,
   type SimOptions,
   type SimSettings,

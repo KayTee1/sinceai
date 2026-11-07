@@ -219,6 +219,8 @@ export async function staleProposals(db: Client | Transaction, results: FindingR
 export type ReassessmentOptions = {
   actor: string;
   trigger?: TriggerSource;
+  /** B5: the simulated date the run must start at; the claim is refused (clock_moved) if the clock moved. */
+  expectedSimDate?: string;
   /** Tests only: replaces suggestMerge. */
   compare?: Comparator;
   /** Tests only: called between evaluation and commit. */
@@ -244,6 +246,7 @@ export async function runReassessment(db: Client, opts: ReassessmentOptions): Pr
     trigger: opts.trigger ?? "manual",
     actor: opts.actor,
     rules: PERIODIC_JOB.rules,
+    expectedSimDate: opts.expectedSimDate,
   });
 
   let result: Awaited<ReturnType<typeof evaluateReassessment>>;
@@ -321,11 +324,15 @@ export function reassessmentDue(s: ReassessmentDueState): { due: boolean; reason
   return { due: false, reason: `Already reassessed at ${s.lastSucceededSimDate}.` };
 }
 
-/** Reads the state reassessmentDue needs. Read-only. */
-export async function readReassessmentDueState(db: Client): Promise<ReassessmentDueState> {
+/**
+ * Reads the state reassessmentDue needs. Read-only. `simDate` (B5): evaluate
+ * at this date instead of reading the clock again, so a trigger's due check
+ * and its run use the same date.
+ */
+export async function readReassessmentDueState(db: Client, simDate?: string): Promise<ReassessmentDueState> {
   await ensureScheduler(db);
   const [clock, last, n, running] = await Promise.all([
-    readClock(db),
+    simDate !== undefined ? { date: simDate } : readClock(db),
     db.execute({
       sql: `SELECT sim_date FROM scheduler_runs WHERE job_id = ? AND status = 'succeeded' ORDER BY started_at DESC, rowid DESC LIMIT 1`,
       args: [PERIODIC_JOB.jobId],

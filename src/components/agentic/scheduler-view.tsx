@@ -42,6 +42,7 @@ export function SchedulerPanel({ clockKey }: { clockKey: string }) {
   const [statusFilter, setStatusFilter] = useState("open");
   const [overview, setOverview] = useState<SchedulerOverviewResponse | null>(null);
   const [sim, setSim] = useState<SimStatusResponse | null>(null);
+  const [simError, setSimError] = useState<string | null>(null);
   const [runs, setRuns] = useState<SchedulerRun[] | null>(null);
   const [findings, setFindings] = useState<{ total: number; list: Finding[] } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -65,8 +66,9 @@ export function SchedulerPanel({ clockKey }: { clockKey: string }) {
     const firstError = [o, r, f].find((x): x is Extract<ApiResult<unknown>, { ok: false }> => !x.ok);
     setLoadError(firstError ? firstError.message : null);
     if (o.ok) setOverview(o.data);
-    // B5: simulated status is optional context; its own error does not hide the rest.
+    // B5: a simulated-status error does not hide the rest, and is shown in place of its card (Codex B5-F1).
     setSim(s.ok ? s.data : null);
+    setSimError(s.ok ? null : s.message);
     if (r.ok) setRuns(r.data.runs);
     if (f.ok) setFindings({ total: f.data.total, list: f.data.findings });
     setLoading(false);
@@ -199,6 +201,16 @@ export function SchedulerPanel({ clockKey }: { clockKey: string }) {
             <ul className="space-y-2">
               {sim && (
                 <SimulatedClockCard sim={sim} busy={inFlight !== null} checking={inFlight === "check"} onCheck={() => void checkDue()} />
+              )}
+              {simError && (
+                <li aria-label="Simulated clock scheduling">
+                  <Notice tone="bad">
+                    Simulated clock status could not be loaded, so whether jobs are due at the simulated date is unknown: {simError}{" "}
+                    <button type="button" onClick={() => void load()} className="font-semibold underline">
+                      Reload
+                    </button>
+                  </Notice>
+                </li>
               )}
               {overview.jobs.map((j) => (
                 <JobCard

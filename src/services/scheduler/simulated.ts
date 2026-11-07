@@ -15,7 +15,8 @@
 //                      for repeated triggers of the same day). A failed run does
 //                      not count, so the next trigger retries it (recovery).
 //   deferred           another finding-writing run is in progress (manual or
-//                      simulated), or the claim lost a race: nothing runs; the
+//                      simulated), the claim lost a race, or the clock moved
+//                      while this trigger ran (clock_moved): nothing runs; the
 //                      next trigger looks again. Runs never overlap (runs.ts).
 //   not_due            incremental: no watched estate change since the
 //                      checkpoint. periodic: reassessmentDue() says no.
@@ -30,9 +31,17 @@
 // demo; it is unset by default and is not a production policy. It has nothing
 // to do with the 90-day usage window or the 30-day Temporary TTL.
 //
+// One date per trigger (Codex B5-F2): the date read at the start is used for
+// the due checks, the idempotency check, the run claim (claimRun refuses with
+// clock_moved if the stored date changed meanwhile; nothing runs for the old
+// date) and the saved state, which never goes back to an older date. A run's
+// sim_date is fixed at claim, so a clock move during evaluation does not
+// change the date it records.
+//
 // New changes after a successful simulated incremental run on the same date
-// wait for the next simulated date (or a manual run). No proposal is ever
-// raised, decided, merged or retired here (B3 stays disabled).
+// wait for the next simulated date (or a manual run); the status says
+// "pending", never "due now" (Codex B5-F3). No proposal is ever raised,
+// decided, merged or retired here (B3 stays disabled).
 import type { Client } from "@libsql/client";
 import { readClock } from "../lifecycle";
 import { addDays } from "../lifecycle/policy";
@@ -62,12 +71,19 @@ export type SimDecision = {
 
 export type SimTriggerResult = { simDate: string; source: SimTriggerSource; decisions: SimDecision[] };
 
+/**
+ * Due preview. `pendingChanges` (incremental): watched changes not read yet.
+ * They can be outstanding while the job is not due today (already processed
+ * at this date); `nextOn` then says when the simulated clock picks them up.
+ */
+export type SimDue = { due: boolean; reason: string; pendingChanges?: number; nextOn?: string };
+
 export type SimJobState = {
   jobId: JobId;
   /** Last simulated date this job was evaluated at by a simulated trigger, and the outcome. Null before the first. */
   last: { simDate: string; decision: SimDecisionKind; reason: string; runId: string | null; source: SimTriggerSource; updatedAt: string } | null;
-  /** Read-only preview at the current stored date. */
-  due: { due: boolean; reason: string };
+  /** Read-only preview at the current stored date; same answer the trigger acts on. */
+  due: SimDue;
 };
 
 export type SimSettings = {
@@ -97,6 +113,8 @@ export type SimOptions = {
   compare?: Comparator;
   /** Tests only: called between evaluation and commit of each job run. */
   beforeCommit?: (jobId: JobId) => Promise<void>;
+  /** Tests only: called after a job was found due, before its run is claimed. */
+  beforeRun?: (jobId: JobId) => Promise<void>;
 };
 
 /** Watched estate changes the incremental job has not read yet. Read-only. */
@@ -110,15 +128,32 @@ async function pendingWatchedChanges(db: Client): Promise<number> {
   return Number(r.rows[0]?.n ?? 0);
 }
 
-/** Is `jobId` due at the stored date? Read-only; same answer the trigger acts on. */
-export async function jobDue(db: Client, jobId: JobId, reassessEveryDays: number | null = null): Promise<{ due: boolean; reason: string }> {
+/**
+ * Is `jobId` due at `simDate` (default: the stored date)? Read-only. Same
+ * answer the trigger acts on: a job that already succeeded from the simulated
+ * clock at this date is not due, even with new changes outstanding.
+ */
+export async function jobDue(db: Client, jobId: JobId, reassessEveryDays: number | null = null, simDate?: string): Promise<SimDue> {
+  const date = simDate ?? (await readClock(db)).date;
+  const done = await succeededSimRunAt(db, jobId, date);
   if (jobId === INCREMENTAL_JOB.jobId) {
     const n = await pendingWatchedChanges(db);
-    return n > 0
-      ? { due: true, reason: `${n} watched estate change(s) (${WATCHED_ACTIONS.join(", ")}) since the last checkpoint.` }
-      : { due: false, reason: "No watched estate change since the last checkpoint." };
+    if (n === 0) return { due: false, reason: "No watched estate change since the last checkpoint.", pendingChanges: 0 };
+    if (done) {
+      const nextOn = addDays(date, 1);
+      return {
+        due: false,
+        pendingChanges: n,
+        nextOn,
+        reason:
+          `${n} watched estate change(s) arrived after this job already ran from the simulated clock at ${date} (run ${done.runId}). ` +
+          `One simulated run per day: they are checked at the next simulated date (${nextOn}), or now with Run now.`,
+      };
+    }
+    return { due: true, pendingChanges: n, reason: `${n} watched estate change(s) (${WATCHED_ACTIONS.join(", ")}) since the last checkpoint.` };
   }
-  const state = await readReassessmentDueState(db);
+  if (done) return { due: false, reason: `Already reassessed by the simulated clock at ${date} (run ${done.runId}).` };
+  const state = await readReassessmentDueState(db, date);
   const base = reassessmentDue(state);
   if (!base.due || !reassessEveryDays || !state.lastSucceededSimDate) return base;
   const next = addDays(state.lastSucceededSimDate, reassessEveryDays);
@@ -147,12 +182,14 @@ async function runningWriter(db: Client): Promise<SchedulerRun | null> {
   return id ? getRun(db, id) : null;
 }
 
+/** Saves the decision at `simDate`. A slower trigger for an older date never overwrites a newer date's state. */
 async function record(db: Client, simDate: string, source: SimTriggerSource, d: SimDecision) {
   await writeTx(db, async (tx) => {
     await tx.execute({
       sql: `INSERT INTO scheduler_sim_state (job_id, sim_date, decision, reason, run_id, source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (job_id) DO UPDATE SET sim_date = excluded.sim_date, decision = excluded.decision, reason = excluded.reason,
-              run_id = excluded.run_id, source = excluded.source, updated_at = excluded.updated_at`,
+              run_id = excluded.run_id, source = excluded.source, updated_at = excluded.updated_at
+            WHERE excluded.sim_date >= scheduler_sim_state.sim_date`,
       args: [d.jobId, simDate, d.decision, d.reason, d.run?.runId ?? null, source, new Date().toISOString()],
     });
   });
@@ -165,11 +202,13 @@ async function decideJob(db: Client, jobId: JobId, simDate: string, opts: SimOpt
   if (busy) {
     return { jobId, decision: "deferred", reason: `Run ${busy.runId} (${busy.jobId}, ${busy.trigger}) is in progress; finding-writing jobs run one at a time. Checked again at the next trigger.`, run: busy };
   }
-  const due = await jobDue(db, jobId, opts.reassessEveryDays ?? null);
+  const due = await jobDue(db, jobId, opts.reassessEveryDays ?? null, simDate);
   if (!due.due) return { jobId, decision: "not_due", reason: due.reason, run: null };
+  await opts.beforeRun?.(jobId);
   const common = {
     actor: SIM_ACTOR,
     trigger: "simulated_clock" as const,
+    expectedSimDate: simDate,
     compare: opts.compare,
     beforeCommit: opts.beforeCommit ? () => opts.beforeCommit!(jobId) : undefined,
   };
@@ -182,6 +221,14 @@ async function decideJob(db: Client, jobId: JobId, simDate: string, opts: SimOpt
     return { jobId, decision: "ran", reason, run };
   } catch (err) {
     if (err instanceof SchedulerError && err.code === "conflict") {
+      if (err.detail?.outcome === "clock_moved") {
+        return {
+          jobId,
+          decision: "deferred",
+          reason: `Clock moved: ${err.message}. The next trigger evaluates ${String(err.detail.simDate)}.`,
+          run: null,
+        };
+      }
       return { jobId, decision: "deferred", reason: `${err.message}. Checked again at the next trigger.`, run: null };
     }
     throw err;
@@ -225,7 +272,7 @@ export async function simulatedStatus(db: Client, settings: SimSettings = simSet
               updatedAt: r.updated_at as string,
             }
           : null,
-        due: await jobDue(db, jobId as JobId, settings.reassessEveryDays),
+        due: await jobDue(db, jobId as JobId, settings.reassessEveryDays, date),
       };
     }),
   );

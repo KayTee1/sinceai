@@ -134,6 +134,8 @@ export type RunOptions = {
   actor: string;
   /** Default manual. simulated_clock only from simulated.ts. */
   trigger?: TriggerSource;
+  /** B5: the simulated date the run must start at; the claim is refused (clock_moved) if the clock moved. */
+  expectedSimDate?: string;
   /** Tests only: replaces suggestMerge. */
   compare?: Comparator;
   /** Tests only: called between evaluation and commit. */
@@ -162,6 +164,7 @@ export async function runIncremental(db: Client, opts: RunOptions): Promise<Sche
     trigger: opts.trigger ?? "manual",
     actor: opts.actor,
     rules: INCREMENTAL_JOB.rules,
+    expectedSimDate: opts.expectedSimDate,
   });
 
   let result: Awaited<ReturnType<typeof evaluate>>;

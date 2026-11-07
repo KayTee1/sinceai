@@ -315,3 +315,48 @@ export function simResultLines(r: SimTriggerResult | null | undefined): { tone: 
 export function runTriggerText(run: Pick<SchedulerRun, "trigger" | "actor">): string {
   return run.trigger === "simulated_clock" ? "triggered by the simulated clock" : `${statusLabel(run.trigger)} by ${run.actor} (demo identity)`;
 }
+
+/**
+ * B5 (Codex B5-F1): what a clock action's response says about the governance
+ * scheduler. The clock change itself succeeded (HTTP 200) and stays; this only
+ * reports when the scheduler did NOT complete its checks for the new date.
+ * Null when there is nothing to warn about: no `scheduler` field (B5 gates off,
+ * response as before) or every job ran successfully, was not due or was
+ * already processed. Never claims the checks succeeded.
+ */
+export type ClockSchedulerNotice = { tone: "bad" | "attention"; summary: string; detail: string };
+
+const RECOVERY = "Open Agentic → Scheduler and use Check due jobs to retry this date (abandon a stuck run there first if one is shown running).";
+
+export function clockSchedulerNotice(response: unknown, verb = "Clock advanced"): ClockSchedulerNotice | null {
+  if (!response || typeof response !== "object" || !("scheduler" in response)) return null;
+  const s = (response as { scheduler: unknown }).scheduler;
+  const date = (response as { clock?: { date?: unknown } }).clock?.date;
+  const head = typeof date === "string" ? `${verb} to ${date}` : verb;
+  const errorText = s && typeof s === "object" && typeof (s as { error?: unknown }).error === "string" ? (s as { error: string }).error : null;
+  if (errorText !== null || !s || typeof s !== "object" || !Array.isArray((s as { decisions?: unknown }).decisions)) {
+    const why = errorText ?? "the scheduler returned no readable outcome";
+    return {
+      tone: "bad",
+      summary: `${head}, but scheduler evaluation failed. Governance checks did not run.`,
+      detail: `${head}, but scheduler evaluation failed: ${why}. Governance checks did not run for this date. ${RECOVERY}`,
+    };
+  }
+  const r = s as SimTriggerResult;
+  const failed = r.decisions.filter((d) => d.decision === "ran" && d.run?.status !== "succeeded");
+  const deferred = r.decisions.filter((d) => d.decision === "deferred");
+  if (!failed.length && !deferred.length) return null;
+  const parts = [
+    ...failed.map((d) => {
+      const e = d.run?.error;
+      return `${jobTitle(d.jobId)}: run ${d.run?.runId ?? "?"} ${d.run?.status ?? "did not finish"}${e ? ` (${e.code}: ${e.message})` : ""}`;
+    }),
+    ...deferred.map((d) => `${jobTitle(d.jobId)}: deferred. ${d.reason}`),
+  ];
+  const what = failed.length ? "failed" : "was deferred";
+  return {
+    tone: failed.length ? "bad" : "attention",
+    summary: `${head}, but scheduler evaluation ${what} at ${r.simDate}.`,
+    detail: `${head}, but scheduler evaluation ${what} at ${r.simDate}. ${parts.join(" ")} ${RECOVERY}`,
+  };
+}

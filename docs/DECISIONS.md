@@ -557,7 +557,20 @@ Choice and why:
 - Idempotency: a job whose simulated run already SUCCEEDED at this date is
   `already_processed` (read from `scheduler_runs`). Failed runs do not
   count, so the next trigger at the same date retries (recovery). Changes
-  after that day's successful run wait for the next date or a manual run.
+  after that day's successful run wait for the next date or a manual run;
+  the status calls them `pending` with the next date, never "due now"
+  (Codex B5-F3).
+- One date per trigger (Codex B5-F2): the date read at the start is used for
+  the due checks, the idempotency check, the run claim and the saved state.
+  `claimRun` refuses inside its write transaction when the stored date no
+  longer matches (`deferred`, reason "Clock moved", nothing runs for the old
+  date); a run's date is fixed at claim; saved state never goes back to an
+  older date. Intermediate days are not replayed.
+- Clock response (Codex B5-F1): the clock change stays (200); a scheduler
+  error, failed run or deferred job is shown on the clock bar as "Clock
+  advanced to <date>, but scheduler evaluation failed / was deferred", with
+  the reason and the retry (Scheduler tab, Check due jobs). A simulated
+  status load failure is shown in place of the card.
 - Concurrency: any running finding-writing run (manual or simulated) defers
   the simulated jobs (`deferred`, nothing started); the existing claim
   indexes still refuse overlaps, and a lost claim race is also `deferred`.

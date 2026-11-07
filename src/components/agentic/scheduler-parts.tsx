@@ -474,7 +474,11 @@ export function SimulatedClockCard({
           <li key={j.jobId} className="rounded-sm bg-canvas px-2 py-1.5">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="font-medium text-ink">{jobTitle(j.jobId)}</span>
-              {TONE_PILL(j.due.due ? "attention" : "muted", j.due.due ? "due now" : "not due")}
+              {j.due.due
+                ? TONE_PILL("attention", "due now")
+                : j.due.pendingChanges
+                  ? TONE_PILL("neutral", `pending · next ${j.due.nextOn ?? "simulated date"}`)
+                  : TONE_PILL("muted", "not due")}
             </div>
             <div className="text-ink-3">{j.due.reason}</div>
             <div className="mt-0.5 text-ink-2">
