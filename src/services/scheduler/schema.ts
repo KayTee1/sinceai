@@ -9,7 +9,7 @@
 import type { Client } from "@libsql/client";
 import { writeTx } from "./db";
 
-export const SCHEDULER_TABLES = ["scheduler_runs", "scheduler_checkpoints", "scheduler_findings"] as const;
+export const SCHEDULER_TABLES = ["scheduler_runs", "scheduler_checkpoints", "scheduler_findings", "scheduler_finding_proposals"] as const;
 
 const DDL = [
   `CREATE TABLE IF NOT EXISTS scheduler_runs (
@@ -31,6 +31,14 @@ const DDL = [
      observations INTEGER NOT NULL,
      dismissed_by TEXT, dismissed_reason TEXT, dismissed_at TEXT, dismissed_sim_date TEXT, dismissed_fingerprint TEXT,
      proposal_id TEXT)`,
+  // B3: proposals raised from findings (proposals.ts). Outcome is a cache of the proposals table, written by syncFindingProposals.
+  `CREATE TABLE IF NOT EXISTS scheduler_finding_proposals (
+     link_id TEXT PRIMARY KEY, finding_id TEXT NOT NULL, proposal_id TEXT NOT NULL UNIQUE,
+     action TEXT NOT NULL CHECK (action IN ('merge')), source_id TEXT NOT NULL, target_id TEXT NOT NULL, actor TEXT NOT NULL,
+     created_at TEXT NOT NULL, sim_date TEXT NOT NULL, fingerprint TEXT NOT NULL, evidence TEXT NOT NULL,
+     outcome TEXT NOT NULL CHECK (outcome IN ('pending', 'approved', 'rejected', 'expired', 'missing')), outcome_synced_at TEXT)`,
+  // At most one pending proposal per finding.
+  `CREATE UNIQUE INDEX IF NOT EXISTS scheduler_finding_proposals_one_pending ON scheduler_finding_proposals (finding_id) WHERE outcome = 'pending'`,
 ];
 
 /** Creates the scheduler tables if missing. Safe to call on every request; writes only when a table is missing. */
