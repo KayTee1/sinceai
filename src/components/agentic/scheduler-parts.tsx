@@ -111,7 +111,7 @@ export function JobCard({
   starting: boolean;
   canRun: boolean;
   onRun: () => void;
-  onAbandon: (runId: string, reason: string) => void;
+  onAbandon: (runId: string, reason: string) => Promise<boolean>;
 }) {
   const [abandoning, setAbandoning] = useState(false);
   const runs = Object.entries(j.runs ?? {}).filter(([k]) => k !== "total");
@@ -192,9 +192,9 @@ export function JobCard({
               submitLabel="Abandon run"
               busy={busy}
               onCancel={() => setAbandoning(false)}
-              onSubmit={(reason) => {
-                onAbandon(j.running!.runId, reason);
-                setAbandoning(false);
+              onSubmit={async (reason) => {
+                // Keep the form and its text if the request fails.
+                if (await onAbandon(j.running!.runId, reason)) setAbandoning(false);
               }}
             />
           )}
@@ -369,9 +369,14 @@ export function FindingCard({
         </div>
       )}
 
-      {f.proposalId && (
+      {f.resolution && (
+        <div className="mt-2 rounded-sm bg-canvas p-2 text-ink-2">Resolved: {f.resolution.reason}</div>
+      )}
+
+      {f.proposal && (
         <div className="mt-2 rounded-sm bg-[#e6f4fc] p-2 text-[#00609a]">
-          Proposal {f.proposalId} linked. Decide it in the Inbox.
+          Proposal {f.proposal.proposalId} ({f.proposal.sourceId} into {f.proposal.targetId}):{" "}
+          {f.proposal.outcome === "pending" ? "waiting for a decision in the Inbox." : `${f.proposal.outcome}.`}
         </div>
       )}
 

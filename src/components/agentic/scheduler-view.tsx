@@ -147,7 +147,7 @@ export function SchedulerView() {
                   starting={inFlight === `run:${j.job.jobId}`}
                   canRun={canStartRun(j, inFlight !== null)}
                   onRun={() => void startRun(j.job.jobId)}
-                  onAbandon={(runId, reason) => void abandon(runId, reason)}
+                  onAbandon={abandon}
                 />
               ))}
             </ul>
