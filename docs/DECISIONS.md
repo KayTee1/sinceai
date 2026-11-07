@@ -413,3 +413,48 @@ golden path; see T19 in PLAN.
 Alternative: regenerating scenarios each demo; reviewed fixtures are preferred
 for repeatability.
 Agreed by: KayTee + Viet (direction only, confirmed by the user)
+
+D25: Governance scheduler core: incremental runs and findings (2026-11-07)
+Status: proposed (KayTee, T24/B1). The reset-list change in
+`src/services/lifecycle/schema.ts` needs Viet's agreement (his area; B0 is his).
+Choice and why:
+- Scheduler runs, checkpoints and findings live in their own tables
+  (`scheduler_*`), apart from request pipeline `runs` and from `proposals`.
+  Run IDs are random (`SCH-<uuid>`), finding IDs `FND-<uuid>`.
+- Mode 2 (incremental) reads `audit_log` IDs after the last committed
+  checkpoint up to a bound fixed when the run is claimed (inside a write
+  transaction, so no lower ID can commit later). Watched actions:
+  `temporary_registered`, `insight_built`, `restored`, `promoted`;
+  `scheduler_*` rows are ignored. No change, no estate read.
+- Rule `active_overlap` (`overlap-v1`) reuses `suggestMerge` unchanged, in both
+  directions (the changed asset as covered or covering side). Only its
+  `merge` verdict becomes a finding; `keep_both` / `partial` are counted.
+  A finding is not a proposal and never merges, archives or changes KPIs.
+- Findings: one row per rule + asset pair; `open` or `dismissed`. Dismiss
+  needs a reason and is audited. Fingerprint = both assets' scope and KPI
+  sets + verdict (usage and merge direction excluded: they move with the
+  clock). Same fingerprint: open stays open, dismissed stays dismissed;
+  new fingerprint on a dismissed finding reopens it (audited).
+- Concurrency: one running run per job (partial unique index); claim,
+  read-only evaluation, and one commit transaction that marks the run
+  succeeded and moves the checkpoint by compare-and-set together with the
+  findings. Failures are recorded and never move the checkpoint.
+- Crash recovery: no automatic stale-run timeout (no heartbeat to tell a dead
+  run from a slow one). A manager abandons a stuck run with a reason
+  (audited); a late commit of that run is refused.
+- Reset: `resetLifecycle` drops the `scheduler_*` tables with `audit_log`, so
+  no checkpoint, run or finding outlives the audit IDs and assets it points at.
+- HTTP writes (run, dismiss, abandon) are off unless the server sets
+  `SCHEDULER_DEMO_ACTIONS=1`, then accept only the demo `manager` actor. This
+  is attribution, not authentication (no auth in the prototype). Reads are
+  open like other GET routes. Operators can use the CLI.
+- The scheduler does not tick the clock (ticking writes lifecycle state); it
+  evaluates at the stored clock date.
+Not covered (later): Mode 3 reassessment (incl. closing findings whose overlap
+is gone), clock/cron triggers, Scheduler UI, finding-to-proposal promotion,
+external catalog changes (imported tables are read-only; nothing to observe).
+Alternatives considered: reusing `runs`/`run_events` (request-specific);
+timestamp-based reset detection (not reliable); a stale-run timeout (no
+evidence for any value); persisting `keep_both`/`partial` overlaps as findings
+(suggestMerge itself treats them as no action).
+Agreed by: KayTee (proposed); Viet pending
