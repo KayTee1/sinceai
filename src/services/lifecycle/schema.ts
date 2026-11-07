@@ -16,6 +16,11 @@ const APP_TABLES = [
   "chat_requests",
   "runs",
   "run_events",
+  // T24 scheduler tables (created by services/scheduler/schema.ts). Dropped with
+  // audit_log because their checkpoints point at audit IDs that restart here.
+  "scheduler_runs",
+  "scheduler_checkpoints",
+  "scheduler_findings",
 ];
 
 const DDL = [
