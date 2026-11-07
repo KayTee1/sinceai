@@ -1,22 +1,28 @@
 # Handoff
 
 - **Now:** T16B is on `feat/T16B-live-orchestrator`, **stacked on PR #18**
-  (T16A, still open, head `6f8015e`). Local only: not pushed, no PR, waiting
-  for Codex's independent review. It does not include master's `1f4621a`
-  (D21 auto-renew, #24). The live orchestrator now uses the deterministic
+  (T16A, still open and CONFLICTING, head `6f8015e`). Local only: not
+  pushed, no PR. It lacks master's `1f4621a` (D21 auto-renew, #24). Codex
+  reviewed `be5e560` (CHANGES REQUIRED; report in `docs/agent/REVIEW.md`).
+  P1 F2/F3 are fixed locally and **await Codex re-verification**:
+  `proposeBuild` now stores a proposal only if the latest user message (from
+  the agent execution context) is exactly `Submit a build proposal for <ID>`
+  or `... for <ID> with product <P> and market <M>`, the ID equals the call's
+  `requestId`, and the call's `answer` equals the confirmed scope (both ways),
+  which must also be the analysis's resolved scope. Everything else returns
+  `intent_required` with a `reason` and stores nothing. Contract in
+  `docs/ARCHITECTURE.md`; tests in `tests/orchestrator.test.ts`
+  ("submission authorization"). Open: F4 (P2, inbox refresh recovery,
+  Viet's files) and F5 (P2, T17 `build.ts:149` provenance, with Viet).
+  The live orchestrator uses the deterministic
   services: `analyzeRequest`, `computeKpi`, `checkKpiDefinitions`,
-  `proposeBuild` (new, `src/mastra/tools/build-tools.ts`) and `searchAssets`.
-  `get-business-request` and `find-kpi-definitions` left the tool map.
+  `proposeBuild` (`src/mastra/tools/build-tools.ts`) and `searchAssets`.
   Prompt and tools are in `src/mastra/agents/orchestrator-config.ts`, so
   `tests/orchestrator.test.ts` runs the production prompt and tools on a
-  mock model and a disposable DB. TEAM-REQ-01 flows from chat to an open
-  `build_temporary` proposal in the approval inbox, but only when the latest
-  user message asks to submit one (deterministic `SUBMIT_INTENT` check).
-  There is no requester input; the D12 mapping picks the requester. There is
-  no approve tool. Chat UI: step labels and summaries; a stored proposal
-  calls the new `refresh()` in the lifecycle context so the inbox updates.
-  Viet's files touched: `orchestrator.ts`, `chat-view.tsx`,
-  `lifecycle-context.tsx` (`refresh` added to the context). He needs to
+  mock model and a disposable DB. There is no requester input (D12 mapping)
+  and no approve tool. Chat UI: step labels and summaries; a stored proposal
+  calls `refresh()` in the lifecycle context. Viet's files touched:
+  `orchestrator.ts`, `chat-view.tsx`, `lifecycle-context.tsx`. He needs to
   review these.
 - **Not verified:** a live run with the Anthropic model (no paid calls).
   Whether Sonnet calls the tools in order, and whether it asks before
@@ -106,10 +112,16 @@
   provisional until Viet agrees.
 - **Needs:** `ANTHROPIC_API_KEY` in `.env.local` for any live chat run (none
   done for T16 or T16B).
-- **Next:** Codex reviews T16B; then push and open a PR stacked on #18 (or
-  retarget to master once #18 merges, then merge master for #24). Viet
-  agrees the tool map, prompt and `build-proposal/v1` view. Fix the
-  discovery issue above with Viet. One live chat smoke run of TEAM-REQ-01.
+- **Next:** Codex re-verifies F2/F3 on T16B. Then reconcile #18 with
+  master, push, and open a PR stacked on #18 (or retarget to master once
+  #18 merges, then merge master for #24). F4 as a small follow-up. Viet
+  agrees the tool map, prompt, submit-command syntax and
+  `build-proposal/v1` view. Fix the discovery issue above with Viet. One
+  live chat smoke run of TEAM-REQ-01 (does Sonnet tell the user the exact
+  command?).
+- **MVP limit:** chat history is client-supplied, not authenticated server
+  state; the latest user message is trusted as typed by the person at the
+  keyboard. The command syntax is English-only and strict by design.
 - **Open:** one agent vs. three (D11/R17); free-text requests have no
   governed entry point; IP / external AI terms (more catalog data reaches
   Anthropic once wired); meaning of `value_type` per row vs. per column;

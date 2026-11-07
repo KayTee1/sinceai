@@ -221,18 +221,35 @@ LIKE-based KPI check conflated Net Sales with Net Sales Growth.
 
 | Tool (id / key) | Input | Calls | Output (model and UI) |
 | --- | --- | --- | --- |
-| `propose-build` / `proposeBuild` | `requestId`, optional `answer {product, market}` | `proposeBuild` (T17) at the lifecycle clock date (`ensureLifecycle` + `tick`, as `POST /api/builds`) | `build-proposal/v1`: `proposed` / `already_proposed` (proposal ID, insight ID, scope, KPIs, gaps, requester, approvers, request source label, `knownIssues`), `not_proposed` (recommendation, rationale), or `intent_required` |
+| `propose-build` / `proposeBuild` | `requestId`, optional `answer {product, market}` | `proposeBuild` (T17) at the lifecycle clock date (`ensureLifecycle` + `tick`, as `POST /api/builds`) | `build-proposal/v1`: `proposed` / `already_proposed` (proposal ID, insight ID, scope, KPIs, gaps, requester, approvers, request source label, `knownIssues`), `not_proposed` (recommendation, rationale), or `intent_required` (`reason`: `no_command` / `request_mismatch` / `scope_mismatch`, message with the accepted syntax) |
 
 Governance of `propose-build`:
 
 - The service re-runs the steward analysis; only `build_proposal` with a
   resolved scope stores a `build_temporary` proposal. Clarification (an
   offered `answer` only) and eligibility stay in the services.
-- Explicit intent (ours): the tool reads the latest user message from the
-  agent context and stores nothing unless it asks to submit or propose a
-  build (`SUBMIT_INTENT`, a narrow English pattern with a negation check).
-  Outside an agent loop it refuses. This is a deterministic guard, not
-  understanding: odd phrasing may need "Submit a build proposal for <ID>".
+- Submission authorization (ours, after Codex F2/F3): the tool reads the
+  latest user message from the agent execution context (never the model's
+  arguments) and stores nothing unless the whole message is one command:
+
+  ```text
+  Submit a build proposal for <REQUEST-ID>
+  Submit a build proposal for <REQUEST-ID> with product <PRODUCT> and market <MARKET>
+  ```
+
+  Case-insensitive; spaces collapse; one optional final period. No question
+  mark, quote, newline, prefix or second sentence, so questions, negations,
+  quotations, hypotheticals and discussion are refused (`no_command`). The
+  command's request ID must equal the call's `requestId` after trim and
+  upper-casing (`request_mismatch`). The call's `answer` must equal the
+  command's product and market (case-insensitive), and is allowed only when
+  the command names them (`scope_mismatch`). A confirmed scope must also be
+  the analysis's resolved scope, so a fixed-scope request cannot store a
+  different confirmed scope. Use the scope form only for a request that needed
+  clarification, with one of the offered options. Missing or invalid
+  execution context refuses. All refusals return `intent_required` before
+  `proposeBuild` runs. The services stay authoritative for eligibility.
+  `parseSubmitCommand` / `authorizeSubmission` in `build-tools.ts`.
 - No `requesterId` input: the chat has no identity, so the requester comes
   from the D12 region mapping (`team_mapping`). The model cannot choose the
   requester and so cannot steer the approvers.

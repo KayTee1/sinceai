@@ -9,9 +9,15 @@
 // register path.
 //
 // Two guards are ours:
-// - Explicit intent: the latest user message must ask to submit or propose a
-//   build (SUBMIT_INTENT). The model cannot create a proposal on a turn where
-//   the user only asked for an analysis, even if it calls the tool.
+// - Explicit, bound authorization (Codex F2/F3): the latest user message, read
+//   from the agent's execution context (never the model's arguments or
+//   reasoning), must be exactly one submit command (SUBMIT_COMMAND_SYNTAX) for
+//   the same request ID the tool was called with, and name the same scope as
+//   the tool's `answer` (or neither names one). A confirmed scope must also be
+//   the scope the analysis resolves to. Anything else (questions, negations,
+//   quotations, hypotheticals, extra sentences, another request or scope)
+//   returns intent_required and stores nothing. There is no fuzzy matching:
+//   unclear messages are refused, not guessed.
 // - No requester input: the chat has no signed-in identity, so the requester
 //   always comes from the service's region mapping (D12, labelled
 //   "team_mapping"). The model cannot pick who requests, and so cannot steer
@@ -26,20 +32,69 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { proposeBuild, type ProposeBuildResult } from "../../services/build/build";
 import { ensureLifecycle, tick, type BuildEvidence, type Proposal } from "../../services/lifecycle";
+import { analyzeRequest } from "../../services/steward/analyze";
 import { TEAM_REQUEST_SHEET, isTeamRequest } from "../../services/steward/team-requests";
 import { passErrors } from "./steward-views";
 
-/**
- * The latest user message must ask for a build proposal to be submitted, e.g.
- * "Submit a build proposal for TEAM-REQ-01" or "Please propose the build".
- * Deliberately narrow: an analysis request ("Handle TEAM-REQ-01") never matches.
- */
-export const SUBMIT_INTENT =
-  /\b(submit|propose|file|raise|create|send|open)\b[^.?!\n]{0,40}\b(build|proposal)\b|\bbuild proposal\b[^.?!\n]{0,20}\b(submit|send|file|go ahead)\b/i;
-const NEGATED = /\b(don'?t|do not|never|no need to|without)\b[^.?!\n]{0,20}\b(submit|propose|file|raise|create|send|open)\b/i;
+/** The only accepted submission syntax, shown to the model and the user. */
+export const SUBMIT_COMMAND_SYNTAX = "Submit a build proposal for <REQUEST-ID> [with product <PRODUCT> and market <MARKET>]";
 
-export function hasSubmitIntent(text: string): boolean {
-  return SUBMIT_INTENT.test(text) && !NEGATED.test(text);
+const ID = "[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*";
+const NAME = "[A-Za-z0-9]+(?:[ /&-][A-Za-z0-9]+)*";
+/**
+ * Whole-message match only: one affirmative command, an optional final period,
+ * nothing before or after. No question mark, quote, newline or second sentence.
+ */
+const SUBMIT_COMMAND = new RegExp(`^submit a build proposal for (${ID})(?: with product (${NAME}) and market (${NAME}))?\\.?$`, "i");
+
+export type SubmitCommand = { requestId: string; scope: { product: string; market: string } | null };
+
+const canonId = (id: string) => id.trim().toUpperCase();
+const canonName = (n: string) => n.trim().replace(/\s+/g, " ").toLowerCase();
+const sameScope = (a: { product: string; market: string }, b: { product: string; market: string }) =>
+  canonName(a.product) === canonName(b.product) && canonName(a.market) === canonName(b.market);
+
+/** Parse a standalone submit command; null for anything else. Spaces and tabs collapse; newlines do not. */
+export function parseSubmitCommand(text: string): SubmitCommand | null {
+  const m = SUBMIT_COMMAND.exec(text.trim().replace(/[ \t]+/g, " "));
+  if (!m) return null;
+  return { requestId: canonId(m[1]), scope: m[2] && m[3] ? { product: m[2], market: m[3] } : null };
+}
+
+export type AuthorizationFailure = "no_command" | "request_mismatch" | "scope_mismatch";
+
+/**
+ * Is this tool call exactly what the user's latest message commands? The
+ * request ID must match (case-insensitive), and the tool's answer must equal
+ * the commanded scope, or both must be absent.
+ */
+export function authorizeSubmission(
+  userText: string | null,
+  call: { requestId: string; answer?: { product: string; market: string } | null },
+): { ok: true; command: SubmitCommand } | { ok: false; reason: AuthorizationFailure } {
+  const command = userText === null ? null : parseSubmitCommand(userText);
+  if (!command) return { ok: false, reason: "no_command" };
+  if (command.requestId !== canonId(call.requestId)) return { ok: false, reason: "request_mismatch" };
+  const answer = call.answer ?? null;
+  if (!command.scope !== !answer) return { ok: false, reason: "scope_mismatch" };
+  if (command.scope && answer && !sameScope(command.scope, answer)) return { ok: false, reason: "scope_mismatch" };
+  return { ok: true, command };
+}
+
+const REFUSAL: Record<AuthorizationFailure, string> = {
+  no_command: "the user's latest message is not a standalone submit command",
+  request_mismatch: "the user's submit command names a different request than this call",
+  scope_mismatch: "the product and market in this call are not the ones the user's submit command confirmed",
+};
+
+function intentRequired(reason: AuthorizationFailure): IntentRequired {
+  return {
+    status: "intent_required",
+    reason,
+    message:
+      `No proposal was stored: ${REFUSAL[reason]}. Explain the analysis and tell the user that to submit they must send ` +
+      `exactly: "${SUBMIT_COMMAND_SYNTAX}" (scope only for a request that needed clarification, as one of the offered options).`,
+  };
 }
 
 type MessageLike = { role?: string; content?: unknown; parts?: unknown };
@@ -70,9 +125,9 @@ export function latestUserText(messages: unknown): string | null {
   return null;
 }
 
-export type ProposeBuildToolOutput =
-  | ProposeBuildResult
-  | { status: "intent_required"; message: string };
+type IntentRequired = { status: "intent_required"; reason: AuthorizationFailure; message: string };
+
+export type ProposeBuildToolOutput = ProposeBuildResult | IntentRequired;
 
 export type BuildProposalView =
   | {
@@ -96,7 +151,7 @@ export type BuildProposalView =
       knownIssues: string[];
     }
   | { view: "build-proposal/v1"; status: "not_proposed"; recommendation: string; rationale: string[]; next: string }
-  | { view: "build-proposal/v1"; status: "intent_required"; message: string };
+  | { view: "build-proposal/v1"; status: "intent_required"; reason: AuthorizationFailure; message: string };
 
 const PENDING_NOTE =
   "Pending human approval. Nothing is built, approved or registered yet. An authorised Lead (or the region's data " +
@@ -108,7 +163,7 @@ export const BUILD_SOURCE_DEFECT =
 
 /** Compact chat view: the proposal's identity, scope, KPIs, approvers and status; no stored evidence sources. */
 export function buildProposalView(o: ProposeBuildToolOutput): BuildProposalView {
-  if (o.status === "intent_required") return { view: "build-proposal/v1", status: o.status, message: o.message };
+  if (o.status === "intent_required") return { view: "build-proposal/v1", status: o.status, reason: o.reason, message: o.message };
   if (o.status === "not_proposed") {
     return {
       view: "build-proposal/v1",
@@ -160,28 +215,30 @@ export function createBuildTools(getDb: () => Client, opts: { today?: (db: Clien
     id: "propose-build",
     description:
       "Submits a build proposal for a stored business request into the human approval inbox. Use ONLY when the user's " +
-      "latest message explicitly asks to submit or propose the build, after analyze-request recommended build_proposal. " +
+      `latest message is exactly "${SUBMIT_COMMAND_SYNTAX}", with the same request ID and scope. ` +
       "The backend re-runs the authoritative analysis and stores a proposal only if it still recommends a build; " +
       "otherwise it returns not_proposed. This never approves or builds anything: a human Lead decides in the " +
-      "approval inbox. For a request that needed clarification, pass the user's chosen option as `answer`.",
+      "approval inbox. Pass `answer` only when the user's command names a product and market, copied exactly.",
     inputSchema: z.object({
       requestId: z.string().trim().min(1).max(64).describe("Stored business request ID, e.g. TEAM-REQ-01"),
       answer: z
         .object({ product: scopeName, market: scopeName })
         .nullish()
-        .describe("Only for a request that needed clarification: the option the user picked, exact product and market"),
+        .describe("Only when the user's submit command names a product and market: exactly those"),
     }),
     execute: async ({ requestId, answer }, context): Promise<ProposeBuildToolOutput> => {
       const userText = latestUserText((context as { agent?: { messages?: unknown } } | undefined)?.agent?.messages);
-      if (userText === null || !hasSubmitIntent(userText)) {
-        return {
-          status: "intent_required",
-          message:
-            "No proposal was stored: the user's latest message does not explicitly ask to submit a build proposal. " +
-            "Explain the analysis and ask whether they want to submit one.",
-        };
-      }
+      const auth = authorizeSubmission(userText, { requestId, answer });
+      if (!auth.ok) return intentRequired(auth.reason);
       const db = getDb();
+      if (answer) {
+        // A confirmed scope must be the one the analysis resolves to. For a
+        // request without a scope conflict the service ignores `answer`, so
+        // without this check a confirmed scope could silently differ from
+        // the stored one. A non-offered option still throws here (T14).
+        const resolved = (await analyzeRequest(db, requestId, answer)).clarification.resolved;
+        if (!resolved || !sameScope(resolved, answer)) return intentRequired("scope_mismatch");
+      }
       return proposeBuild(db, { requestId, answer: answer ?? undefined }, await today(db));
     },
     toModelOutput: (x: unknown) => json(view(x as ProposeBuildToolOutput)),
