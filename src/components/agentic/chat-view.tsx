@@ -8,13 +8,40 @@ import type { AnalysisView, KpiChecksView } from "@/mastra/tools/steward-views";
 import type { BuildProposalView } from "@/mastra/tools/build-tools";
 import type { ProposalListView } from "@/mastra/tools/inbox-tools";
 import { useLifecycle } from "../lifecycle/lifecycle-context";
-import { AnalysisCards, BuildProposalCards, KpiChecksCards, ProposalListCards } from "./chat-cards";
+import type { MergeProposalView, RetireView } from "@/mastra/tools/estate-tools";
+import type {
+  ArchivedView,
+  AssetView,
+  DraftView,
+  DuplicateView,
+  EstateSearchView,
+  MergeSuggestionsView,
+  PortfolioView,
+  RestoreOfferView,
+} from "@/mastra/tools/estate-views";
+import {
+  AnalysisCards,
+  ArchivedCards,
+  AssetCard,
+  BuildProposalCards,
+  DraftCard,
+  DuplicateCard,
+  EstateSearchCard,
+  KpiChecksCards,
+  MergeProposalCards,
+  MergeSuggestionsCards,
+  PortfolioCard,
+  ProposalListCards,
+  RestoreCard,
+  RetireCards,
+} from "./chat-cards";
 
 const SUGGESTIONS = [
   { title: "Run business request REQ-0001", prompt: "Handle business request REQ-0001." },
   { title: "Run team demo request TEAM-REQ-01", prompt: "Handle business request TEAM-REQ-01." },
   { title: "What's waiting for approval?", prompt: "What's waiting for approval?" },
-  { title: "Check the Net Sales definition", prompt: "Which Net Sales KPI should we use, and are there conflicting definitions?" },
+  { title: "I need a new dashboard", prompt: "I need a dashboard for net sales and forecast variance for Xarelto in Germany." },
+  { title: "What was archived recently?", prompt: "What was archived recently, and can any of it be restored?" },
 ];
 
 // Short, plain step names. Keys cover both tool ids and agent tool names.
@@ -37,6 +64,28 @@ const STEP: Record<string, string> = {
   listPendingProposals: "Read the approval inbox",
   "get-build-status": "Checked build status",
   getBuildStatus: "Checked build status",
+  "search-estate": "Searched the estate",
+  searchEstate: "Searched the estate",
+  "check-duplicate": "Checked for duplicates",
+  checkDuplicate: "Checked for duplicates",
+  "list-archived": "Looked in the archive",
+  listArchived: "Looked in the archive",
+  "get-asset": "Opened the asset",
+  getAsset: "Opened the asset",
+  "who-signs-off": "Looked up who decides",
+  whoSignsOff: "Looked up who decides",
+  "portfolio-summary": "Summarised the estate",
+  portfolioSummary: "Summarised the estate",
+  "prepare-restore": "Prepared a restore",
+  prepareRestore: "Prepared a restore",
+  "draft-request": "Drafted a request",
+  draftRequest: "Drafted a request",
+  "suggest-merge": "Looked for overlapping dashboards",
+  suggestMerge: "Looked for overlapping dashboards",
+  "propose-merge": "Sent a merge proposal",
+  proposeMerge: "Sent a merge proposal",
+  "propose-retire": "Sent a retire proposal",
+  proposeRetire: "Sent a retire proposal",
 };
 
 type ToolPart = { id: string; name: string; state: string; output?: unknown };
@@ -61,7 +110,11 @@ const viewOf = (t: ToolPart) => (t.state === "output-available" ? (t.output as {
 function storedProposalCalls(messages: UIMessage[]): string[] {
   return messages.flatMap((m) =>
     toolParts(m)
-      .filter((t) => viewOf(t) === "build-proposal/v1" && (t.output as { status?: string }).status === "proposed")
+      .filter(
+        (t) =>
+          ["build-proposal/v1", "retire-proposal/v1", "merge-proposal/v1"].includes(viewOf(t) ?? "") &&
+          (t.output as { status?: string }).status === "proposed",
+      )
       .map((t) => t.id),
   );
 }
@@ -92,6 +145,17 @@ export function ChatView() {
   });
   const busy = status === "submitted" || status === "streaming";
   const endRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Grow with the text up to the max height; only then scroll (never sideways).
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const max = 160;
+    el.style.height = `${Math.min(el.scrollHeight + 2, max)}px`;
+    el.style.overflowY = el.scrollHeight + 2 > max ? "auto" : "hidden";
+  }, [input]);
   const { refresh } = useLifecycle();
   const seenProposals = useRef(new Set<string>());
 
@@ -149,6 +213,7 @@ export function ChatView() {
           }}
         >
           <textarea
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -158,8 +223,8 @@ export function ChatView() {
               }
             }}
             rows={1}
-            placeholder="Ask about a request (e.g. REQ-0001), a KPI, or what's waiting for approval"
-            className="max-h-40 min-h-[44px] flex-1 resize-none rounded-sm border border-line-strong px-3 py-2.5 text-sm placeholder:text-ink-3 focus:border-blue focus:outline-none focus:ring-2 focus:ring-blue/20"
+            placeholder="Ask about a request, a KPI, or what's waiting for approval"
+            className="min-h-[44px] flex-1 resize-none overflow-hidden whitespace-pre-wrap break-words rounded-sm border border-line-strong px-3 py-2.5 text-sm placeholder:text-ink-3 focus:border-blue focus:outline-none focus:ring-2 focus:ring-blue/20"
           />
           {busy ? (
             <button
@@ -249,9 +314,29 @@ function ToolCards({ t, send, busy }: { t: ToolPart; send: (t: string) => void; 
     case "kpi-checks/v1":
       return <KpiChecksCards v={t.output as KpiChecksView} />;
     case "build-proposal/v1":
-      return <BuildProposalCards v={t.output as BuildProposalView} />;
+      return <BuildProposalCards v={t.output as BuildProposalView} send={send} busy={busy} />;
     case "proposal-list/v1":
       return <ProposalListCards v={t.output as ProposalListView} />;
+    case "duplicate-check/v1":
+      return <DuplicateCard v={t.output as DuplicateView} send={send} busy={busy} />;
+    case "estate-search/v1":
+      return <EstateSearchCard v={t.output as EstateSearchView} />;
+    case "archived-list/v1":
+      return <ArchivedCards v={t.output as ArchivedView} />;
+    case "restore-offer/v1":
+      return <RestoreCard v={t.output as RestoreOfferView} />;
+    case "asset-detail/v1":
+      return <AssetCard v={t.output as AssetView} send={send} busy={busy} />;
+    case "portfolio/v1":
+      return <PortfolioCard v={t.output as PortfolioView} />;
+    case "draft-request/v1":
+      return <DraftCard v={t.output as DraftView} />;
+    case "retire-proposal/v1":
+      return <RetireCards v={t.output as RetireView} />;
+    case "merge-suggestions/v1":
+      return <MergeSuggestionsCards v={t.output as MergeSuggestionsView} send={send} busy={busy} />;
+    case "merge-proposal/v1":
+      return <MergeProposalCards v={t.output as MergeProposalView} />;
     default:
       return null;
   }
@@ -326,6 +411,12 @@ function summarize(output: unknown): string {
     return `${o.checks.length} metrics${conflicts ? ` · ${conflicts} conflict` : ""}`;
   }
   if (o.view === "proposal-list/v1") return `${o.total} waiting`;
+  if (o.view === "duplicate-check/v1") return String(o.verdict);
+  if (o.view === "estate-search/v1" || o.view === "archived-list/v1") return `${o.total} found`;
+  if (o.view === "draft-request/v1") return String(o.requestId);
+  if (o.view === "retire-proposal/v1" || o.view === "merge-proposal/v1") return String(o.status).replace(/_/g, " ");
+  if (o.view === "merge-suggestions/v1") return `${o.total} overlaps`;
+  if (o.view === "build-proposal/v1" && o.status === "duplicate") return "already covered";
   if (o.view === "kpi-result/v1" && typeof o.status === "string") return o.status.replace(/_/g, " ");
   if (o.view === "kpi-by-market/v1") return "by market";
   if (Array.isArray(o.assets)) return `${o.assets.length} candidates`;

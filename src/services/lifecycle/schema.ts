@@ -13,6 +13,7 @@ const APP_TABLES = [
   "archive_snapshots",
   "usage_events",
   "insights",
+  "chat_requests",
 ];
 
 const DDL = [
@@ -47,6 +48,10 @@ const DDL = [
      id TEXT PRIMARY KEY, proposal_id TEXT NOT NULL, request_id TEXT NOT NULL, name TEXT NOT NULL,
      owner_id TEXT NOT NULL, scope TEXT NOT NULL, results TEXT NOT NULL, built_on TEXT NOT NULL, built_by TEXT NOT NULL)`,
   // App-generated usage, kept apart from the pack's Asset_Usage (D10).
+  // T22: requests drafted from typed chat questions (ours, labelled; never in Business_Requests).
+  `CREATE TABLE IF NOT EXISTS chat_requests (
+     request_id TEXT PRIMARY KEY, request_date TEXT NOT NULL, product_context TEXT NOT NULL,
+     market_context TEXT NOT NULL, request_text TEXT NOT NULL, created_on TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS usage_events (
      asset_id TEXT NOT NULL, user_id TEXT NOT NULL, sim_date TEXT NOT NULL, origin TEXT NOT NULL)`,
 ];

@@ -6,6 +6,7 @@
 // come only from computeKpiByMarket over source rows (Rule 2); the LLM never
 // produces them. Nothing is built without an approved proposal (Rule 1).
 import type { Client } from "@libsql/client";
+import { checkDuplicate, type DuplicateCheck } from "../estate";
 import {
   LifecycleError,
   POLICY_VERSION,
@@ -62,7 +63,9 @@ export type ProposeBuildResult =
    * path (restore is), so it is refused too.
    */
   | { status: "already_built"; proposal: Proposal; build: BuildRecord }
-  | { status: "not_proposed"; recommendation: string; rationale: string[] };
+  | { status: "not_proposed"; recommendation: string; rationale: string[] }
+  /** T22: the estate already covers it (active or app-built asset, archived asset, or another waiting build). */
+  | { status: "duplicate"; duplicate: DuplicateCheck };
 
 /** Region a scope's market belongs to: a region name, a market ID's region, or Global. */
 async function scopeRegion(db: Db, market: string): Promise<string> {
@@ -147,7 +150,9 @@ function serialised<T>(db: Client, fn: () => Promise<T>): Promise<T> {
  * already_proposed; an approved one returns already_built, whatever its
  * insight's lifecycle state. The check, the insight numbering and the insert
  * run in one write transaction (BEGIN IMMEDIATE), queued per client, so
- * concurrent submissions cannot both store a proposal.
+ * concurrent submissions cannot both store a proposal. Between the two, the
+ * T22 estate gate (checkDuplicate) returns duplicate when an active or archived
+ * asset, or a build waiting under another request, already covers the scope.
  */
 export async function proposeBuild(
   db: Client,
@@ -165,6 +170,21 @@ export async function proposeBuild(
   const requestSheet = analysis.request.source?.sheet;
   if (!requestSheet) throw new LifecycleError(`Request ${requestId} has no source sheet; refusing to guess its provenance`, "invalid");
 
+  // T21 first: the same request (ID and source sheet) and scope already has a
+  // pending or approved build → already_proposed / already_built.
+  const prior = await existingBuild(db, requestId, requestSheet, scope);
+  if (prior) return existingResult(db, prior);
+
+  // T22 duplicate gate: discovery reads only the imported catalog, so also
+  // check app-built insights, archived assets and builds waiting under another
+  // request before anything new is proposed.
+  const duplicate = await checkDuplicate(db, { scope, kpiIds: analysis.computability.map((c) => c.kpiId) });
+  if (duplicate.verdict === "reuse" || duplicate.verdict === "restore" || duplicate.verdict === "pending") {
+    return { status: "duplicate", duplicate };
+  }
+
+  // The same-request check runs again inside the write transaction, so
+  // concurrent submissions cannot both store a proposal.
   const { existing, proposalId } = await serialised(db, async () => {
     const tx = await db.transaction("write");
     try {
@@ -179,12 +199,14 @@ export async function proposeBuild(
       tx.close();
     }
   });
-  if (existing) {
-    const proposal = (await getProposal(db, existing.id))!;
-    if (existing.status === "approved") return { status: "already_built", proposal, build: (await buildRecord(db, existing.id))! };
-    return { status: "already_proposed", proposal };
-  }
+  if (existing) return existingResult(db, existing);
   return { status: "proposed", proposal: (await getProposal(db, proposalId!))! };
+}
+
+async function existingResult(db: Client, existing: { id: string; status: ProposalStatus }): Promise<ProposeBuildResult> {
+  const proposal = (await getProposal(db, existing.id))!;
+  if (existing.status === "approved") return { status: "already_built", proposal, build: (await buildRecord(db, existing.id))! };
+  return { status: "already_proposed", proposal };
 }
 
 /** Stores the proposal and its audit row inside the caller's write transaction; returns its ID. */

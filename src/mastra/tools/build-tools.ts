@@ -40,6 +40,7 @@ import { ensureLifecycle, tick, type BuildEvidence, type Proposal } from "../../
 import { analyzeRequest } from "../../services/steward/analyze";
 import { TEAM_REQUEST_SHEET } from "../../services/steward/team-requests";
 import { buildRecordView, type BuildRecordView } from "./build-status-tools";
+import { duplicateView, type DuplicateView } from "./estate-views";
 import { passErrors } from "./steward-views";
 
 /** The only accepted submission syntax, shown to the model and the user. */
@@ -159,7 +160,8 @@ export type BuildProposalView =
       build?: BuildRecordView;
     }
   | { view: "build-proposal/v1"; status: "not_proposed"; recommendation: string; rationale: string[]; next: string }
-  | { view: "build-proposal/v1"; status: "intent_required"; reason: AuthorizationFailure; message: string };
+  | { view: "build-proposal/v1"; status: "intent_required"; reason: AuthorizationFailure; message: string }
+  | { view: "build-proposal/v1"; status: "duplicate"; duplicate: DuplicateView; next: string };
 
 const PENDING_NOTE =
   "Pending human approval. Nothing is built, approved or registered yet. An authorised Lead (or the region's data " +
@@ -175,6 +177,16 @@ export const MISSING_REQUEST_SOURCE =
 /** Compact chat view: the proposal's identity, scope, KPIs, approvers and status; no stored evidence sources. */
 export function buildProposalView(o: ProposeBuildToolOutput): BuildProposalView {
   if (o.status === "intent_required") return { view: "build-proposal/v1", status: o.status, reason: o.reason, message: o.message };
+  if (o.status === "duplicate") {
+    return {
+      view: "build-proposal/v1",
+      status: o.status,
+      duplicate: duplicateView(o.duplicate),
+      next:
+        "No proposal was stored: the estate already covers this. Offer the existing asset (reuse), the waiting proposal, " +
+        "or the archived asset (restore) instead.",
+    };
+  }
   if (o.status === "not_proposed") {
     return {
       view: "build-proposal/v1",

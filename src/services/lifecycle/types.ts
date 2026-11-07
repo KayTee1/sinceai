@@ -55,7 +55,34 @@ export type BuildEvidence = {
   source: { sheet: string; ids: string[] }[];
 };
 
-export type ProposalType = "renew" | "retire" | "promote" | "build_temporary";
+/**
+ * T22: merge one dashboard into another that covers it. Both owners must
+ * approve (an inactive owner is replaced by their region's data steward); any
+ * rejection closes it and nothing changes. On the last approval the source is
+ * archived with a redirect to the target (D14 checks re-run first).
+ */
+export type MergeEvidence = {
+  kind: "merge_pair";
+  sourceId: string;
+  sourceName: string;
+  targetId: string;
+  targetName: string;
+  /** Who approves for each side (owner, or the region's steward when the owner is inactive). */
+  sourceApprover: string | null;
+  targetApprover: string | null;
+  sharedKpis: string[];
+  /** KPIs on the target the source's users never asked for. */
+  targetExtraKpis: string[];
+  usage: { sourceUsers: number | null; targetUsers: number | null; sourceOpens90d: number; targetOpens90d: number };
+  /** Assets fed by the source; redirected to the target on merge. */
+  downstreamAssets: string[];
+  /** Required approvers who have approved so far. */
+  approvals: string[];
+  reason: string;
+  source: { sheet: string; ids: string[] }[];
+};
+
+export type ProposalType = "renew" | "retire" | "promote" | "build_temporary" | "merge";
 export type ProposalStatus = "open" | "escalated" | "approved" | "rejected" | "expired";
 
 export type Proposal = {
@@ -64,7 +91,7 @@ export type Proposal = {
   type: ProposalType;
   assetIds: string[];
   rationale: string;
-  evidence: ReviewEvidence | PromoteEvidence | BuildEvidence;
+  evidence: ReviewEvidence | PromoteEvidence | BuildEvidence | MergeEvidence;
   requiredApprovers: string[];
   status: ProposalStatus;
   createdOn: string;

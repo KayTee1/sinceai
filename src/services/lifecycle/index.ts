@@ -10,6 +10,7 @@ export {
   listPendingProposals,
   nextDueEvent,
   processDue,
+  proposeRetire,
   recordUsage,
   recordDecision,
   regionSteward,

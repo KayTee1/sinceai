@@ -9,6 +9,18 @@ import { useState } from "react";
 import type { AnalysisView, KpiCheckView, KpiChecksView } from "@/mastra/tools/steward-views";
 import type { BuildProposalView } from "@/mastra/tools/build-tools";
 import type { ProposalListView } from "@/mastra/tools/inbox-tools";
+import type { MergeProposalView, RetireView } from "@/mastra/tools/estate-tools";
+import type {
+  ArchivedView,
+  AssetView,
+  DraftView,
+  DuplicateView,
+  EstateItemView,
+  EstateSearchView,
+  MergeSuggestionsView,
+  PortfolioView,
+  RestoreOfferView,
+} from "@/mastra/tools/estate-views";
 import { ProposalCard } from "../lifecycle/inbox";
 import { useLifecycle } from "../lifecycle/lifecycle-context";
 
@@ -279,7 +291,8 @@ function LiveProposals({ ids, emptyText }: { ids: string[]; emptyText: string })
   );
 }
 
-export function BuildProposalCards({ v }: { v: BuildProposalView }) {
+export function BuildProposalCards({ v, send, busy }: { v: BuildProposalView; send: Send; busy: boolean }) {
+  if (v.status === "duplicate") return <DuplicateCard v={v.duplicate} send={send} busy={busy} />;
   if (v.status === "proposed" || v.status === "already_proposed") {
     return <LiveProposals ids={[v.proposal.id]} emptyText="" />;
   }
@@ -299,5 +312,307 @@ export function ProposalListCards({ v }: { v: ProposalListView }) {
       <LiveProposals ids={v.proposals.map((p) => p.id)} emptyText="Nothing is waiting for a decision." />
       {v.total > v.shown && <p className="text-[11px] text-ink-3">Showing {v.shown} of {v.total}; the rest are in the inbox.</p>}
     </div>
+  );
+}
+
+// ---------- estate (T22) ----------
+
+function AssetLine({ a }: { a: EstateItemView }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <span>
+        <span className="font-medium text-ink">{a.name}</span>{" "}
+        <span className="text-ink-3">
+          {a.assetId} · {a.scope} · {a.origin === "app" ? "built in app" : "catalog"}
+        </span>
+      </span>
+      <span className={`shrink-0 text-[11px] ${a.status === "archived" ? "text-warn" : "text-ink-3"}`}>
+        {a.status === "archived" ? "archived" : a.tier}
+      </span>
+    </div>
+  );
+}
+
+const VERDICT: Record<DuplicateView["verdict"], { tag: string; tone: "good" | "warn" | "plain" | "build" }> = {
+  reuse: { tag: "Already exists · reuse", tone: "good" },
+  pending: { tag: "Already waiting for approval", tone: "warn" },
+  restore: { tag: "Archived match · restore", tone: "warn" },
+  partial: { tag: "Partly covered", tone: "plain" },
+  none: { tag: "Nothing like it yet", tone: "build" },
+};
+
+export function DuplicateCard({ v, send, busy }: { v: DuplicateView; send: Send; busy: boolean }) {
+  const meta = VERDICT[v.verdict];
+  return (
+    <Card tag={meta.tag} tone={meta.tone}>
+      <p className="text-ink-2">{v.rationale}</p>
+      <div className="mt-2 space-y-1">
+        {[...v.active, ...v.archived, ...v.partial].slice(0, 4).map((a) => (
+          <AssetLine key={a.assetId} a={a} />
+        ))}
+        {v.pending.map((p) => (
+          <div key={p.proposalId} className="text-ink-3">
+            {p.proposalId} for {p.requestId} · {p.status}
+          </div>
+        ))}
+      </div>
+      {v.verdict === "restore" && v.archived[0] && (
+        <div className="mt-2 flex justify-end">
+          <button type="button" disabled={busy} onClick={() => send(`Can we restore ${v.archived[0].assetId} instead?`)} className={btn}>
+            Restore instead
+          </button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+export function EstateSearchCard({ v }: { v: EstateSearchView }) {
+  if (v.total === 0) return <p className="text-[11px] text-ink-3">Nothing in the estate matches.</p>;
+  return (
+    <Card tag={`${v.total} in the estate`}>
+      <div className="space-y-1">
+        {v.assets.map((a) => (
+          <AssetLine key={a.assetId} a={a} />
+        ))}
+      </div>
+      {v.total > v.shown && <p className="mt-1.5 text-[11px] text-ink-3">Showing {v.shown} of {v.total}.</p>}
+    </Card>
+  );
+}
+
+export function ArchivedCards({ v }: { v: ArchivedView }) {
+  if (v.total === 0) return <p className="text-[11px] text-ink-3">Nothing archived matches.</p>;
+  return (
+    <Card tag={`${v.total} archived`} tone="warn">
+      <ul className="space-y-1.5">
+        {v.assets.map((a) => (
+          <li key={a.assetId}>
+            <AssetLine a={a} />
+            <div className="text-ink-3">
+              {a.archivedOn ? `Archived ${a.archivedOn}` : "Archived"} · restores to {a.restoresTo}
+              {a.archivedBecause ? ` · ${a.archivedBecause}` : ""}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+export function RestoreCard({ v }: { v: RestoreOfferView }) {
+  const { post, busy } = useLifecycle();
+  const [chosen, setChosen] = useState(v.restorers[0]?.id ?? "");
+  const [done, setDone] = useState(false);
+  async function restore() {
+    const ok = await post(`/api/assets/${v.asset.assetId}/restore`, {
+      actor: chosen,
+      reason: "Restored from chat instead of building a new one.",
+    });
+    if (ok) setDone(true);
+  }
+  return (
+    <Card tag="Restore instead of building" tone="warn">
+      <AssetLine a={v.asset} />
+      <p className="mt-1 text-ink-3">{v.next}</p>
+      <div className="mt-2 flex flex-wrap items-center justify-end gap-1.5">
+        {done ? (
+          <span className="mr-auto text-green-deep">Restored by {v.restorers.find((r) => r.id === chosen)?.name ?? chosen}</span>
+        ) : v.restorers.length === 0 ? (
+          <span className="mr-auto text-warn">Nobody active can restore it</span>
+        ) : (
+          <>
+            <span className="mr-auto text-ink-3">Restore as:</span>
+            {v.restorers.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => setChosen(r.id)}
+                className={`rounded-full border px-2 py-px ${chosen === r.id ? "border-blue bg-[#e6f4fc] text-[#00609a]" : "border-line-strong text-ink-2"}`}
+              >
+                {r.name}
+              </button>
+            ))}
+            <button type="button" disabled={busy || !chosen} onClick={restore} className={btnPrimary}>
+              Restore
+            </button>
+          </>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+export function AssetCard({ v, send, busy }: { v: AssetView; send: Send; busy: boolean }) {
+  const [retiring, setRetiring] = useState(false);
+  const [reason, setReason] = useState("");
+  const a = v.asset;
+  const canRetire = a.status !== "archived" && v.openProposals.length === 0;
+  return (
+    <Card tag={a.origin === "app" ? "Built in app" : "Catalog asset"}>
+      <AssetLine a={a} />
+      <dl className="mt-1.5 grid grid-cols-[96px_1fr] gap-x-2 gap-y-0.5 text-ink-2">
+        <dt className="text-ink-3">Owner</dt>
+        <dd className={a.ownerActive ? "" : "text-warn"}>
+          {a.owner ?? "none"}
+          {a.owner && !a.ownerActive ? " (inactive)" : ""}
+        </dd>
+        <dt className="text-ink-3">{a.ttlEnd ? "Expires" : "Lease ends"}</dt>
+        <dd>{a.ttlEnd ?? a.leaseEnd ?? "–"}</dd>
+        <dt className="text-ink-3">KPIs</dt>
+        <dd>{a.kpiIds.join(", ") || "–"}</dd>
+        <dt className="text-ink-3">App use</dt>
+        <dd className="tabular">
+          {v.usage.appOpens} opens · {v.usage.appViewers} people{v.usage.lastOpened ? ` · last ${v.usage.lastOpened}` : ""}
+        </dd>
+        <dt className="text-ink-3">Pack users</dt>
+        <dd className="tabular">{v.usage.packAvgMonthlyUsers ?? "unknown"} / month avg</dd>
+        {v.openProposals.length > 0 && (
+          <>
+            <dt className="text-ink-3">Waiting</dt>
+            <dd>{v.openProposals.map((p) => `${p.id} (${p.type})`).join(", ")}</dd>
+          </>
+        )}
+      </dl>
+      {canRetire &&
+        (retiring ? (
+          <div className="mt-2 space-y-1.5">
+            <input
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              autoFocus
+              placeholder="Why retire it? (e.g. duplicates AST-0135)"
+              className="w-full rounded-sm border border-line-strong px-2 py-1.5 text-xs focus:border-blue focus:outline-none"
+            />
+            <div className="flex justify-end gap-1.5">
+              <button type="button" onClick={() => setRetiring(false)} className="px-2 py-1 text-ink-3 hover:text-ink">
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={busy || !reason.trim() || /[?\n]/.test(reason)}
+                onClick={() => send(`Propose retiring ${a.assetId} because ${reason.trim().replace(/\.$/, "")}`)}
+                className={btnPrimary}
+              >
+                Send to owner
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-2 flex justify-end">
+            <button type="button" onClick={() => setRetiring(true)} className={btn}>
+              Propose retire
+            </button>
+          </div>
+        ))}
+    </Card>
+  );
+}
+
+export function PortfolioCard({ v }: { v: PortfolioView }) {
+  const tiers = ["certified", "team", "personal", "temporary", "archived", "underReview"] as const;
+  return (
+    <Card tag="Estate">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+        {tiers.map((t) => (
+          <div key={t}>
+            <div className="text-[10px] uppercase tracking-wide text-ink-3">{t === "underReview" ? "in review" : t}</div>
+            <div className="tabular text-sm font-semibold text-ink">{v.now[t]}</div>
+            <div className="tabular text-[10px] text-ink-3">was {v.before[t]}</div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-ink-3">
+        {v.pending.total} waiting ({v.pending.escalated} escalated)
+        {v.nextEvent ? ` · next: ${v.nextEvent.kind} for ${v.nextEvent.id} on ${v.nextEvent.date}` : ""}
+      </p>
+    </Card>
+  );
+}
+
+export function DraftCard({ v }: { v: DraftView }) {
+  return (
+    <p className="text-[11px] text-ink-3">
+      Drafted <span className="font-medium text-ink-2">{v.requestId}</span> · {v.product} · {v.market} · {v.metrics.join(", ")} (drafted in
+      chat, not a Bayer request)
+    </p>
+  );
+}
+
+export function RetireCards({ v }: { v: RetireView }) {
+  if (v.status === "proposed") return <LiveProposals ids={[v.proposalId]} emptyText="" />;
+  return (
+    <Card tag="Not submitted" tone="warn">
+      <p className="text-ink-2">Nothing was stored. Use Propose retire on the asset card and give a reason.</p>
+    </Card>
+  );
+}
+
+// ---------- merge (T22) ----------
+
+const MERGE_TAG: Record<MergeSuggestionsView["suggestions"][number]["verdict"], { tag: string; tone: "good" | "warn" | "plain" }> = {
+  merge: { tag: "Merge suggested", tone: "good" },
+  keep_both: { tag: "Keep both · target too broad", tone: "warn" },
+  partial: { tag: "Partial overlap · keep both", tone: "plain" },
+};
+
+function UsageLine({ s }: { s: MergeSuggestionsView["suggestions"][number]["keep"] }) {
+  return (
+    <span className="tabular text-ink-3">
+      {s.packUsers ?? "?"} users/mo · {s.appOpens90d} app opens · {s.kpiIds.length} KPIs
+    </span>
+  );
+}
+
+export function MergeSuggestionsCards({ v, send, busy }: { v: MergeSuggestionsView; send: Send; busy: boolean }) {
+  if (v.total === 0) return <p className="text-[11px] text-ink-3">No overlapping dashboards found.</p>;
+  return (
+    <div className="space-y-2">
+      {v.suggestions.map((x) => {
+        const meta = MERGE_TAG[x.verdict];
+        return (
+          <Card key={`${x.mergeAway.assetId}-${x.keep.assetId}`} tag={meta.tag} tone={meta.tone}>
+            <div className="space-y-1.5">
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-ink-3">{x.verdict === "merge" ? "Merge away" : "Asked about"}</div>
+                <AssetLine a={x.mergeAway} />
+                <UsageLine s={x.mergeAway} />
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-ink-3">{x.verdict === "merge" ? "Keep" : "Overlaps with"}</div>
+                <AssetLine a={x.keep} />
+                <UsageLine s={x.keep} />
+              </div>
+            </div>
+            <p className="mt-1.5 text-ink-2">{x.reason}</p>
+            {x.verdict === "merge" && (
+              <div className="mt-2 flex items-center justify-end gap-2">
+                <span className="mr-auto text-ink-3">
+                  Both owners approve: {[x.mergeAway.approver, x.keep.approver].filter(Boolean).join(" and ") || "nobody active"}
+                </span>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => send(`Propose merging ${x.mergeAway.assetId} into ${x.keep.assetId}`)}
+                  className={btnPrimary}
+                >
+                  Propose merge
+                </button>
+              </div>
+            )}
+          </Card>
+        );
+      })}
+      <p className="text-[11px] text-ink-3">{v.note}</p>
+    </div>
+  );
+}
+
+export function MergeProposalCards({ v }: { v: MergeProposalView }) {
+  if (v.status === "proposed") return <LiveProposals ids={[v.proposalId]} emptyText="" />;
+  return (
+    <Card tag="Not submitted" tone="warn">
+      <p className="text-ink-2">Nothing was stored. Use Propose merge on a merge suggestion.</p>
+    </Card>
   );
 }

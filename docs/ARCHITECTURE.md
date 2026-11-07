@@ -283,7 +283,9 @@ Build status and duplicates (T21):
   (queued per client). Pending → `already_proposed`; approved, whatever the
   insight's lifecycle state → `already_built`. Nothing is stored either way.
   A rejection still allows a new proposal (`INS-<request>-<n+1>`). Different
-  scopes of one request are separate. No schema change.
+  scopes of one request are separate. No schema change. Order with T22: this
+  same-request check runs first, then the T22 estate gate (`checkDuplicate` →
+  `duplicate`), then the transactional re-check and insert.
 - Open policy: whether an archived (expired) build may be rebuilt as a new
   proposal. Not agreed, so it is refused; restore (D13/D14) is the existing
   path.

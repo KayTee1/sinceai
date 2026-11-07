@@ -421,47 +421,66 @@ describe("proposeBuild duplicate protection (T21)", () => {
   });
 
   it("does not conflate a workbook and a team request that share an ID and scope", async () => {
-    // Team-authored TEAM-REQ-01 is approved and built.
+    // An approved build of a workbook (Business_Requests) request with the same
+    // ID and scope as team-authored TEAM-REQ-01. Stored directly, without an
+    // insight, so only the T21 same-request check can match it.
+    const pack: BuildEvidence = {
+      kind: "build",
+      requestId: REQ,
+      requestText: "x",
+      scope: { product: "Xarelto", market: "North America" },
+      requesterId: "OWN-NA",
+      requesterSource: "given",
+      kpis: [],
+      gaps: [],
+      rationale: [],
+      source: [{ sheet: "Business_Requests", ids: [REQ] }],
+    };
+    await db.execute({
+      sql: `INSERT INTO proposals (id, version, type, asset_ids, rationale, evidence, required_approvers, status, created_on, due_on)
+            VALUES ('PRP-INS-TEAM-REQ-01-1', 1, 'build_temporary', '["INS-TEAM-REQ-01-1"]', 'r', ?, '["OWN-NL"]', 'approved', ?, NULL)`,
+      args: [JSON.stringify(pack), DAY],
+    });
+    // The team request does not get the workbook build back: it is proposed as its own.
+    const team = await proposeBuild(db, { requestId: REQ }, DAY);
+    assert.equal(team.status, "proposed");
+    if (team.status !== "proposed") return;
+    assert.equal(team.proposal.id, "PRP-INS-TEAM-REQ-01-2");
+    assert.deepEqual((team.proposal.evidence as BuildEvidence).source[0], { sheet: TEAM_REQUEST_SHEET, ids: [REQ] });
+    // Repeating it finds its own pending proposal, not the approved workbook one.
+    const again = await proposeBuild(db, { requestId: REQ }, DAY);
+    assert.equal(again.status, "already_proposed");
+    if (again.status === "already_proposed") assert.equal(again.proposal.id, "PRP-INS-TEAM-REQ-01-2");
+    // Status by request lists both, each with its own source, and says they are different requests.
+    const s = await status("request", REQ);
+    assert.deepEqual(
+      s.builds.map((b) => [b.proposal.id, b.proposal.status, b.proposal.requestSourceSheet]),
+      [
+        ["PRP-INS-TEAM-REQ-01-1", "approved", "Business_Requests"],
+        ["PRP-INS-TEAM-REQ-01-2", "open", TEAM_REQUEST_SHEET],
+      ],
+    );
+    assert.match(s.notes.join(" "), /different request sources .*they are different requests/);
+  });
+
+  it("a workbook request colliding with a built team request gets the estate verdict, not the team build", async () => {
     await approved();
-    // A workbook row with the same ID and scope appears in Business_Requests
-    // (loadRequest prefers the pack row, so the analysis now cites that sheet).
-    const team = { date: "2026-11-01", product: "Xarelto", market: "North America" };
     const text = "Net sales and forecast variance for Xarelto in North America, by country.";
     await db.execute({
       sql: `INSERT INTO Business_Requests (request_id, request_date, product_context, market_context, request_text, urgency, status, _source_row)
-            VALUES (?, ?, ?, ?, ?, 'normal', 'new', 999)`,
-      args: [REQ, team.date, team.product, team.market, text],
+            VALUES (?, '2026-11-01', 'Xarelto', 'North America', ?, 'normal', 'new', 999)`,
+      args: [REQ, text],
     });
     try {
-      // The team build is not returned for the workbook request: a new proposal is stored.
-      const pack = await proposeBuild(db, { requestId: REQ }, DAY);
-      assert.equal(pack.status, "proposed");
-      if (pack.status !== "proposed") return;
-      assert.equal(pack.proposal.id, "PRP-INS-TEAM-REQ-01-2");
-      assert.deepEqual((pack.proposal.evidence as BuildEvidence).source[0], { sheet: "Business_Requests", ids: [REQ] });
-      // Repeating the workbook request finds its own pending proposal, not the approved team build.
-      const packAgain = await proposeBuild(db, { requestId: REQ }, DAY);
-      assert.equal(packAgain.status, "already_proposed");
-      if (packAgain.status === "already_proposed") assert.equal(packAgain.proposal.id, "PRP-INS-TEAM-REQ-01-2");
-      // Status by request lists both, each with its own source, and says they are different requests.
-      const s = await status("request", REQ);
-      assert.deepEqual(
-        s.builds.map((b) => [b.proposal.id, b.proposal.status, b.proposal.requestSourceSheet]),
-        [
-          [PRP, "approved", TEAM_REQUEST_SHEET],
-          ["PRP-INS-TEAM-REQ-01-2", "open", "Business_Requests"],
-        ],
-      );
-      assert.match(s.notes.join(" "), /different request sources .*they are different requests/);
+      const before = await snapshot();
+      const r = await proposeBuild(db, { requestId: REQ }, DAY);
+      // Not already_built/already_proposed for the team proposal: the T22 estate gate
+      // points to the built insight as a reuse candidate, and nothing is stored.
+      assert.equal(r.status, "duplicate");
+      if (r.status === "duplicate") assert.equal(r.duplicate.verdict, "reuse");
+      assert.equal(await snapshot(), before);
     } finally {
       await db.execute({ sql: `DELETE FROM Business_Requests WHERE request_id = ? AND _source_row = 999`, args: [REQ] });
-    }
-    // The team request again returns its own approved build, not the pending workbook proposal.
-    const teamAgain = await proposeBuild(db, { requestId: REQ }, DAY);
-    assert.equal(teamAgain.status, "already_built");
-    if (teamAgain.status === "already_built") {
-      assert.equal(teamAgain.proposal.id, PRP);
-      assert.equal(teamAgain.build.proposal.requestSourceSheet, TEAM_REQUEST_SHEET);
     }
   });
 
