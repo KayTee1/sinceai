@@ -26,6 +26,7 @@ const LABEL: Record<string, string> = {
   ttl_expired: "Temporary expired",
   temporary_registered: "Temporary insight created",
   promoted: "Promoted",
+  promotion_proposed: "Proposed for Team",
 };
 
 // Per-asset audit timeline (Manager), with Restore for archived assets.

@@ -18,6 +18,7 @@ export const LIFECYCLE_SHEETS: ParsedSheet[] = [
     ["OWN-3", "Other Owner", "Analyst", "EMEA", "active"],
     ["OWN-S", "EMEA Steward", "Data Steward", "EMEA", "active"],
     ["OWN-G", "Global Steward", "Data Steward", "Global", "active"],
+    ["OWN-L", "EMEA Lead", "Supply Analytics Lead", "EMEA", "active"],
   ]),
   sheet(
     "Analytics_Assets",

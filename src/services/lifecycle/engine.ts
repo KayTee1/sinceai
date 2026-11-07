@@ -8,6 +8,7 @@ import {
   LOW_USAGE_USERS,
   POLICY_VERSION,
   REVIEW_WINDOW_DAYS,
+  TEAM_USERS,
   TTL_DAYS,
   USAGE_MONTHS,
   addDays,
@@ -17,6 +18,7 @@ import {
   type AssetState,
   type Db,
   type Proposal,
+  type PromoteEvidence,
   type ProposalStatus,
   type ReviewEvidence,
   type Tier,
@@ -113,6 +115,8 @@ export async function nextDueEvent(db: Db, until = "9999-12-31"): Promise<DueEve
     sql: `SELECT date, kind, id FROM (
             SELECT ttl_end AS date, 'ttl' AS kind, asset_id AS id FROM asset_state
               WHERE status = 'active' AND tier = 'temporary' AND ttl_end IS NOT NULL
+                AND asset_id NOT IN (SELECT json_extract(asset_ids, '$[0]') FROM proposals
+                                     WHERE type = 'promote' AND status IN ('open', 'escalated'))
             UNION ALL
             SELECT lease_end, 'lease', asset_id FROM asset_state
               WHERE status = 'active' AND tier != 'temporary' AND lease_end IS NOT NULL
@@ -284,7 +288,7 @@ async function escalateOverdueReview(tx: Db, proposalId: string, date: string) {
   if (!p || p.status !== "open") return;
   const assetId = p.assetIds[0];
   const state = await getAssetState(tx, assetId);
-  const evidence = state ? await buildEvidence(tx, state, date) : p.evidence;
+  const evidence = state ? await buildEvidence(tx, state, date) : (p.evidence as ReviewEvidence);
   const steward = await regionSteward(tx, state?.ownerId ?? null);
   const approvers = [...new Set([...p.requiredApprovers, ...(steward ? [steward] : [])])];
   const notes: string[] = [];
@@ -371,6 +375,28 @@ export async function decide(db: Client, input: DecisionInput, date: string): Pr
       proposalId: p.id,
       rationale: reason || `Approved ${p.type}.`,
     });
+
+    if (p.type === "promote") {
+      if (input.action === "approve") {
+        const leaseEnd = addDays(date, LEASE_DAYS);
+        await tx.execute({
+          sql: `UPDATE asset_state SET tier = 'team', ttl_end = NULL, lease_end = ?, status = 'active' WHERE asset_id = ?`,
+          args: [leaseEnd, assetId],
+        });
+        await appendAudit(tx, {
+          simDate: date,
+          actor: input.actor,
+          action: "promoted",
+          assetId,
+          proposalId: p.id,
+          policyVersion: POLICY_VERSION,
+          rationale: `Promoted to Team after use across the team; lease until ${leaseEnd}. Owner unchanged (D14).`,
+        });
+      }
+      // Rejected: nothing changes; a Temporary insight's 30-day expiry resumes.
+      await tx.commit();
+      return (await getProposal(db, p.id))!;
+    }
 
     if (renew) {
       const leaseEnd = addDays(date, LEASE_DAYS);
@@ -478,6 +504,61 @@ export async function registerTemporary(
   }
 }
 
+// D17: once enough distinct people in the owner's region have opened a
+// Temporary insight, a Lead in that region is asked to promote it to Team.
+// The 30-day expiry is held while the proposal waits.
+async function proposeTeamIfUsedByTeam(tx: Db, s: AssetState, date: string) {
+  const pending = await tx.execute({
+    sql: `SELECT 1 FROM proposals WHERE type = 'promote' AND status IN ('open', 'escalated') AND json_extract(asset_ids, '$[0]') = ?`,
+    args: [s.assetId],
+  });
+  if (pending.rows.length) return;
+  const owner = await tx.execute({ sql: `SELECT scope FROM Owners WHERE owner_id = ?`, args: [s.ownerId] });
+  const region = owner.rows[0]?.scope as string | undefined;
+  if (!region) return;
+  const users = await tx.execute({
+    sql: `SELECT DISTINCT u.user_id FROM usage_events u JOIN Owners o ON o.owner_id = u.user_id
+          WHERE u.asset_id = ? AND o.scope = ? ORDER BY u.user_id`,
+    args: [s.assetId, region],
+  });
+  const ids = users.rows.map((r) => r.user_id as string);
+  if (ids.length < TEAM_USERS) return;
+  // Any active Lead in the region except the owner (no self-approval); else the region's steward.
+  const leads = await tx.execute({
+    sql: `SELECT owner_id FROM Owners WHERE role LIKE '%Lead%' AND status = 'active' AND scope = ? AND owner_id != ? ORDER BY owner_id`,
+    args: [region, s.ownerId],
+  });
+  const steward = leads.rows.length ? null : await regionSteward(tx, s.ownerId);
+  const approvers = leads.rows.length ? leads.rows.map((r) => r.owner_id as string) : steward ? [steward] : [];
+  const id = `PRP-${s.assetId}-team-${date}`;
+  const evidence: PromoteEvidence = {
+    kind: "team_use",
+    region,
+    users: ids,
+    threshold: TEAM_USERS,
+    ttlEnd: s.ttlEnd,
+    source: [{ sheet: "usage_events (app)", ids: [s.assetId] }, { sheet: "Owners", ids }],
+  };
+  const rationale =
+    `${ids.length} people in ${region} opened this Temporary insight (threshold ${TEAM_USERS}). ` +
+    `Proposed: promote to Team. Its 30-day expiry is on hold while a Lead in ${region} decides.`;
+  await tx.execute({
+    sql: `INSERT INTO proposals (id, version, type, asset_ids, rationale, evidence, required_approvers, status, created_on, due_on)
+          VALUES (?, 1, 'promote', ?, ?, ?, ?, 'open', ?, NULL)`,
+    args: [id, JSON.stringify([s.assetId]), rationale, JSON.stringify(evidence), JSON.stringify(approvers), date],
+  });
+  await appendAudit(tx, {
+    simDate: date,
+    actor: "policy",
+    action: "promotion_proposed",
+    assetId: s.assetId,
+    proposalId: id,
+    policyVersion: POLICY_VERSION,
+    rationale,
+    evidence,
+  });
+}
+
 /**
  * Logs an app open (kept apart from imported usage). When the owner opens
  * their own Temporary insight again it becomes Personal automatically (D14).
@@ -509,6 +590,9 @@ export async function recordUsage(
         policyVersion: POLICY_VERSION,
         rationale: `Owner used the Temporary insight again: promoted to Personal, lease until ${leaseEnd}.`,
       });
+    }
+    if (s.status === "active" && s.tier === "temporary" && s.ownerId && s.ownerId !== input.userId) {
+      await proposeTeamIfUsedByTeam(tx, s, date);
     }
     await tx.commit();
     return (await getAssetState(db, input.assetId))!;

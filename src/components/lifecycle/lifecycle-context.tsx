@@ -5,19 +5,29 @@ import { useRouter } from "next/navigation";
 
 export type Person = { name: string; role: string; region: string; active: boolean };
 
+export type ReviewEvidence = {
+  avgMonthlyUsers: number | null;
+  usageMonths: string[];
+  appOpens90d: number;
+  ownerStatus: "active" | "inactive" | "missing";
+  downstreamAssets: string[];
+};
+
+export type PromoteEvidence = {
+  kind: "team_use";
+  region: string;
+  users: string[];
+  threshold: number;
+  ttlEnd: string | null;
+};
+
 export type PendingProposal = {
   id: string;
-  type: "renew" | "retire";
+  type: "renew" | "retire" | "promote";
   assetIds: string[];
   assetNames: string[];
   rationale: string;
-  evidence: {
-    avgMonthlyUsers: number | null;
-    usageMonths: string[];
-    appOpens90d: number;
-    ownerStatus: "active" | "inactive" | "missing";
-    downstreamAssets: string[];
-  };
+  evidence: ReviewEvidence | PromoteEvidence;
   requiredApprovers: string[];
   status: "open" | "escalated";
   createdOn: string;
