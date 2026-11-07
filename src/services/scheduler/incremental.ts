@@ -38,7 +38,7 @@ export const LIMITATIONS = [
   "Imported catalog assets, KPI mappings and KPI definitions cannot change at runtime and have no change record; changes made outside the app (a new workbook import) are not detected.",
   "Changes are read from the app's audit log only; writes that do not audit (usage events, chat drafts, pipeline runs) are not change triggers.",
   "Assets that map no KPIs, or app assets without a built insight, are reported as unsupported: overlap is unknown, not absent.",
-  "Open findings are not closed automatically when an overlap disappears (retire, merge, expiry); that needs periodic reassessment (Mode 3).",
+  "Incremental runs never close a finding when its overlap disappears (retire, merge, expiry); the periodic reassessment job (Mode 3) does.",
 ];
 
 export const INCREMENTAL_JOB: JobDescriptor = {
@@ -86,7 +86,7 @@ export async function readChanges(db: Client, window: ChangeWindow) {
  * it is reused. Matching itself is suggestMerge's, unchanged. Each distinct
  * comparison still loads the estate inside suggestMerge (follow-up).
  */
-function memoized(compare: Comparator): Comparator {
+export function memoized(compare: Comparator): Comparator {
   const seen = new Map<string, ReturnType<Comparator>>();
   return (db, input, date) => {
     const key = `${input.assetId}|${input.limit ?? ""}|${date}`;

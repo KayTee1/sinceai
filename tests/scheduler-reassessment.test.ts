@@ -1,0 +1,500 @@
+// T24 (B2): periodic reassessment of known scheduler findings (Mode 3).
+// Same disposable fixture as tests/scheduler.test.ts (team-authored T15
+// facts, not Bayer data): AST-1 Alphazol EMEA (KPI-004, OWN-1); REQ-S01
+// builds INS-REQ-S01-1 (Alphazol EMEA, KPI-004 + KPI-042, owner OWN-R) that
+// covers AST-1, so the incremental run records one open finding for the pair.
+//
+// Catalog KPI mappings are read-only at runtime; tests that need them to
+// change edit this disposable copy and restore it in `finally`.
+// Failures are injected natively (triggers), never by throwing before a
+// transaction starts. No LLM or network calls.
+import { after, beforeEach, describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { Client } from "@libsql/client";
+import { importWorkbook, type ParsedSheet } from "../src/db/import-workbook";
+import { openDb } from "../src/db/open";
+import { decideBuild, proposeBuild } from "../src/services/build";
+import { proposeMerge, suggestMerge } from "../src/services/estate";
+import { decide, listPendingProposals, proposeRetire, recordUsage, resetLifecycle, restore } from "../src/services/lifecycle";
+import {
+  B1_FINDINGS_DDL,
+  PERIODIC_JOB,
+  SCHEDULER_TABLES,
+  SchedulerError,
+  claimRun,
+  countRuns,
+  dismissFinding,
+  ensureScheduler,
+  getCheckpoint,
+  getFinding,
+  listFindings,
+  listRuns,
+  parseJobFilter,
+  parseJobId,
+  readReassessmentDueState,
+  reassessmentDue,
+  runIncremental,
+  runJob,
+  runReassessment,
+  schedulerOverview,
+  type Comparator,
+  type Finding,
+} from "../src/services/scheduler";
+import { LOCK_WAIT_MS, schedulerDbTesting } from "../src/services/scheduler/db";
+import { FACT_SHEETS } from "./fixtures/facts";
+
+const OWNERS: ParsedSheet = {
+  sheet: "Owners",
+  data: [
+    ["owner_id", "owner_name", "role", "scope", "status"],
+    ["OWN-1", "Fixture Lead", "Commercial Lead", "EMEA", "active"],
+    ["OWN-R", "Fixture Requester", "Analyst", "EMEA", "active"],
+    ["OWN-S", "Fixture Steward", "Data Steward", "EMEA", "active"],
+    ["OWN-T", "Fixture Analyst", "Analyst", "EMEA", "active"],
+  ],
+};
+const TAIL = ["active", "certified", "Dashboard", "Power BI", "WS-1", "2026-09-01"];
+function patch(s: ParsedSheet): ParsedSheet {
+  if (s.sheet === "Owners") return OWNERS;
+  if (s.sheet === "Analytics_Assets") {
+    const rows = s.data.map((r, i) => (i > 0 && r[0] === "AST-2" ? [...r.slice(0, 5), "OWN-R", ...r.slice(6)] : r));
+    return { sheet: s.sheet, data: [...rows, ["AST-4", "Betavex Global Everything", "SM-1", "Betavex", "Global", "OWN-S", ...TAIL]] };
+  }
+  if (s.sheet === "Asset_KPI_Map") {
+    const extra = ["KPI-001", "KPI-004", "KPI-005", "KPI-014", "KPI-027", "KPI-042"].map((k) => ["AST-4", k, "primary"]);
+    return { sheet: s.sheet, data: [...s.data, ...extra] };
+  }
+  return s;
+}
+const SHEETS = [
+  ...FACT_SHEETS.map(patch),
+  { sheet: "Asset_Usage", data: [["asset_id", "month", "views", "unique_users"], ["AST-2", "2026-10-01", 900, 300]] },
+  { sheet: "Lineage_Edges", data: [["source_id", "target_id", "edge_type", "relationship"], ["AST-2", "AST-9", "ASSET_TO_ASSET", "feeds"]] },
+].filter((s, i, all) => all.findIndex((x) => x.sheet === s.sheet) === i);
+const EXPECTED = Object.fromEntries(SHEETS.filter((s) => s.sheet !== "START_HERE").map((s) => [s.sheet, s.data.length - 1]));
+const DAY = "2026-11-03";
+const INSIGHT = "INS-REQ-S01-1";
+
+const dir = mkdtempSync(join(tmpdir(), "scheduler-reassess-test-"));
+const DB_PATH = join(dir, "scheduler.db");
+let db: Client;
+let imported = false;
+
+beforeEach(async () => {
+  if (!imported) {
+    await importWorkbook({ sheets: SHEETS, dest: DB_PATH, expected: EXPECTED });
+    db = openDb(DB_PATH);
+    imported = true;
+  }
+  schedulerDbTesting.lockWaitMs = LOCK_WAIT_MS;
+  schedulerDbTesting.onOpen = undefined;
+  schedulerDbTesting.onBusy = undefined;
+  await resetLifecycle(db, 0);
+});
+
+after(() => {
+  db?.close();
+  rmSync(dir, { recursive: true, force: true });
+});
+
+async function buildInsight() {
+  const r = await proposeBuild(db, { requestId: "REQ-S01", requesterId: "OWN-R" }, DAY);
+  assert.equal(r.status, "proposed");
+  const { insight } = await decideBuild(db, { proposalId: (r as { proposal: { id: string } }).proposal.id, actor: "OWN-1", action: "approve" }, DAY);
+  assert.equal(insight?.id, INSIGHT);
+}
+
+/** One open finding for AST-1 / the insight, recorded by an incremental run. */
+async function openFinding(): Promise<Finding> {
+  await buildInsight();
+  const r = await runIncremental(db, { actor: "manager" });
+  assert.equal(r.summary!.findings.created, 1);
+  return (await listFindings(db, { status: "open" })).findings[0];
+}
+
+async function archiveAst1() {
+  const p = await proposeRetire(db, { assetId: "AST-1", reason: "Fixture: retired." }, DAY);
+  await decide(db, { proposalId: p.id, actor: "OWN-1", action: "approve" }, DAY);
+}
+
+const periodic = (compare?: Comparator) => runReassessment(db, { actor: "manager", compare });
+const maxAuditId = async () => Number((await db.execute(`SELECT MAX(id) AS m FROM audit_log`)).rows[0].m);
+const auditSince = async (id: number) =>
+  (await db.execute({ sql: `SELECT action, actor FROM audit_log WHERE id > ? ORDER BY id`, args: [id] })).rows.map((r) => ({ action: r.action as string, actor: r.actor as string }));
+const sideOf = (f: Finding, id: string) => [f.evidence.mergeAway, f.evidence.keep].find((x) => x.assetId === id)!;
+
+/** Edits the disposable copy's (read-only at runtime) AST-1 KPI mapping, restoring it afterwards. */
+async function withAst1Kpis(kpis: string[], fn: () => Promise<void>) {
+  const before = (await db.execute(`SELECT * FROM Asset_KPI_Map WHERE asset_id = 'AST-1' ORDER BY rowid`)).rows;
+  const cols = Object.keys(before[0]);
+  await db.execute(`DELETE FROM Asset_KPI_Map WHERE asset_id = 'AST-1'`);
+  try {
+    for (const k of kpis) {
+      const row = { ...before[0], kpi_id: k, _source_row: 9000 + kpis.indexOf(k) } as Record<string, unknown>;
+      await db.execute({ sql: `INSERT INTO Asset_KPI_Map (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`, args: cols.map((c) => row[c] as string) });
+    }
+    await fn();
+  } finally {
+    await db.execute(`DELETE FROM Asset_KPI_Map WHERE asset_id = 'AST-1'`);
+    for (const r of before) {
+      await db.execute({ sql: `INSERT INTO Asset_KPI_Map (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`, args: cols.map((c) => r[c] as string) });
+    }
+  }
+}
+
+const LIFECYCLE_TABLES = ["proposals", "decisions", "asset_state", "insights", "usage_events", "app_clock", "archive_snapshots", "Analytics_Assets", "Asset_KPI_Map", "KPI_Catalog", "Owners"];
+const snapLifecycle = async () => Promise.all(LIFECYCLE_TABLES.map(async (t) => JSON.stringify((await db.execute(`SELECT * FROM ${t} ORDER BY rowid`)).rows)));
+
+describe("periodic reassessment run", () => {
+  it("runs manually without chat or an LLM; reports an empty scope when there are no findings", async () => {
+    const calls: string[] = [];
+    const r = await periodic(async (d, input, date) => (calls.push(input.assetId), suggestMerge(d, input, date)));
+    assert.deepEqual([r.status, r.jobId, r.mode, r.trigger, r.actor], ["succeeded", "periodic_reassessment", "reassessment", "manual", "manager"]);
+    assert.deepEqual(r.summary!.reassessment!.scope, { open: 0, dismissed: 0 });
+    assert.deepEqual(calls, [], "nothing to reassess: nothing compared");
+    assert.deepEqual(r.window, { fromAuditId: 0, toAuditId: await maxAuditId() });
+    assert.deepEqual(r.rules, PERIODIC_JOB.rules);
+    assert.equal(await getCheckpoint(db, "periodic_reassessment"), null, "no checkpoint for the periodic job");
+  });
+
+  it("reassesses an open finding: same evidence => unchanged, only last seen and count move; compares only the pair", async () => {
+    const f = await openFinding();
+    const calls: string[] = [];
+    const r = await periodic(async (d, input, date) => (calls.push(input.assetId), suggestMerge(d, input, date)));
+    assert.equal(r.status, "succeeded");
+    const re = r.summary!.reassessment!;
+    assert.deepEqual(re.scope, { open: 1, dismissed: 0 });
+    assert.deepEqual(re.assetsCompared, ["AST-1", INSIGHT]);
+    assert.deepEqual([...new Set(calls)].sort(), ["AST-1", INSIGHT], "no full-estate sweep");
+    assert.equal(re.counts.unchanged, 1);
+    assert.deepEqual(re.results.map((x) => [x.findingId, x.fromStatus, x.toStatus, x.outcome]), [[f.findingId, "open", "open", "unchanged"]]);
+    assert.deepEqual(r.summary!.findings, { created: 0, updated: 0, unchanged: 1, reopened: 0, suppressed: 0, resolved: 0 });
+    const after = (await getFinding(db, f.findingId))!;
+    assert.deepEqual([after.status, after.fingerprint, after.observations, after.lastSeen.runId], ["open", f.fingerprint, 2, r.runId]);
+    assert.deepEqual(after.evidence, f.evidence, "evidence untouched when nothing material changed");
+  });
+
+  it("updates an open finding whose evidence changed (tier Temporary -> Personal)", async () => {
+    const f = await openFinding();
+    await recordUsage(db, { assetId: INSIGHT, userId: "OWN-R" }, DAY); // owner opens it again: promoted to Personal
+    const r = await periodic();
+    assert.equal(r.summary!.reassessment!.counts.updated, 1);
+    const after = (await getFinding(db, f.findingId))!;
+    assert.deepEqual([after.status, sideOf(after, INSIGHT).tier], ["open", "personal"]);
+    assert.notEqual(after.fingerprint, f.fingerprint);
+    assert.equal(after.evidence.changedAssetId, f.evidence.changedAssetId, "same perspective as the stored evidence");
+    assert.deepEqual(after.evidence.triggers, []);
+  });
+
+  it("resolves when one side is archived (asset_inactive), audited, without any lifecycle side effect", async () => {
+    const f = await openFinding();
+    await archiveAst1();
+    const before = await snapLifecycle();
+    const mark = await maxAuditId();
+    const r = await periodic();
+    const res = r.summary!.reassessment!.results[0];
+    assert.deepEqual([res.outcome, res.toStatus, res.resolution?.reason], ["resolved", "resolved", "asset_inactive"]);
+    assert.equal(r.summary!.findings.resolved, 1);
+    const after = (await getFinding(db, f.findingId))!;
+    assert.equal(after.status, "resolved");
+    assert.equal(after.resolution?.reason, "asset_inactive");
+    assert.equal(after.resolution?.fromStatus, "open");
+    assert.equal(after.resolution?.runId, r.runId);
+    assert.equal(after.resolution?.evidence.assets.find((a) => a.assetId === "AST-1")?.status, "archived");
+    assert.equal(after.resolution?.evidence.previousFingerprint, f.fingerprint);
+    assert.equal(after.lastSeen.runId, f.lastSeen.runId, "last seen stays the last run that saw the overlap");
+    // No lease / TTL / retire / promote / proposal side effects: only the scheduler's own audit row.
+    assert.deepEqual(await snapLifecycle(), before);
+    assert.deepEqual(await auditSince(mark), [{ action: "scheduler_finding_resolved", actor: "scheduler" }]);
+  });
+
+  it("resolves when the KPIs diverge (no_overlap) and when the verdict changes (verdict_changed), with the evidence", async () => {
+    const f = await openFinding();
+    await withAst1Kpis(["KPI-001"], async () => {
+      const r = await periodic();
+      const res = r.summary!.reassessment!.results[0];
+      assert.deepEqual([res.outcome, res.resolution?.reason], ["resolved", "no_overlap"]);
+      assert.deepEqual(res.resolution?.evidence.assets.find((a) => a.assetId === "AST-1")?.kpiIds, ["KPI-001"]);
+      assert.equal(res.resolution?.evidence.verdict, null);
+    });
+
+    await resetLifecycle(db, 0);
+    const g = await openFinding();
+    assert.notEqual(g.findingId, f.findingId);
+    await withAst1Kpis(["KPI-004", "KPI-005"], async () => {
+      const r = await periodic();
+      const res = r.summary!.reassessment!.results[0];
+      assert.deepEqual([res.outcome, res.resolution?.reason, res.resolution?.evidence.verdict], ["resolved", "verdict_changed", "partial"]);
+      assert.match(res.reason, /partial/);
+      const stored = (await getFinding(db, g.findingId))!;
+      assert.deepEqual([stored.status, stored.resolution?.reason], ["resolved", "verdict_changed"]);
+      assert.match(stored.resolution!.evidence.suggestionReason!, /lacks KPI-005/);
+    });
+  });
+
+  it("a side that cannot be compared is indeterminate and left as it was", async () => {
+    const f = await openFinding();
+    await withAst1Kpis([], async () => {
+      const r = await periodic();
+      assert.equal(r.summary!.reassessment!.counts.indeterminate, 1);
+      const after = (await getFinding(db, f.findingId))!;
+      assert.deepEqual([after.status, after.observations, after.lastSeen.runId], ["open", 1, f.lastSeen.runId]);
+    });
+  });
+
+  it("repeated runs are idempotent: the second run changes nothing material and writes no audit rows", async () => {
+    await openFinding();
+    await archiveAst1();
+    await periodic();
+    const snap = async () => (await listFindings(db, { status: "any" })).findings.map((x) => ({ ...x, lastSeen: null, observations: null }));
+    const before = await snap();
+    const mark = await maxAuditId();
+    const again = await periodic();
+    assert.equal(again.status, "succeeded");
+    assert.deepEqual(again.summary!.reassessment!.scope, { open: 0, dismissed: 0 }, "a resolved finding is not reassessed");
+    assert.deepEqual(await snap(), before);
+    assert.deepEqual(await auditSince(mark), []);
+    assert.equal(again.window.fromAuditId, (await listRuns(db, { jobId: "periodic_reassessment", limit: 2 }))[1].window.toAuditId);
+
+    // Open + unchanged: a second run only moves last seen / count.
+    await resetLifecycle(db, 0);
+    const f = await openFinding();
+    await periodic();
+    const m2 = await maxAuditId();
+    const third = await periodic();
+    assert.equal(third.summary!.reassessment!.counts.unchanged, 1);
+    const g = (await getFinding(db, f.findingId))!;
+    assert.deepEqual([g.status, g.fingerprint, g.evidence], ["open", f.fingerprint, f.evidence]);
+    assert.deepEqual(await auditSince(m2), []);
+  });
+});
+
+describe("dismissed findings", () => {
+  it("same evidence => stays dismissed (suppressed), no audit", async () => {
+    const f = await openFinding();
+    await dismissFinding(db, { findingId: f.findingId, actor: "manager", reason: "Known overlap." });
+    const mark = await maxAuditId();
+    const r = await periodic();
+    assert.equal(r.summary!.reassessment!.counts.suppressed, 1);
+    const after = (await getFinding(db, f.findingId))!;
+    assert.deepEqual([after.status, after.dismissal?.reason, after.observations], ["dismissed", "Known overlap.", 2]);
+    assert.deepEqual(await auditSince(mark), []);
+  });
+
+  it("changed evidence => reopened (audited)", async () => {
+    const f = await openFinding();
+    await dismissFinding(db, { findingId: f.findingId, actor: "manager", reason: "Temporary one-off." });
+    await recordUsage(db, { assetId: INSIGHT, userId: "OWN-R" }, DAY); // promoted to Personal
+    const mark = await maxAuditId();
+    const r = await periodic();
+    assert.equal(r.summary!.reassessment!.counts.reopened, 1);
+    const after = (await getFinding(db, f.findingId))!;
+    assert.deepEqual([after.status, after.dismissal], ["open", null]);
+    assert.deepEqual((await auditSince(mark)).map((a) => a.action), ["scheduler_finding_reopened"]);
+  });
+
+  it("overlap gone => resolved, keeping the dismissal; overlap back on the dismissed evidence => dismissed again (audited)", async () => {
+    const f = await openFinding();
+    await dismissFinding(db, { findingId: f.findingId, actor: "manager", reason: "Known overlap." });
+    await archiveAst1();
+    const r = await periodic();
+    assert.equal(r.summary!.reassessment!.results[0].fromStatus, "dismissed");
+    const resolved = (await getFinding(db, f.findingId))!;
+    assert.deepEqual([resolved.status, resolved.resolution?.fromStatus, resolved.dismissal?.reason], ["resolved", "dismissed", "Known overlap."]);
+
+    await restore(db, { assetId: "AST-1", actor: "OWN-1" }, DAY); // a watched change: the incremental run sees the overlap again
+    const mark = await maxAuditId();
+    const inc = await runIncremental(db, { actor: "manager" });
+    assert.equal(inc.summary!.findings.suppressed, 1);
+    const back = (await getFinding(db, f.findingId))!;
+    assert.deepEqual([back.status, back.resolution, back.dismissal?.reason], ["dismissed", null, "Known overlap."]);
+    assert.deepEqual((await auditSince(mark)).map((a) => a.action), ["scheduler_finding_recurred"]);
+  });
+
+  it("a resolved open finding reopens (audited) when an incremental run sees the overlap again", async () => {
+    const f = await openFinding();
+    await archiveAst1();
+    await periodic();
+    await restore(db, { assetId: "AST-1", actor: "OWN-1" }, DAY);
+    const mark = await maxAuditId();
+    const inc = await runIncremental(db, { actor: "manager" });
+    assert.equal(inc.summary!.findings.reopened, 1);
+    const back = (await getFinding(db, f.findingId))!;
+    assert.deepEqual([back.status, back.resolution, back.dismissal], ["open", null, null]);
+    assert.deepEqual((await auditSince(mark)).map((a) => a.action), ["scheduler_finding_reopened"]);
+    assert.equal((await listFindings(db)).total, 1, "same row, no duplicate");
+  });
+});
+
+describe("stale proposal evidence (read-only)", () => {
+  it("reports pending proposals on changed findings without touching proposals or decisions", async () => {
+    const f = await openFinding();
+    const merge = await proposeMerge(db, { sourceId: "AST-1", targetId: INSIGHT }, DAY);
+    const retire = await proposeRetire(db, { assetId: INSIGHT, reason: "Fixture: pending retire." }, DAY);
+    const before = await snapLifecycle();
+    const pending = await listPendingProposals(db);
+    await withAst1Kpis(["KPI-004", "KPI-005"], async () => {
+      const r = await periodic();
+      const stale = r.summary!.reassessment!.staleProposals;
+      const byId = Object.fromEntries(stale.map((s) => [s.proposalId, s]));
+      assert.deepEqual([byId[merge.id]?.relation, byId[merge.id]?.findingOutcome, byId[merge.id]?.findingId], ["same_pair", "resolved", f.findingId]);
+      assert.deepEqual([byId[retire.id]?.relation, byId[retire.id]?.type], ["shares_asset", "retire"]);
+    });
+    assert.deepEqual(await snapLifecycle(), before, "proposals and decisions untouched");
+    assert.deepEqual(await listPendingProposals(db), pending);
+  });
+
+  it("an unchanged finding reports no stale proposal", async () => {
+    await openFinding();
+    await proposeRetire(db, { assetId: "AST-1", reason: "Fixture: pending retire." }, DAY);
+    const r = await periodic();
+    assert.deepEqual(r.summary!.reassessment!.staleProposals, []);
+  });
+});
+
+describe("failure and concurrency", () => {
+  it("a failure mid-commit rolls back every finding change; the run is failed; a retry succeeds", async () => {
+    const f = await openFinding();
+    await archiveAst1();
+    await ensureScheduler(db);
+    // Fires after the finding UPDATE inside the commit transaction.
+    await db.execute(`CREATE TRIGGER test_fail_resolve_audit BEFORE INSERT ON audit_log WHEN NEW.action = 'scheduler_finding_resolved'
+                      BEGIN SELECT RAISE(ABORT, 'injected: resolve audit failed'); END`);
+    let failed;
+    try {
+      failed = await periodic();
+    } finally {
+      await db.execute(`DROP TRIGGER IF EXISTS test_fail_resolve_audit`);
+    }
+    assert.deepEqual([failed.status, failed.error?.code, failed.error?.stage, failed.summary], ["failed", "commit_failed", "commit", null]);
+    assert.match(failed.error!.message, /injected/);
+    const still = (await getFinding(db, f.findingId))!;
+    assert.deepEqual([still.status, still.resolution], ["open", null]);
+    assert.equal((await db.execute(`SELECT COUNT(*) AS n FROM audit_log WHERE action = 'scheduler_finding_resolved'`)).rows[0].n, 0);
+    const retry = await periodic();
+    assert.deepEqual([retry.status, retry.summary!.reassessment!.counts.resolved], ["succeeded", 1]);
+    assert.equal(retry.window.fromAuditId, 0, "the failed run is not a previous success");
+  });
+
+  it("an evaluation failure is recorded and changes nothing", async () => {
+    const f = await openFinding();
+    const r = await periodic(async () => {
+      throw new Error("estate read failed");
+    });
+    assert.deepEqual([r.status, r.error?.code], ["failed", "evaluation_failed"]);
+    assert.deepEqual(await getFinding(db, f.findingId), f);
+  });
+
+  it("one running run per job: a held periodic run blocks periodic, not incremental", async () => {
+    await buildInsight();
+    const held = await claimRun(db, { jobId: "periodic_reassessment", mode: "reassessment", trigger: "manual", actor: "manager", rules: PERIODIC_JOB.rules });
+    await assert.rejects(periodic(), (e: unknown) => e instanceof SchedulerError && e.code === "conflict" && e.detail?.runningRunId === held.runId);
+    const inc = await runIncremental(db, { actor: "manager" });
+    assert.equal(inc.status, "succeeded");
+    assert.deepEqual(await countRuns(db, "periodic_reassessment"), { running: 1, succeeded: 0, failed: 0, total: 1 });
+  });
+
+  it("a finding changed between evaluation and commit is skipped, not overwritten", async () => {
+    const f = await openFinding();
+    await archiveAst1();
+    const r = await runReassessment(db, {
+      actor: "manager",
+      beforeCommit: async () => void (await dismissFinding(db, { findingId: f.findingId, actor: "manager", reason: "Dismissed meanwhile." })),
+    });
+    assert.equal(r.summary!.reassessment!.counts.skipped, 1);
+    const after = (await getFinding(db, f.findingId))!;
+    assert.deepEqual([after.status, after.resolution, after.dismissal?.reason], ["dismissed", null, "Dismissed meanwhile."]);
+  });
+});
+
+describe("schema migration from B1", () => {
+  it("rebuilds a B1 findings table (old status CHECK) keeping its rows; then resolved is accepted", async () => {
+    await ensureScheduler(db);
+    await db.execute(`DROP TABLE scheduler_findings`);
+    await db.execute(B1_FINDINGS_DDL);
+    await db.execute(`INSERT INTO scheduler_findings (finding_id, dedup_key, rule_id, rule_version, asset_ids, status, evidence, fingerprint,
+                        first_seen_at, first_seen_sim_date, first_run_id, last_seen_at, last_seen_sim_date, last_run_id, observations,
+                        dismissed_by, dismissed_reason, dismissed_at, dismissed_sim_date, dismissed_fingerprint, proposal_id)
+                      VALUES ('FND-old', 'active_overlap:A|B', 'active_overlap', 'overlap-v2', '["A","B"]', 'dismissed', '{}', 'fp',
+                        't', '2026-11-01', 'SCH-1', 't', '2026-11-01', 'SCH-1', 3, 'manager', 'why', 't', '2026-11-01', 'fp', 'PRP-1')`);
+    await assert.rejects(db.execute(`UPDATE scheduler_findings SET status = 'resolved'`), /CHECK constraint/);
+
+    await ensureScheduler(db);
+    const sql = (await db.execute(`SELECT sql FROM sqlite_master WHERE name = 'scheduler_findings'`)).rows[0].sql as string;
+    assert.match(sql, /'resolved', 'superseded'/);
+    assert.match(sql, /resolution TEXT/);
+    const f = (await getFinding(db, "FND-old"))!;
+    assert.deepEqual([f.status, f.observations, f.dismissal?.reason, f.proposalId, f.resolution], ["dismissed", 3, "why", "PRP-1", null]);
+    await db.execute(`UPDATE scheduler_findings SET status = 'resolved' WHERE finding_id = 'FND-old'`);
+    await assert.rejects(db.execute(`UPDATE scheduler_findings SET status = 'bogus'`), /CHECK constraint/);
+    assert.equal((await db.execute(`SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'scheduler_findings_b2'`)).rows[0].n, 0);
+    // Idempotent: nothing to do on the next call.
+    await ensureScheduler(db);
+    assert.equal((await getFinding(db, "FND-old"))?.status, "resolved");
+  });
+});
+
+describe("jobs, overview, due check and reset", () => {
+  it("job IDs are validated (route contract): default incremental, unknown rejected", async () => {
+    assert.equal(parseJobId(undefined), "incremental_overlap");
+    assert.equal(parseJobId(""), "incremental_overlap");
+    assert.equal(parseJobId("periodic_reassessment"), "periodic_reassessment");
+    assert.equal(parseJobFilter(null), undefined, "GET: no filter");
+    assert.equal(parseJobFilter("periodic_reassessment"), "periodic_reassessment");
+    for (const bad of ["nope", 7, {}]) {
+      assert.throws(() => parseJobId(bad), (e: unknown) => e instanceof SchedulerError && e.code === "invalid");
+      assert.throws(() => parseJobFilter(bad), (e: unknown) => e instanceof SchedulerError && e.code === "invalid");
+    }
+    const r = await runJob(db, { jobId: "periodic_reassessment", actor: "manager" });
+    assert.equal(r.jobId, "periodic_reassessment");
+    assert.deepEqual((await listRuns(db, { jobId: "periodic_reassessment" })).map((x) => x.runId), [r.runId]);
+    assert.deepEqual(await listRuns(db, { jobId: "incremental_overlap" }), []);
+  });
+
+  it("overview lists both jobs; the periodic one has no checkpoint; finding counts include resolved", async () => {
+    await openFinding();
+    await archiveAst1();
+    const r = await periodic();
+    const o = await schedulerOverview(db);
+    assert.deepEqual(o.jobs.map((j) => j.job.jobId), ["incremental_overlap", "periodic_reassessment"]);
+    const p = o.jobs[1];
+    assert.deepEqual([p.checkpoint, p.pendingAuditRows, p.runs.succeeded, p.latestRun?.runId, p.running], [null, 0, 1, r.runId, null]);
+    assert.ok(o.jobs[0].checkpoint);
+    assert.deepEqual(o.findings, { open: 0, dismissed: 0, resolved: 1, superseded: 0 });
+    assert.deepEqual((await listFindings(db, { status: "resolved" })).total, 1);
+  });
+
+  it("reassessmentDue is pure, depends only on observable state, and has no cadence", async () => {
+    const base = { simDate: "2026-11-05", lastSucceededSimDate: "2026-11-04", reassessableFindings: 2, running: false };
+    assert.equal(reassessmentDue(base).due, true);
+    assert.equal(reassessmentDue({ ...base, lastSucceededSimDate: null }).due, true);
+    assert.equal(reassessmentDue({ ...base, lastSucceededSimDate: "2026-11-05" }).due, false);
+    assert.equal(reassessmentDue({ ...base, reassessableFindings: 0 }).due, false);
+    assert.equal(reassessmentDue({ ...base, running: true }).due, false);
+
+    await openFinding();
+    assert.equal(reassessmentDue(await readReassessmentDueState(db)).due, true);
+    await periodic();
+    const s = await readReassessmentDueState(db);
+    assert.deepEqual([s.lastSucceededSimDate, reassessmentDue(s).due], [s.simDate, false]);
+    await db.execute(`UPDATE app_clock SET sim_date = '2026-11-02'`); // the stored date moved (test setup; the scheduler never ticks)
+    assert.equal(reassessmentDue(await readReassessmentDueState(db)).due, true);
+  });
+
+  it("demo reset drops periodic runs and resolved findings with everything else", async () => {
+    await openFinding();
+    await archiveAst1();
+    await periodic();
+    await resetLifecycle(db, 0);
+    const tables = await db.execute(`SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'scheduler_%'`);
+    assert.deepEqual(tables.rows, [], `reset drops ${SCHEDULER_TABLES.join(", ")}`);
+    const o = await schedulerOverview(db);
+    assert.deepEqual(o.jobs.map((j) => j.runs.total), [0, 0]);
+    assert.deepEqual(o.findings, { open: 0, dismissed: 0, resolved: 0, superseded: 0 });
+    const r = await periodic();
+    assert.deepEqual([r.window.fromAuditId, r.summary!.reassessment!.scope], [0, { open: 0, dismissed: 0 }]);
+  });
+});

@@ -7,7 +7,12 @@
 //   upper bound (MAX(audit_log.id)) and inserts the running row. Because it is
 //   a write transaction, no other writer is mid-flight, so no audit row with a
 //   lower ID can appear after the bound is read. A partial unique index allows
-//   one running run per job; a second claim is refused (conflict).
+//   one running run per job; a second claim is refused (conflict). Jobs
+//   are independent: an incremental run and a periodic run may overlap.
+// - Jobs without a checkpoint (periodic reassessment) read no audit rows.
+//   Their window is a reference: from the previous succeeded run's upper
+//   bound of the same job (0 if none) to MAX(audit_log.id) at claim, and
+//   commitRun moves no checkpoint for them.
 // - commitRun: one write transaction marks the run succeeded only if it is
 //   still running, advances the checkpoint only if it still equals the run's
 //   window start (compare-and-set), and writes findings via `apply`. Any
@@ -66,6 +71,10 @@ async function runningRun(db: Client | Transaction, jobId: JobId): Promise<Sched
   return r.rows[0] ? toRun(r.rows[0] as Row) : null;
 }
 
+/** Jobs that read the audit log from a committed checkpoint. */
+const CHECKPOINT_JOBS: readonly JobId[] = ["incremental_overlap"];
+export const usesCheckpoint = (jobId: JobId) => CHECKPOINT_JOBS.includes(jobId);
+
 export type ClaimInput = { jobId: JobId; mode: SchedulerMode; trigger: TriggerSource; actor: string; rules: RuleRef[] };
 
 /** Starts a run, or refuses with `conflict` while another run of the job is running. */
@@ -80,10 +89,17 @@ export async function claimRun(db: Client, input: ClaimInput, nowIso = new Date(
         throw new SchedulerError(`Run ${running.runId} is still running`, "conflict", { runningRunId: running.runId });
       }
       const clock = await readClock(tx);
-      const cp = await tx.execute({ sql: `SELECT last_audit_id FROM scheduler_checkpoints WHERE job_id = ?`, args: [input.jobId] });
+      const checkpointed = usesCheckpoint(input.jobId);
+      const cp = checkpointed
+        ? await tx.execute({ sql: `SELECT last_audit_id FROM scheduler_checkpoints WHERE job_id = ?`, args: [input.jobId] })
+        : await tx.execute({
+            sql: `SELECT to_audit_id AS last_audit_id FROM scheduler_runs WHERE job_id = ? AND status = 'succeeded'
+                  ORDER BY started_at DESC, rowid DESC LIMIT 1`,
+            args: [input.jobId],
+          });
       let from = 0;
       if (cp.rows[0]) from = Number(cp.rows[0].last_audit_id);
-      else {
+      else if (checkpointed) {
         // First run since the scheduler tables were created (or since a reset): start at the beginning of this audit log.
         await tx.execute({
           sql: `INSERT INTO scheduler_checkpoints (job_id, last_audit_id, run_id, updated_at) VALUES (?, 0, NULL, ?)`,
@@ -118,7 +134,7 @@ export async function claimRun(db: Client, input: ClaimInput, nowIso = new Date(
 
 /**
  * Commits a run's results atomically: findings (via `apply`), the run as
- * succeeded and the checkpoint moved to the window's end. Refuses (and
+ * succeeded and (checkpoint jobs only) the checkpoint moved to the window's end. Refuses (and
  * changes nothing) if the run is no longer running or the checkpoint moved.
  */
 export async function commitRun(
@@ -136,6 +152,7 @@ export async function commitRun(
     if (done.rowsAffected !== 1) {
       throw new SchedulerError(`Run ${run.runId} is no longer running (abandoned, already finished or reset)`, "conflict");
     }
+    if (!usesCheckpoint(run.jobId)) return;
     const cp = await tx.execute({
       sql: `UPDATE scheduler_checkpoints SET last_audit_id = ?, run_id = ?, updated_at = ? WHERE job_id = ? AND last_audit_id = ?`,
       args: [run.window.toAuditId, run.runId, nowIso, run.jobId, run.window.fromAuditId],
