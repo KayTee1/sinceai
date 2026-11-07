@@ -5,11 +5,15 @@
   `get-build-status`) reports proposal status, decision, built insight and
   lifecycle separately (approved can be archived). `proposeBuild` returns
   `already_built` for an approved build of the same request + scope and stores
-  nothing; the check runs inside the write transaction, queued per client.
+  nothing; the match includes the request's source sheet (F5 evidence), so a
+  workbook and a team request sharing an ID are separate. A missing lifecycle
+  table gives `store: "incomplete"`, `found: null` (never "nothing exists").
+  The check runs inside the write transaction, queued per client. Merged with
+  master after #31 (inbox tool, reuse confirmation, chat cards).
   `analyzeRequest` no longer says "nothing has been built". **Open policy:**
   rebuild after TTL expiry is refused (restore is the path) until agreed.
   **Known risk:** concurrent writers from different code paths can still hit
-  SQLITE_BUSY (no busy timeout). Awaits independent Codex review.
+  SQLITE_BUSY (no busy timeout). Codex blockers fixed; ready for PR.
 - **New direction (D24, both developers; not implemented):** after T16B and
   the current golden path, plan T19's additional team-authored, LLM-generated
   synthetic estate scenarios (KPI forks, duplicate/overlapping assets, stale
@@ -37,8 +41,23 @@
   (#21), the F1 demo request / D18 (#22), T18 data separation / D19 + D20
   (#23), D21 auto-renew (#24), T16 / T16A steward tool adapters (#18),
   D22 team catalog dashboards (#25), D23 telemetry window (#27), T19 docs
-  (#26) and T16B live orchestrator (#28). Open: the F5 build provenance fix
-  (PR #29).
+  (#26), T16B live orchestrator (#28) and F5 build provenance (#29). Open:
+  T21 (`feat/T21-chat-assistant`, PR #31, Viet / Claude).
+- **T21 chat assistant (`feat/T21-chat-assistant`):** colleague tone in the
+  prompt (verdict first, no process narration, cards carry the detail).
+  Chat collapses tool steps into one line and renders cards
+  (`src/components/agentic/chat-cards.tsx`): reuse (Use this / Not right),
+  KPI conflicts, build (Submit build proposal sends the exact T16B command),
+  and inbox proposals, which reuse the side inbox's `ProposalCard`
+  (Approve / Reject = human click on the decision API). New read-only tool
+  `listPendingProposals` (`src/mastra/tools/inbox-tools.ts`); the model has
+  no decide tool. "Use this" calls `POST /api/reuse` → `confirmReuse`
+  (`src/services/build/reuse.ts`): re-runs the analysis, requires
+  reuse_candidates and a listed asset, logs an app use for the D12 mapped
+  requester and a `reuse_confirmed` audit row. Verified on the pack:
+  REQ-0026 → AST-0335 logged; wrong asset / build request refused.
+  The inbox card shows only the rationale for an unknown proposal type
+  (e.g. a T20 `merge` left in a local DB) instead of crashing.
 - **T16B (merged #28):** Codex reviewed `be5e560` (CHANGES
   REQUIRED; report in `docs/agent/REVIEW.md`). P1 F2/F3 are fixed in
   `4e10510` and **verified fixed by Codex**:
@@ -158,11 +177,10 @@
   provisional until Viet agrees.
 - **Needs:** `ANTHROPIC_API_KEY` in `.env.local` for any live chat run (none
   done for T16 or T16B).
-- **Next:** Viet re-reviews F5 (PR #29) after the master merge, which
-  carries the T16B follow-up (provenance assertion, `BUILD_SOURCE_DEFECT`
-  removed, stored provenance in the build-proposal view). T16B is merged;
-  live Sonnet / browser verification of it is still outstanding. Then fix
-  the discovery issue above with Viet. T19 (D24) planning comes after the
+- **Next:** KayTee reviews T21 (PR #31; core AI pipeline). A scripted live
+  Sonnet check of the T21 prompt (REQ-0026 reuse, TEAM-REQ-01 build, "What's
+  waiting for approval?") is still outstanding. Then fix the discovery issue
+  above with Viet. T19 (D24) planning comes after the
   golden path.
 - **MVP limit:** chat history is client-supplied, not authenticated server
   state; the latest user message is trusted as typed by the person at the

@@ -261,13 +261,42 @@ describe("getBuildStatus", () => {
     assert.match(s.notes[0], /is a retire proposal, not a build proposal/);
   });
 
-  it("reports an uninitialised lifecycle store instead of failing", async () => {
+  it("reports a genuinely empty, complete store as verified absence", async () => {
+    const s = await status("request", REQ);
+    assert.deepEqual([s.store, s.missingTables, s.found, s.storedProposals], ["complete", [], false, []]);
+    assert.match(s.notes.join(" "), /No build proposal has been stored for TEAM-REQ-01/);
+  });
+
+  it("does not claim absence when a lifecycle table is missing, and keeps stored proposals", async () => {
+    await approved();
     await db.execute(`DROP TABLE insights`);
     const s = await status("request", REQ);
-    assert.equal(s.found, false);
-    assert.match(s.notes[0], /not initialised/);
+    assert.deepEqual([s.store, s.missingTables, s.found, s.builds], ["incomplete", ["insights"], null, []]);
+    assert.doesNotMatch(s.notes.join(" "), /not initialised|No build proposal has been stored|so no proposal/i);
+    assert.match(s.notes[0], /cannot be verified: the lifecycle store is incomplete \(missing insights\)/);
+    assert.match(s.notes[0], /does not show that no proposal or insight exists/);
+    // The proposals table is intact: its row is reported with its stored status only.
+    assert.deepEqual(
+      s.storedProposals.map((p) => [p.id, p.status, p.requestSourceSheet, p.insightId]),
+      [[PRP, "approved", TEAM_REQUEST_SHEET, INS]],
+    );
+    assert.match(s.notes[1], /PRP-INS-TEAM-REQ-01-1 \(approved\); its decision, build and lifecycle state cannot be read/);
+    const v = buildStatusView(s);
+    assert.deepEqual([v.store, v.found, v.builds], ["incomplete", null, []]);
     // Nothing was recreated by the lookup.
     const t = await db.execute(`SELECT 1 FROM sqlite_master WHERE name = 'insights'`);
+    assert.equal(t.rows.length, 0);
+  });
+
+  it("does not claim absence when the proposals table itself is missing", async () => {
+    await db.execute(`DROP TABLE proposals`);
+    for (const [by, id] of [["request", REQ], ["proposal", PRP], ["insight", INS]] as const) {
+      const s = await status(by, id);
+      assert.deepEqual([s.store, s.found, s.builds, s.storedProposals], ["incomplete", null, [], []]);
+      assert.deepEqual(s.missingTables, ["proposals"]);
+      assert.match(s.notes[0], /cannot be verified/);
+    }
+    const t = await db.execute(`SELECT 1 FROM sqlite_master WHERE name = 'proposals'`);
     assert.equal(t.rows.length, 0);
   });
 
@@ -284,7 +313,7 @@ describe("getBuildStatus", () => {
 });
 
 function buildFactsOf(b: BuildStatus["builds"][number]) {
-  return buildStatusView({ query: { by: "proposal", id: b.proposal.id }, found: true, requestId: null, builds: [b], summary: {} as BuildStatus["summary"], clockDate: null, notes: [] }).builds[0].facts;
+  return buildStatusView({ query: { by: "proposal", id: b.proposal.id }, store: "complete", missingTables: [], found: true, requestId: null, builds: [b], storedProposals: [], summary: {} as BuildStatus["summary"], clockDate: null, notes: [] }).builds[0].facts;
 }
 
 describe("proposeBuild duplicate protection (T21)", () => {
@@ -389,6 +418,51 @@ describe("proposeBuild duplicate protection (T21)", () => {
     await decideBuild(db, { proposalId: PRP, actor: "OWN-NL", action: "approve" }, DAY);
     // An approved proposal cannot be decided again.
     await assert.rejects(decideBuild(db, { proposalId: PRP, actor: "OWN-NL", action: "approve" }, DAY), /already approved/);
+  });
+
+  it("does not conflate a workbook and a team request that share an ID and scope", async () => {
+    // Team-authored TEAM-REQ-01 is approved and built.
+    await approved();
+    // A workbook row with the same ID and scope appears in Business_Requests
+    // (loadRequest prefers the pack row, so the analysis now cites that sheet).
+    const team = { date: "2026-11-01", product: "Xarelto", market: "North America" };
+    const text = "Net sales and forecast variance for Xarelto in North America, by country.";
+    await db.execute({
+      sql: `INSERT INTO Business_Requests (request_id, request_date, product_context, market_context, request_text, urgency, status, _source_row)
+            VALUES (?, ?, ?, ?, ?, 'normal', 'new', 999)`,
+      args: [REQ, team.date, team.product, team.market, text],
+    });
+    try {
+      // The team build is not returned for the workbook request: a new proposal is stored.
+      const pack = await proposeBuild(db, { requestId: REQ }, DAY);
+      assert.equal(pack.status, "proposed");
+      if (pack.status !== "proposed") return;
+      assert.equal(pack.proposal.id, "PRP-INS-TEAM-REQ-01-2");
+      assert.deepEqual((pack.proposal.evidence as BuildEvidence).source[0], { sheet: "Business_Requests", ids: [REQ] });
+      // Repeating the workbook request finds its own pending proposal, not the approved team build.
+      const packAgain = await proposeBuild(db, { requestId: REQ }, DAY);
+      assert.equal(packAgain.status, "already_proposed");
+      if (packAgain.status === "already_proposed") assert.equal(packAgain.proposal.id, "PRP-INS-TEAM-REQ-01-2");
+      // Status by request lists both, each with its own source, and says they are different requests.
+      const s = await status("request", REQ);
+      assert.deepEqual(
+        s.builds.map((b) => [b.proposal.id, b.proposal.status, b.proposal.requestSourceSheet]),
+        [
+          [PRP, "approved", TEAM_REQUEST_SHEET],
+          ["PRP-INS-TEAM-REQ-01-2", "open", "Business_Requests"],
+        ],
+      );
+      assert.match(s.notes.join(" "), /different request sources .*they are different requests/);
+    } finally {
+      await db.execute({ sql: `DELETE FROM Business_Requests WHERE request_id = ? AND _source_row = 999`, args: [REQ] });
+    }
+    // The team request again returns its own approved build, not the pending workbook proposal.
+    const teamAgain = await proposeBuild(db, { requestId: REQ }, DAY);
+    assert.equal(teamAgain.status, "already_built");
+    if (teamAgain.status === "already_built") {
+      assert.equal(teamAgain.proposal.id, PRP);
+      assert.equal(teamAgain.build.proposal.requestSourceSheet, TEAM_REQUEST_SHEET);
+    }
   });
 
   it("already_built keeps F5 provenance in the service result and the chat view", async () => {

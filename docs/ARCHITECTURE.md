@@ -223,7 +223,7 @@ LIKE-based KPI check conflated Net Sales with Net Sales Growth.
 | Tool (id / key) | Input | Calls | Output (model and UI) |
 | --- | --- | --- | --- |
 | `propose-build` / `proposeBuild` | `requestId`, optional `answer {product, market}` | `proposeBuild` (T17) at the lifecycle clock date (`ensureLifecycle` + `tick`, as `POST /api/builds`) | `build-proposal/v1`: `proposed` / `already_proposed` / `already_built` (proposal ID, insight ID, scope, KPIs, gaps, requester, approvers, request source label, `knownIssues`; `already_built` adds `build`, the stored status record), `not_proposed` (recommendation, rationale), or `intent_required` (`reason`: `no_command` / `request_mismatch` / `scope_mismatch`, message with the accepted syntax) |
-| `get-build-status` / `getBuildStatus` | `by` (`request` / `proposal` / `insight`), `id` | `getBuildStatus` (T21), read-only, no tick | `build-status/v1`: `found`, every matching build proposal (oldest first) with status, recorded decision (action, actor, date, reason), insight (built?, name, scope, request, proposal, owner, built on/by, KPI IDs with computed/total markets, no values), lifecycle (status, tier, TTL/lease end, previous tier, last lifecycle event), `facts` lines, `summary` counts, stored `clockDate`, `notes`, `whereToFind` |
+| `get-build-status` / `getBuildStatus` | `by` (`request` / `proposal` / `insight`), `id` | `getBuildStatus` (T21), read-only, no tick | `build-status/v1`: `store` (`complete` / `incomplete`) and `missingTables`; `found` (null when the store is incomplete: absence is not verified, and `storedProposals` lists the proposals-table rows that can still be read); every matching build proposal (oldest first) with status, recorded decision (action, actor, date, reason), insight (built?, name, scope, request, proposal, owner, built on/by, KPI IDs with computed/total markets, no values), lifecycle (status, tier, TTL/lease end, previous tier, last lifecycle event), `facts` lines, `summary` counts, stored `clockDate`, `notes`, `whereToFind` |
 
 Governance of `propose-build`:
 
@@ -278,7 +278,8 @@ Build status and duplicates (T21):
   questions to `getBuildStatus` and has the agent check it before offering a
   submission.
 - `proposeBuild` checks for a pending or approved `build_temporary` proposal
-  with the same request ID, product and market inside its write transaction
+  with the same request ID, request source sheet (the stored F5 `source`
+  entry, never the ID prefix), product and market inside its write transaction
   (queued per client). Pending → `already_proposed`; approved, whatever the
   insight's lifecycle state → `already_built`. Nothing is stored either way.
   A rejection still allows a new proposal (`INS-<request>-<n+1>`). Different

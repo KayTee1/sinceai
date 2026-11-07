@@ -61,7 +61,7 @@ export function Inbox() {
   );
 }
 
-function ProposalCard({ p }: { p: PendingProposal }) {
+export function ProposalCard({ p }: { p: PendingProposal }) {
   const { data, post, busy } = useLifecycle();
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
@@ -137,6 +137,9 @@ function ProposalCard({ p }: { p: PendingProposal }) {
             </dd>
           </dl>
         </div>
+      ) : "kind" in ev && (ev.kind as string) !== "team_use" ? (
+        // A proposal type this app does not know (e.g. one written by another branch's code): show its rationale only.
+        <p className="mt-2 text-ink-2">{p.rationale}</p>
       ) : "kind" in ev ? (
         <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-0.5 text-ink-2">
           <dt className="text-ink-3">Used by ({ev.region})</dt>

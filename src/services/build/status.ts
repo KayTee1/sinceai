@@ -61,13 +61,37 @@ export type BuildRecord = {
   };
 };
 
+/** Proposal facts read from the proposals table alone, when the rest of the store cannot be read. */
+export type StoredProposal = {
+  id: string;
+  version: number;
+  status: ProposalStatus;
+  requestId: string;
+  requestSourceSheet: string | null;
+  scope: { product: string; market: string };
+  insightId: string;
+  createdOn: string;
+};
+
 export type BuildStatus = {
   query: BuildStatusQuery;
-  found: boolean;
+  /**
+   * "complete": every lifecycle table exists, so `found` and `builds` are
+   * verified. "incomplete": a required table is missing; absence cannot be
+   * verified, `found` is null and `builds` is empty. Proposals the proposals
+   * table does hold are listed in `storedProposals` (decision, build and
+   * lifecycle state unknown).
+   */
+  store: "complete" | "incomplete";
+  missingTables: string[];
+  /** True/false only when the store is complete; null when it cannot be verified. */
+  found: boolean | null;
   /** The request the matched proposals belong to, when found. */
   requestId: string | null;
   /** Every matching build proposal, oldest first. */
   builds: BuildRecord[];
+  /** Only when the store is incomplete: matching rows of the proposals table, if it exists. */
+  storedProposals: StoredProposal[];
   summary: {
     proposals: number;
     pending: number;
@@ -81,6 +105,9 @@ export type BuildStatus = {
   clockDate: string | null;
   notes: string[];
 };
+
+/** Tables a verified answer reads. */
+const STATUS_TABLES = ["proposals", "decisions", "insights", "asset_state", "audit_log", "app_clock"];
 
 const LIFECYCLE_ACTIONS = ["temporary_registered", "ttl_expired", "retired", "restored", "promoted", "renewed"];
 
@@ -107,6 +134,11 @@ async function tableExists(db: Db, name: string): Promise<boolean> {
 export async function buildRecord(db: Db, proposalId: string): Promise<BuildRecord | null> {
   const r = await db.execute({ sql: `SELECT * FROM proposals WHERE id = ? AND type = 'build_temporary'`, args: [proposalId] });
   return r.rows[0] ? toRecord(db, r.rows[0] as unknown as ProposalRow) : null;
+}
+
+/** Sheet the request was loaded from (F5), from the stored evidence; null when missing. */
+function requestSheetOf(ev: BuildEvidence): string | null {
+  return ev.source?.find((x) => x.ids?.includes(ev.requestId))?.sheet ?? null;
 }
 
 async function toRecord(db: Db, p: ProposalRow): Promise<BuildRecord> {
@@ -138,7 +170,7 @@ async function toRecord(db: Db, p: ProposalRow): Promise<BuildRecord> {
       version: Number(p.version),
       status: p.status,
       requestId: ev.requestId,
-      requestSourceSheet: ev.source?.find((x) => x.ids?.includes(ev.requestId))?.sheet ?? null,
+      requestSourceSheet: requestSheetOf(ev),
       scope: ev.scope,
       kpiIds: ev.kpis.map((k) => k.kpiId),
       requesterId: ev.requesterId,
@@ -199,17 +231,21 @@ async function lookup(db: Db, q: BuildStatusQuery): Promise<BuildStatus> {
   const query = { by: q.by, id: canon(q.id) };
   const empty = (notes: string[], clockDate: string | null = null): BuildStatus => ({
     query,
+    store: "complete",
+    missingTables: [],
     found: false,
     requestId: null,
     builds: [],
+    storedProposals: [],
     summary: summarize([]),
     clockDate,
     notes,
   });
   if (!query.id) return empty(["No identifier was given."]);
-  for (const t of ["proposals", "decisions", "insights", "asset_state", "audit_log", "app_clock"]) {
-    if (!(await tableExists(db, t))) return empty(["The lifecycle store is not initialised, so no proposal or insight exists yet."]);
-  }
+  const missingTables: string[] = [];
+  for (const t of STATUS_TABLES) if (!(await tableExists(db, t))) missingTables.push(t);
+  if (missingTables.length) return incomplete(db, query, missingTables);
+
   const clock = await db.execute(`SELECT sim_date FROM app_clock WHERE id = 1`);
   const clockDate = (clock.rows[0]?.sim_date as string | undefined) ?? null;
 
@@ -259,13 +295,75 @@ async function lookup(db: Db, q: BuildStatusQuery): Promise<BuildStatus> {
     }
     if (b.insight.built && !b.lifecycle.registered) notes.push(`${b.insight.id} is built but has no lifecycle state.`);
   }
+  const sheets = [...new Set(builds.map((b) => b.proposal.requestSourceSheet ?? "unknown"))];
+  if (sheets.length > 1) {
+    notes.push(`The matching proposals come from different request sources (${sheets.join(", ")}); they are different requests.`);
+  }
   return {
     query,
+    store: "complete",
+    missingTables: [],
     found: true,
     requestId: requestIds.length === 1 ? requestIds[0] : null,
     builds,
+    storedProposals: [],
     summary: summarize(builds),
     clockDate,
+    notes,
+  };
+}
+
+/**
+ * A required lifecycle table is missing: report that the status cannot be
+ * verified, never that nothing exists. Read-only: nothing is created. Rows the
+ * proposals table holds are still reported, with their stored status only.
+ */
+async function incomplete(db: Db, query: BuildStatusQuery, missingTables: string[]): Promise<BuildStatus> {
+  const storedProposals: StoredProposal[] = [];
+  if (!missingTables.includes("proposals")) {
+    const where = {
+      request: `json_extract(evidence, '$.requestId') = ?`,
+      proposal: `id = ?`,
+      insight: `json_extract(asset_ids, '$[0]') = ?`,
+    }[query.by];
+    const r = await db.execute({
+      sql: `SELECT * FROM proposals WHERE type = 'build_temporary' AND ${where} ORDER BY created_on, rowid`,
+      args: [query.id],
+    });
+    for (const row of r.rows as unknown as ProposalRow[]) {
+      const ev = JSON.parse(row.evidence) as BuildEvidence;
+      storedProposals.push({
+        id: row.id,
+        version: Number(row.version),
+        status: row.status,
+        requestId: ev.requestId,
+        requestSourceSheet: requestSheetOf(ev),
+        scope: ev.scope,
+        insightId: (JSON.parse(row.asset_ids) as string[])[0],
+        createdOn: row.created_on,
+      });
+    }
+  }
+  const notes = [
+    `Build status for ${query.id} cannot be verified: the lifecycle store is incomplete (missing ${missingTables.join(", ")}). ` +
+      "This does not show that no proposal or insight exists.",
+  ];
+  if (storedProposals.length) {
+    notes.push(
+      `The proposals table lists ${storedProposals.map((p) => `${p.id} (${p.status})`).join(", ")}; ` +
+        "its decision, build and lifecycle state cannot be read.",
+    );
+  }
+  return {
+    query,
+    store: "incomplete",
+    missingTables,
+    found: null,
+    requestId: null,
+    builds: [],
+    storedProposals,
+    summary: summarize([]),
+    clockDate: null,
     notes,
   };
 }

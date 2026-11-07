@@ -82,23 +82,43 @@ async function defaultRequester(db: Db, region: string): Promise<string | null> 
   return (r.rows[0]?.owner_id as string | undefined) ?? null;
 }
 
+/** D12 requester for a scope's market: our labelled team mapping, shared by builds and reuse confirmations. */
+export async function mappedRequester(db: Db, market: string): Promise<string | null> {
+  return defaultRequester(db, await scopeRegion(db, market));
+}
+
 async function ownerRow(db: Db, id: string) {
   const r = await db.execute({ sql: `SELECT owner_id, scope, status FROM Owners WHERE owner_id = ?`, args: [id] });
   return r.rows[0];
 }
 
 /**
- * Pending or approved build proposal for this request and scope, approved
- * first. Rejected proposals do not count: a new proposal may follow a
- * rejection (existing versioning, INS-<request>-<n>).
+ * Pending or approved build proposal for this request, request source and
+ * scope, approved first. Rejected proposals do not count: a new proposal may
+ * follow a rejection (existing versioning, INS-<request>-<n>).
+ *
+ * The request's identity is its ID plus the sheet it was loaded from, as
+ * recorded in the stored F5 evidence (`source` entry naming that sheet and
+ * listing the request ID). A pack request and a team-authored request that
+ * share an ID and scope are different requests; the ID prefix is never used.
  */
-async function existingBuild(db: Db, requestId: string, scope: Scope): Promise<{ id: string; status: ProposalStatus } | null> {
+async function existingBuild(
+  db: Db,
+  requestId: string,
+  requestSheet: string,
+  scope: Scope,
+): Promise<{ id: string; status: ProposalStatus } | null> {
   const r = await db.execute({
     sql: `SELECT id, status FROM proposals WHERE type = 'build_temporary' AND status IN ('open', 'escalated', 'approved')
           AND json_extract(evidence, '$.requestId') = ? AND json_extract(evidence, '$.scope.product') = ?
           AND json_extract(evidence, '$.scope.market') = ?
+          AND EXISTS (
+            SELECT 1 FROM json_each(evidence, '$.source') src
+            WHERE json_extract(src.value, '$.sheet') = ?
+              AND EXISTS (SELECT 1 FROM json_each(src.value, '$.ids') i WHERE i.value = ?)
+          )
           ORDER BY status = 'approved' DESC, created_on DESC, rowid DESC LIMIT 1`,
-    args: [requestId, scope.product, scope.market],
+    args: [requestId, scope.product, scope.market, requestSheet, requestId],
   });
   const row = r.rows[0];
   return row ? { id: row.id as string, status: row.status as ProposalStatus } : null;
@@ -122,7 +142,8 @@ function serialised<T>(db: Client, fn: () => Promise<T>): Promise<T> {
  * Runs the steward analysis and, only when it recommends a build, stores a
  * build_temporary proposal for the requester's team Lead (D13/D14).
  *
- * Duplicates (T21): a pending proposal for the same request and scope returns
+ * Duplicates (T21): a pending proposal for the same request (ID and source
+ * sheet) and scope returns
  * already_proposed; an approved one returns already_built, whatever its
  * insight's lifecycle state. The check, the insight numbering and the insert
  * run in one write transaction (BEGIN IMMEDIATE), queued per client, so
@@ -147,7 +168,7 @@ export async function proposeBuild(
   const { existing, proposalId } = await serialised(db, async () => {
     const tx = await db.transaction("write");
     try {
-      const existing = await existingBuild(tx, requestId, scope);
+      const existing = await existingBuild(tx, requestId, requestSheet, scope);
       const proposalId = existing ? null : await storeProposal(tx, analysis, scope, requestSheet, input.requesterId, date);
       await tx.commit();
       return { existing, proposalId };
