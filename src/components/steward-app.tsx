@@ -5,6 +5,7 @@ import type { DashboardData, Role } from "@/lib/types";
 import { formatDate } from "@/lib/format";
 import { DashboardView } from "./dashboard/dashboard-view";
 import { ChatView } from "./agentic/chat-view";
+import { FindingsView } from "./agentic/findings-view";
 import { LifecycleProvider, useLifecycle } from "./lifecycle/lifecycle-context";
 import { ClockBar } from "./lifecycle/clock-bar";
 import { Inbox } from "./lifecycle/inbox";
@@ -37,8 +38,8 @@ export function StewardApp({ data }: { data: DashboardData }) {
             <DashboardView data={data} role={role} />
           ) : (
             <div className="flex h-full">
-              <div className="min-w-0 flex-1">
-                <ChatView />
+              <div className="flex min-w-0 flex-1 flex-col">
+                <AgenticViews />
               </div>
               <aside className="w-[380px] shrink-0 border-l border-line bg-surface">
                 <Inbox />
@@ -170,5 +171,33 @@ function ViewerPicker() {
         ))}
       </select>
     </label>
+  );
+}
+
+// Agentic tab: chat with the steward, and findings from scheduled jobs (T20).
+function AgenticViews() {
+  const [view, setView] = useState<"chat" | "findings">("chat");
+  return (
+    <>
+      <nav className="flex shrink-0 gap-1 border-b border-line bg-surface px-5 pt-2" aria-label="Agentic views">
+        {[
+          { id: "chat" as const, label: "Chat", note: "ask before you build" },
+          { id: "findings" as const, label: "Scheduled findings", note: "duplicate scan every 10 days" },
+        ].map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setView(t.id)}
+            className={`-mb-px border-b-2 px-3 pb-2 pt-1 text-left ${
+              view === t.id ? "border-blue text-ink" : "border-transparent text-ink-3 hover:text-ink"
+            }`}
+          >
+            <div className="text-sm font-semibold">{t.label}</div>
+            <div className="text-[11px]">{t.note}</div>
+          </button>
+        ))}
+      </nav>
+      <div className="min-h-0 flex-1">{view === "chat" ? <ChatView /> : <FindingsView />}</div>
+    </>
   );
 }

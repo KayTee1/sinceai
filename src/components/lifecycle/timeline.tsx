@@ -27,6 +27,8 @@ const LABEL: Record<string, string> = {
   temporary_registered: "Temporary insight created",
   promoted: "Promoted",
   promotion_proposed: "Proposed for Team",
+  merge_proposed: "Merge proposed",
+  merged: "Merged",
   build_proposed: "Build proposed",
   insight_built: "Insight built",
 };

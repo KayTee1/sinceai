@@ -1,5 +1,10 @@
 # Handoff
 
+- **T20 duplicate scan (`feat/T20-duplicate-scan`, D24):** scheduled job every
+  10 simulated days; findings in Agentic > Scheduled findings (propose merge /
+  dismiss with reason); merge proposals go to owners. **KayTee:** plug the
+  binary fingerprints into `src/services/duplicates/fingerprint.ts` (implement
+  `Fingerprinter`, export as `fingerprinter`); nothing else needs to change.
 - **D23 (`fix/telemetry-window`):** pack telemetry counts only for months in
   the 90 days before a review; after ~Jan 2027 only app views keep a dashboard
   alive. Usage chart shows years and a stale-snapshot note. `lifecycle-v5`.

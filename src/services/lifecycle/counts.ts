@@ -15,13 +15,14 @@ export type PortfolioCounts = {
 };
 
 export type PortfolioChanges = Record<
-  "renewed" | "retired" | "restored" | "escalated" | "expired" | "promoted" | "built" | "rejected",
+  "renewed" | "retired" | "merged" | "restored" | "escalated" | "expired" | "promoted" | "built" | "rejected",
   number
 >;
 
 const CHANGE_ACTIONS: Record<keyof PortfolioChanges, string> = {
   renewed: "renewed",
   retired: "retired",
+  merged: "merged",
   restored: "restored",
   escalated: "review_escalated",
   expired: "ttl_expired",

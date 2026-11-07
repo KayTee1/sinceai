@@ -55,7 +55,17 @@ export type BuildEvidence = {
   source: { sheet: string; ids: string[] }[];
 };
 
-export type ProposalType = "renew" | "retire" | "promote" | "build_temporary";
+/** Merge a duplicate into a surviving dashboard (T20). One proposal per merged-away dashboard. */
+export type MergeEvidence = {
+  kind: "merge";
+  findingId: string;
+  targetId: string;
+  targetName: string;
+  similarity: number;
+  shared: string[];
+};
+
+export type ProposalType = "renew" | "retire" | "promote" | "build_temporary" | "merge";
 export type ProposalStatus = "open" | "escalated" | "approved" | "rejected" | "expired";
 
 export type Proposal = {
@@ -64,7 +74,7 @@ export type Proposal = {
   type: ProposalType;
   assetIds: string[];
   rationale: string;
-  evidence: ReviewEvidence | PromoteEvidence | BuildEvidence;
+  evidence: ReviewEvidence | PromoteEvidence | BuildEvidence | MergeEvidence;
   requiredApprovers: string[];
   status: ProposalStatus;
   createdOn: string;

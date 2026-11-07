@@ -32,13 +32,22 @@ export type BuildEvidence = {
   gaps: string[];
 };
 
+export type MergeEvidence = {
+  kind: "merge";
+  findingId: string;
+  targetId: string;
+  targetName: string;
+  similarity: number;
+  shared: string[];
+};
+
 export type PendingProposal = {
   id: string;
-  type: "renew" | "retire" | "promote" | "build_temporary";
+  type: "renew" | "retire" | "promote" | "build_temporary" | "merge";
   assetIds: string[];
   assetNames: string[];
   rationale: string;
-  evidence: ReviewEvidence | PromoteEvidence | BuildEvidence;
+  evidence: ReviewEvidence | PromoteEvidence | BuildEvidence | MergeEvidence;
   requiredApprovers: string[];
   status: "open" | "escalated";
   createdOn: string;

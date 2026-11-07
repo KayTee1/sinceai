@@ -4,8 +4,8 @@ import type { ParsedSheet } from "../../src/db/import-workbook";
 
 const sheet = (name: string, header: string[], rows: unknown[][]): ParsedSheet => ({ sheet: name, data: [header, ...rows] });
 
-const asset = (id: string, owner: string | null, endorsement: string, lastModified: string) => [
-  id, `Fixture ${id}`, "SM-1", "Alphazol", "DE", owner, "active", endorsement, "Dashboard", "Power BI", "WS-1", lastModified,
+const asset = (id: string, owner: string | null, endorsement: string, lastModified: string, market = "DE") => [
+  id, `Fixture ${id}`, "SM-1", "Alphazol", market, owner, "active", endorsement, "Dashboard", "Power BI", "WS-1", lastModified,
 ];
 
 const usage = (id: string, users: number) =>
@@ -28,14 +28,29 @@ export const LIFECYCLE_SHEETS: ParsedSheet[] = [
     ],
     [
       asset("AST-LOW", "OWN-1", "none", "2026-08-10"), // lease ends 2026-11-08; low usage -> retire
-      asset("AST-HIGH", "OWN-1", "certified", "2026-08-12"), // lease ends 2026-11-10; renew
-      asset("AST-INACT", "OWN-2", "none", "2026-08-10"), // inactive owner
+      asset("AST-HIGH", "OWN-1", "certified", "2026-08-12", "FR"), // lease ends 2026-11-10; renew
+      asset("AST-INACT", "OWN-2", "none", "2026-08-10", "US"), // inactive owner
       asset("AST-DEP", "OWN-1", "promoted", "2026-08-10"), // has downstream dependents
-      asset("AST-NOOWN", null, "none", "2026-08-10"), // missing owner
-      asset("AST-OLD", "OWN-1", "none", "2025-11-15"), // three whole periods -> lease ends 2026-11-10
-      asset("AST-ORPHAN", "OWN-2", "none", "2026-08-10"), // used, but owner inactive -> steward (D21, Rule 8)
+      asset("AST-NOOWN", null, "none", "2026-08-10", "UK"), // missing owner
+      asset("AST-OLD", "OWN-1", "none", "2025-11-15", "ES"), // three whole periods -> lease ends 2026-11-10
+      asset("AST-ORPHAN", "OWN-2", "none", "2026-08-10", "IT"), // used, but owner inactive -> steward (D21, Rule 8)
     ],
   ),
+  // T20: AST-LOW and AST-DEP show the same metrics in the same scope (one via a
+  // KPI variant), so the duplicate scan should group exactly those two.
+  sheet("KPI_Catalog", ["kpi_id", "kpi_name", "canonical_metric", "unit", "definition_status", "approval_status", "description"], [
+    ["KPI-1", "Net Sales", "Net Sales", "EUR", "canonical", "approved", "Fixture"],
+    ["KPI-2", "Net Sales Local", "Net Sales", "EUR", "duplicate_candidate", "local", "Fixture"],
+    ["KPI-3", "OTIF", "OTIF", "%", "canonical", "approved", "Fixture"],
+    ["KPI-4", "Coverage", "Coverage", "%", "canonical", "approved", "Fixture"],
+  ]),
+  sheet("Asset_KPI_Map", ["asset_id", "kpi_id", "usage_role"], [
+    ["AST-LOW", "KPI-1", "primary"],
+    ["AST-LOW", "KPI-3", "secondary"],
+    ["AST-DEP", "KPI-2", "primary"],
+    ["AST-DEP", "KPI-3", "secondary"],
+    ["AST-HIGH", "KPI-4", "primary"],
+  ]),
   sheet("Asset_Usage", ["asset_id", "month", "views", "unique_users"], [
     ...usage("AST-LOW", 2),
     ...usage("AST-HIGH", 80),

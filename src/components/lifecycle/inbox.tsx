@@ -4,7 +4,7 @@ import { useState } from "react";
 import { formatDate } from "@/lib/format";
 import { useLifecycle, type PendingProposal } from "./lifecycle-context";
 
-type Filter = "all" | "escalated" | "retire" | "renew" | "promote" | "build_temporary";
+type Filter = "all" | "escalated" | "retire" | "renew" | "promote" | "merge" | "build_temporary";
 
 // Approval inbox (Manager). Approval follows each proposal's required approvers
 // (Rule 11), so every card offers only its own approvers to decide as (D12).
@@ -29,8 +29,8 @@ export function Inbox() {
           You decide as one of each card&apos;s approvers: the owner (lease reviews), a team Lead (promotions and
           builds), or the data steward once escalated.
         </p>
-        <div className="flex gap-1">
-          {(["all", "escalated", "retire", "renew", "promote", "build_temporary"] as Filter[]).map((f) => (
+        <div className="flex flex-wrap gap-1">
+          {(["all", "escalated", "retire", "renew", "promote", "merge", "build_temporary"] as Filter[]).map((f) => (
             <button
               key={f}
               type="button"
@@ -94,7 +94,9 @@ function ProposalCard({ p }: { p: PendingProposal }) {
                     ? "bg-[#eef7e4] text-green-deep"
                     : p.type === "build_temporary"
                       ? "bg-navy text-white"
-                      : "bg-[#e6f4fc] text-[#00609a]"
+                      : p.type === "merge"
+                        ? "bg-[#efe9f5] text-[#5b3a7a]"
+                        : "bg-[#e6f4fc] text-[#00609a]"
               }`}
             >
               {p.type === "build_temporary" ? "build" : p.type}
@@ -113,7 +115,20 @@ function ProposalCard({ p }: { p: PendingProposal }) {
         </span>
       </div>
 
-      {"kind" in ev && ev.kind === "build" ? (
+      {"kind" in ev && ev.kind === "merge" ? (
+        <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-0.5 text-ink-2">
+          <dt className="text-ink-3">Merge into</dt>
+          <dd>
+            {ev.targetName} <span className="text-ink-3">({ev.targetId})</span>
+          </dd>
+          <dt className="text-ink-3">Similarity</dt>
+          <dd>{Math.round(ev.similarity * 100)}% · duplicate scan</dd>
+          <dt className="text-ink-3">Shared</dt>
+          <dd className="truncate" title={ev.shared.join(", ")}>
+            {ev.shared.map((x) => x.replace(/^\w+:/, "")).join(", ")}
+          </dd>
+        </dl>
+      ) : "kind" in ev && ev.kind === "build" ? (
         <div className="mt-2 space-y-1.5 text-ink-2">
           <p className="italic">&ldquo;{ev.requestText}&rdquo;</p>
           {ev.requestId.startsWith("TEAM-") && (
@@ -204,7 +219,9 @@ function ProposalCard({ p }: { p: PendingProposal }) {
                   ? "Why not promote? (expiry resumes)"
                   : p.type === "build_temporary"
                     ? "Why not build? (nothing is built)"
-                    : "Why not renew? (retires it)"
+                    : p.type === "merge"
+                      ? "Why keep it separate? (nothing changes)"
+                      : "Why not renew? (retires it)"
             }
             className="w-full resize-none rounded-sm border border-line-strong px-2 py-1.5 text-xs focus:border-blue focus:outline-none"
           />

@@ -1,7 +1,7 @@
 // App-owned lifecycle tables. Imported pack tables are never written; these
 // live next to them in the same SQLite file and can be reset for the demo.
 import type { Client } from "@libsql/client";
-import { CLOCK_START, LEASE_DAYS, POLICY_VERSION, TTL_DAYS, seededLeaseEnd } from "./policy";
+import { CLOCK_START, LEASE_DAYS, POLICY_VERSION, TTL_DAYS, addDays, seededLeaseEnd } from "./policy";
 import type { Tier } from "./types";
 
 const APP_TABLES = [
@@ -13,6 +13,9 @@ const APP_TABLES = [
   "archive_snapshots",
   "usage_events",
   "insights",
+  "scheduled_jobs",
+  "scan_runs",
+  "findings",
 ];
 
 const DDL = [
@@ -46,6 +49,17 @@ const DDL = [
   `CREATE TABLE IF NOT EXISTS insights (
      id TEXT PRIMARY KEY, proposal_id TEXT NOT NULL, request_id TEXT NOT NULL, name TEXT NOT NULL,
      owner_id TEXT NOT NULL, scope TEXT NOT NULL, results TEXT NOT NULL, built_on TEXT NOT NULL, built_by TEXT NOT NULL)`,
+  // Scheduled jobs on the simulated clock (T20: duplicate scan every 10 days).
+  `CREATE TABLE IF NOT EXISTS scheduled_jobs (
+     job_id TEXT PRIMARY KEY, every_days INTEGER NOT NULL, next_run TEXT NOT NULL, last_run TEXT)`,
+  `CREATE TABLE IF NOT EXISTS scan_runs (
+     id TEXT PRIMARY KEY, run_date TEXT NOT NULL, actor TEXT NOT NULL, assets INTEGER NOT NULL,
+     groups INTEGER NOT NULL, new_findings INTEGER NOT NULL, fingerprint_version TEXT NOT NULL)`,
+  // Findings are observations for triage, not proposals (T20).
+  `CREATE TABLE IF NOT EXISTS findings (
+     id TEXT PRIMARY KEY, run_id TEXT NOT NULL, first_seen TEXT NOT NULL, last_seen TEXT NOT NULL,
+     asset_ids TEXT NOT NULL, similarity REAL NOT NULL, evidence TEXT NOT NULL, status TEXT NOT NULL,
+     reason TEXT, decided_by TEXT, decided_on TEXT)`,
   // App-generated usage, kept apart from the pack's Asset_Usage (D10).
   `CREATE TABLE IF NOT EXISTS usage_events (
      asset_id TEXT NOT NULL, user_id TEXT NOT NULL, sim_date TEXT NOT NULL, origin TEXT NOT NULL)`,
@@ -66,6 +80,7 @@ export async function ensureLifecycle(db: Client, nowMs = Date.now()): Promise<v
     // Already seeded: only add tables introduced since (all CREATE IF NOT EXISTS).
     await db.batch(DDL, "write");
     await removeTeamBoards(db);
+    await ensureScanJob(db);
     return;
   }
   await seed(db, nowMs);
@@ -80,6 +95,17 @@ export async function resetLifecycle(db: Client, nowMs = Date.now()): Promise<vo
 // D22 replaces D20: employees open the real catalog dashboards, so the four
 // team boards (origin "team", DSH-*) are no longer seeded. Remove them from
 // databases seeded before; app-owned rows only, the audit log is untouched.
+// T20: the duplicate scan runs every 10 simulated days, first the day after
+// the current simulated date (so a clock far ahead never replays missed runs).
+async function ensureScanJob(db: Client) {
+  const clock = await db.execute(`SELECT sim_date FROM app_clock WHERE id = 1`);
+  const from = (clock.rows[0]?.sim_date as string | undefined) ?? CLOCK_START;
+  await db.execute({
+    sql: `INSERT OR IGNORE INTO scheduled_jobs (job_id, every_days, next_run) VALUES ('duplicate-scan', 10, ?)`,
+    args: [addDays(from, 1)],
+  });
+}
+
 async function removeTeamBoards(db: Client) {
   await db.batch(
     [
@@ -124,4 +150,5 @@ async function seed(db: Client, nowMs: number) {
     ],
     "write",
   );
+  await ensureScanJob(db);
 }

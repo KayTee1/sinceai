@@ -114,6 +114,11 @@ KPI mapping from SCOPE (D14).
    it recommends a build; `POST /api/proposals/:id/decision` on that proposal
    computes the insight (per market, latest month, actual-like) and registers
    it as Temporary. Built insights live in the app-owned `insights` table.
+   Built in T20: `GET /api/findings` (duplicate findings, scan runs, next run),
+   `POST /api/findings/scan` (run now; a production cron calls the same scan),
+   `POST /api/findings/:id/dismiss` (`{ actor, reason }`),
+   `POST /api/findings/:id/merge` (`{ actor, targetId }`). Fingerprint
+   contract: `src/services/duplicates/fingerprint.ts`.
 
 Role toggle controls visibility only; approval checks the proposal's required
 approvers (owner / team lead / steward) against the acting identity. Runs are

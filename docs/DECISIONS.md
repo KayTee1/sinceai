@@ -375,3 +375,25 @@ Alternatives considered: keep the snapshot as current (D21); extrapolate the
 snapshot forward (would invent usage).
 Agreed by: Viet
 
+D24: Scheduled duplicate scan with findings for triage (2026-11-07)
+Status: accepted (Viet); prebuilt for KayTee's binary fingerprints (T20).
+Choice and why: a job on the simulated clock runs every 10 days (production:
+a real cron calling the same function; "Run scan now" for the demo). It
+fingerprints every active catalog dashboard and groups those at >= 60%
+similarity. Findings are observations, kept apart from the approval inbox so
+it does not flood: a person triages each group in Agentic > Scheduled
+findings, either "Propose merge" (pick the dashboard to keep; one merge
+proposal per merged-away dashboard goes to its owner, or the region's steward
+without an active owner) or "Dismiss" with a reason (not raised again unless
+a fingerprint changes). The scan never proposes, merges or archives by itself;
+nothing becomes a proposal automatically. Approved merges archive the source
+as "merged into X" (restorable). Fingerprint contract: fingerprint() and
+similarity() in src/services/duplicates/fingerprint.ts. Until the binary
+version lands, a stand-in sets one bit per canonical metric, product scope and
+market scope and scores Jaccard over the bits; on the pack it finds 16 groups
+among 360 dashboards. Semantic model is shown as evidence, not scored.
+Alternatives considered: findings straight into the inbox; auto-proposing
+merges for identical fingerprints; exact KPI IDs as features (no pair
+reaches 50% on the pack).
+Agreed by: Viet
+

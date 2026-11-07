@@ -219,8 +219,10 @@ describe("clock and audit", () => {
   });
 
   it("jumps to the next due event", async () => {
+    const first = await controlClock(db, { action: "next_due" }, "test", 0);
+    assert.equal(first.clock.date, "2026-11-02"); // first duplicate scan (T20)
     const r = await controlClock(db, { action: "next_due" }, "test", 0);
-    assert.equal(r.clock.date, "2026-11-08");
+    assert.equal(r.clock.date, "2026-11-08"); // first lease end
     assert.ok(r.processed >= 1);
   });
 

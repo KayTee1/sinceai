@@ -3,6 +3,7 @@
 // directly; every change writes one audit row.
 import type { Client } from "@libsql/client";
 import { appendAudit } from "./audit";
+import { runScheduledScan } from "../duplicates/scan";
 import {
   LEASE_DAYS,
   LOW_USAGE_USERS,
@@ -18,6 +19,7 @@ import {
   type AssetState,
   type Db,
   type Proposal,
+  type MergeEvidence,
   type PromoteEvidence,
   type ProposalStatus,
   type ReviewEvidence,
@@ -107,7 +109,7 @@ export async function listPendingProposals(db: Db): Promise<Proposal[]> {
 
 // ---------- scheduler ----------
 
-type DueEvent = { date: string; kind: "ttl" | "lease" | "review"; id: string };
+type DueEvent = { date: string; kind: "job" | "ttl" | "lease" | "review"; id: string };
 
 /** Earliest due event on or before `until`, if any. */
 export async function nextDueEvent(db: Db, until = "9999-12-31"): Promise<DueEvent | null> {
@@ -122,6 +124,8 @@ export async function nextDueEvent(db: Db, until = "9999-12-31"): Promise<DueEve
               WHERE status = 'active' AND tier != 'temporary' AND lease_end IS NOT NULL
             UNION ALL
             SELECT due_on, 'review', id FROM proposals WHERE status = 'open' AND due_on IS NOT NULL
+            UNION ALL
+            SELECT next_run, 'job', job_id FROM scheduled_jobs
           ) WHERE date <= ? ORDER BY date, kind, id LIMIT 1`,
     args: [until],
   });
@@ -140,7 +144,8 @@ export async function processDue(db: Client, until: string): Promise<number> {
     if (!ev) return processed;
     const tx = await db.transaction("write");
     try {
-      if (ev.kind === "ttl") await expireTemporary(tx, ev.id, ev.date);
+      if (ev.kind === "job") await runScheduledScan(tx, ev.date);
+      else if (ev.kind === "ttl") await expireTemporary(tx, ev.id, ev.date);
       else if (ev.kind === "lease") await openLeaseReview(tx, ev.id, ev.date);
       else await escalateOverdueReview(tx, ev.id, ev.date);
       await tx.commit();
@@ -342,7 +347,7 @@ async function escalateOverdueReview(tx: Db, proposalId: string, date: string) {
   });
 }
 
-async function archiveAsset(tx: Db, assetId: string, date: string) {
+export async function archiveAsset(tx: Db, assetId: string, date: string) {
   const state = await getAssetState(tx, assetId);
   if (!state) throw new LifecycleError(`Unknown asset ${assetId}`, "not_found");
   await tx.execute({
@@ -419,6 +424,24 @@ export async function decide(db: Client, input: DecisionInput, date: string): Pr
     const renew = (p.type === "renew") === (input.action === "approve");
     await recordDecision(tx, p, input, reason, date);
 
+    if (p.type === "merge") {
+      const ev = p.evidence as MergeEvidence;
+      if (input.action === "approve") {
+        await archiveAsset(tx, assetId, date);
+        await appendAudit(tx, {
+          simDate: date,
+          actor: input.actor,
+          action: "merged",
+          assetId,
+          proposalId: p.id,
+          policyVersion: POLICY_VERSION,
+          rationale: `Merged into ${ev.targetId} (${ev.targetName}); archived, restorable. Finding ${ev.findingId}.`,
+        });
+      }
+      // Rejected: the owner keeps it; nothing changes.
+      await tx.commit();
+      return (await getProposal(db, p.id))!;
+    }
     if (p.type === "promote") {
       if (input.action === "approve") {
         const leaseEnd = addDays(date, LEASE_DAYS);
