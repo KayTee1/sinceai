@@ -1,38 +1,36 @@
 # Handoff
 
-- **Now:** T14 merged (#14, squash `1162fcd`). T15 is draft PR #15
-  (`feat/T15-kpi-computation`). Codex review fixes applied (F2 provenance,
-  F4 handoff, month validation, F5 as proposed D15); awaiting Codex
-  re-verification. Not approved.
-  `src/services/semantic` computes KPI-001, KPI-004, KPI-042 and KPI-027
-  from `Product_Market_Monthly` under the D14 mapping (`d14-mapping.ts`,
-  provisional). Statuses: computed / unsupported / insufficient_data, with
-  units, filters, the query and source rows. `analyzeRequest` adds
-  `computability` (computable / incomplete / insufficient_data / unsupported,
-  with per-market values, reasons, filters and the same provenance as
-  `computeKpi`) and proposes a build only if every
-  requested approved KPI computes for every requested market (probe: latest
-  month, actual-like).
-- **Data facts found in T15:** one row per product × market × month;
-  `value_type` labels the row and alternates within a series, so only 211
-  of 882 month-to-month pairs are actual-like in both months. Growth is often
-  `insufficient_data`; that is intended (no mixing). 11 product–market series
-  are all zeros (growth undefined). Where the forecast is non-zero (870
-  rows), `forecast_variance_pct` equals (net − forecast) / forecast × 100 to
-  1 decimal, which supports the D14 KPI-042 mapping; the 110 zero-forecast
-  rows have a blank `forecast_variance_pct` (formula undefined).
-- **Decisions:** as before (D6–D14; D12–D14 await Viet). T15 policies are
-  proposed D15 (pending owner approval): actual-like default, no blending,
-  coverage % not aggregated, latest-month probe, every-market build gate.
-- **Needs:** `ANTHROPIC_API_KEY` in `.env.local`; local checks need
-  `data/private/pack.xlsx` and `PACK_XLSX=data/private/pack.xlsx npm test`.
-- **Next:** Codex re-verifies PR #15. Owner decides the F1 demo strategy
-  (no real request reaches `build_proposal`; see REVIEW). Viet agrees
-  D12–D15, the StewardAnalysis/KpiResult shapes and lanes. Then expose
-  computation to the chat tools (Viet's Mastra files, coordinate), build step
-  for a Temporary insight, lineage panel, step events + approval pause (T6).
-- **Open:** meaning of `value_type` per row vs. per column (does a
-  forecast-like row's `net_sales` hold a forecast?); remaining D14 KPIs
-  (014, 016, 020, 006, 054) return unsupported with reasons; IP / external AI
-  terms (catalog rows go to Anthropic via the agent); embeddings provider;
-  video limit; DSO framing.
+- **Now:** T14 (#14) and T15 (#15) merged; Viet's DB-path fix (#16) merged.
+  T16 on `feat/T16-mastra-steward-integration`: Mastra tool adapters over the
+  deterministic services, `src/mastra/tools/steward-tools.ts`
+  (`createStewardTools(getDb)` → `analyze-request`, `compute-kpi`,
+  `check-kpi-definitions`). They return service results unchanged and re-throw
+  service errors. Model and chat UI both get compact views
+  (`steward-views.ts`) without row provenance. **Not wired into the
+  orchestrator yet:** the tool map and prompt change is a proposal for Viet,
+  `docs/agent/T16-orchestrator-proposal.md`.
+- **Measured (pack):** REQ-0001 Nubeqa / Global: full analysis 55 KB, view
+  12.3 KB, model-visible follow-up replay 12.7 KB. Mastra also keeps the model
+  output in `providerOptions.mastra.modelOutput`, so the browser message is
+  ~25 KB; whether that copy reaches the provider is unverified (no live run).
+- **Tests:** `tests/steward-tools.test.ts` (adapters vs. services on fixtures,
+  views, errors, mock-model stream via `handleChatStream`, follow-up replay);
+  `tests/helpers/mock-agent.ts` (scripted `MockLanguageModelV3`, no key).
+  Local workbook checks: `PACK_XLSX=data/private/pack.xlsx npm test`.
+- **Data facts (T15):** one row per product × market × month; `value_type`
+  labels each row and alternates, so growth is often `insufficient_data`.
+  `forecast_variance_pct` matches (net − forecast) / forecast × 100 on the 870
+  non-zero-forecast rows; the 110 zero-forecast rows have a blank value.
+- **Decisions:** D6–D15; D12–D15 await Viet. T16 adds no decision; the view
+  shapes and tool contracts are provisional until Viet agrees.
+- **Needs:** `ANTHROPIC_API_KEY` in `.env.local` for any live chat run (none
+  done for T16).
+- **Next:** Viet reviews the orchestrator proposal and view contract; then
+  UI step labels/summaries and an analysis card (Viet); evidence endpoint if
+  the UI needs provenance (sketched in ARCHITECTURE, "Steward tools").
+  Dashboard KPI tiles still blend value types and average percentages
+  (`asset-detail.tsx`, Viet's), see the integration audit.
+- **Open:** F1 (no real request reaches a build proposal; owner decision);
+  one agent vs. three (D11/R17); free-text requests have no governed entry
+  point; IP / external AI terms (more catalog data reaches Anthropic once
+  wired); clock start and per-asset leases vs. the contract.

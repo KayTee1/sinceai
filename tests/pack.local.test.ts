@@ -12,6 +12,9 @@ import { EXPECTED_ROW_COUNTS } from "../src/db/expected";
 import { importWorkbook } from "../src/db/import-workbook";
 import { openDb } from "../src/db/open";
 import { computeKpi } from "../src/services/semantic/compute";
+import { createStewardTools } from "../src/mastra/tools/steward-tools";
+import { analysisView } from "../src/mastra/tools/steward-views";
+import { modelVisible, runChat, toolResults, userMessage } from "./helpers/mock-agent";
 import { analyzeRequest } from "../src/services/steward/analyze";
 
 const PACK = process.env.PACK_XLSX;
@@ -179,5 +182,52 @@ describe("Bayer pack (local)", { skip }, () => {
       }
     }
     assert.notEqual(a.recommendation.kind, "build_proposal"); // assets map every metric
+  });
+
+  // T16: Mastra adapters on the real workbook (read-only, temp import).
+  const exec = (tool: unknown, input: unknown) =>
+    (tool as { execute: (i: never, c: never) => Promise<unknown> }).execute(input as never, {} as never);
+
+  it("T16: analyze-request equals analyzeRequest for REQ-0001, before and after clarification", async () => {
+    const tools = createStewardTools(() => db);
+    const clarifyOut = await exec(tools.analyzeRequest, { requestId: "REQ-0001" });
+    assert.deepEqual(clarifyOut, await analyzeRequest(db, "REQ-0001"));
+    const answer = { product: "Nubeqa", market: "Global" };
+    const resolved = (await exec(tools.analyzeRequest, { requestId: "REQ-0001", answer })) as Awaited<ReturnType<typeof analyzeRequest>>;
+    assert.deepEqual(resolved, await analyzeRequest(db, "REQ-0001", answer));
+    const view = analysisView(resolved);
+    assert.equal(view.recommendation.kind, resolved.recommendation.kind);
+    assert.deepEqual(view.kpiChecks.map((k) => k.approvedKpiId), ["KPI-004", "KPI-042", "KPI-027"]);
+    assert.ok(JSON.stringify(view).length < 15_000, `compact view ${JSON.stringify(view).length} bytes`);
+    assert.ok(JSON.stringify(resolved).length > 40_000, "full result keeps provenance");
+  });
+
+  it("T16: compute-kpi equals computeKpi for Nubeqa DE", async () => {
+    const tools = createStewardTools(() => db);
+    const out = await exec(tools.computeKpi, { kpiId: "KPI-004", product: "Nubeqa", market: "DE", month: "2026-10-01" });
+    const direct = await computeKpi(db, { kpiId: "KPI-004", productIds: ["P-NUB"], marketIds: ["DE"], month: "2026-10-01" });
+    assert.deepEqual(out, { breakdown: "total", result: direct });
+  });
+
+  it("T16: a follow-up turn replays the compact view, not the 55 KB analysis", async () => {
+    const tools = createStewardTools(() => db);
+    const answer = { product: "Nubeqa", market: "Global" };
+    const first = await runChat({
+      tools,
+      script: [{ toolCalls: [{ id: "c1", name: "analyzeRequest", input: { requestId: "REQ-0001", answer } }] }, { text: "Summary" }],
+      messages: [userMessage("u1", "REQ-0001, Nubeqa Global")],
+    });
+    const second = await runChat({
+      tools,
+      script: [{ text: "ok" }],
+      messages: [userMessage("u1", "REQ-0001, Nubeqa Global"), first.assistant!, userMessage("u2", "Why no build?")],
+    });
+    const full = JSON.stringify(await analyzeRequest(db, "REQ-0001", answer)).length;
+    const visible = JSON.stringify(modelVisible(second.prompts[0])).length;
+    assert.deepEqual(toolResults(second.prompts[0]).c1.value, analysisView(await analyzeRequest(db, "REQ-0001", answer)));
+    assert.ok(visible < full / 3, `model-visible follow-up ${visible} bytes vs full analysis ${full} bytes`);
+    // No row-level provenance anywhere, including Mastra's providerOptions copy.
+    const raw = JSON.stringify(second.prompts[0]);
+    for (const banned of ['"provenance"', '"query"', '"rows"', "SELECT "]) assert.ok(!raw.includes(banned), banned);
   });
 });

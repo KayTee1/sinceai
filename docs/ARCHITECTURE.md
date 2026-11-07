@@ -151,6 +151,47 @@ coverage % per product and market only. Results are `computed`,
 source rows: `npx tsx src/services/semantic/cli.ts KPI-004 P-NUB DE
 2026-10-01` (add `--by-market` for one result per market).
 
+### Steward tools (T16, provisional until agreed with Viet)
+
+`src/mastra/tools/steward-tools.ts` exposes the services to Mastra as thin
+adapters: `createStewardTools(getDb)` returns three `createTool()` tools. Each
+validates the input shape, calls the service and returns its result unchanged;
+service errors are re-thrown unchanged (Mastra streams them as
+`tool-output-error`). Not yet wired into the orchestrator (needs Viet's
+approval; see `docs/agent/T16-orchestrator-proposal.md`).
+
+| Tool (id / key) | Input | Calls | Errors |
+| --- | --- | --- | --- |
+| `analyze-request` / `analyzeRequest` | `requestId`, optional `answer {product, market}` (an offered option) | `analyzeRequest` | unknown ID: `RequestNotFoundError`; answer not offered: `Error` |
+| `compute-kpi` / `computeKpi` | `kpiId`, `product` (name or All Pharma), `market` (ID, region or Global), optional `month`, `valueType`, `breakdown` (total / by_market) | `scopeIds`, `latestFactMonth`, `computeKpi` / `computeKpiByMarket` | unknown scope: `StewardToolInputError`; bad month: `InvalidKpiQueryError` |
+| `check-kpi-definitions` / `checkKpiDefinitions` | `text` | `checkKpis` | none |
+
+Malformed input (empty ID, unknown `valueType`) returns Mastra's validation
+object `{ error: true, message }` instead of a result.
+
+Payloads: the full results keep row-level provenance (REQ-0001 Nubeqa / Global
+is ~55 KB) and are what `execute` returns. The model (`toModelOutput`) and the
+chat UI stream (`transform.display`) both receive the same compact view from
+`steward-views.ts` (`steward-analysis/v1`, `kpi-result/v1`,
+`kpi-by-market/v1`, `kpi-checks/v1`): values, statuses, reasons, IDs, formula
+text and source-row counts, without row references, SQL or source-row lists.
+Every view carries an `omitted` note saying so. Validation errors pass through
+both projections unchanged. Measured on the pack: REQ-0001 Nubeqa / Global
+55 KB full → 12.3 KB view; a follow-up turn's model-visible replay is the view
+(12.7 KB), because Mastra keeps the model output in
+`providerOptions.mastra.modelOutput`. That copy doubles the browser-held
+message (~25 KB); whether the model provider sends it on the wire is not
+verified (no Anthropic provider package to inspect; no live run).
+
+Future evidence detail (not built): the services are deterministic over the
+read-only imported pack, so an endpoint such as
+`GET /api/evidence/analysis?requestId=&product=&market=` or
+`GET /api/evidence/kpi?kpiId=&product=&market=&month=&valueType=` can recompute
+the full result with the inputs echoed in the view (`request.id`,
+`clarification.resolved`, KPI `filters`) and return provenance on demand. Once
+app-owned state (lifecycle, proposals) affects results, evidence must come from
+the snapshot stored per proposal version (contract §6), not a recompute.
+
 Code layout: `src/app` (page + `api/chat`), `src/components` (shell, dashboard,
 agentic chat), `src/lib` (catalog loader, shared types), `src/mastra` (agent +
 read-only catalog tools), `src/db` (SQLite client, import).
