@@ -440,9 +440,18 @@ Choice and why:
   transfer; revisit when B3 routes findings to owners), active vs
   lease_due. Same fingerprint: open stays open, dismissed stays
   dismissed; new fingerprint on a dismissed finding reopens it (audited).
+  Every observation (incremental or periodic) refreshes the current
+  evidence, also when the fingerprint is unchanged; the evidence a finding
+  was dismissed on is kept apart (`dismissed_evidence`) until the dismissal
+  is cleared (Codex B2-F2).
   `overlap-v1` findings (local demo DBs only; B1 is unmerged) reopen once
   on their next observation because the basis changed.
-- Concurrency: one running run per job (partial unique index); claim,
+- Concurrency: one running run per job (partial unique index), and one
+  running run across all finding-writing jobs (incremental + periodic,
+  second partial unique index checked in the claim transaction; Codex
+  B2-F1: an older incremental run could otherwise reopen a finding a
+  periodic run had just resolved). A blocked claim is a conflict (HTTP
+  409); abandoning or finishing the run releases it. Claim,
   read-only evaluation, and one commit transaction that marks the run
   succeeded and moves the checkpoint by compare-and-set together with the
   findings. Failures are recorded and never move the checkpoint.

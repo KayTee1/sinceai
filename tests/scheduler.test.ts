@@ -675,7 +675,7 @@ describe("demo reset", () => {
     const tables = await db.execute(`SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'scheduler_%'`);
     assert.deepEqual(tables.rows, [], `reset drops ${SCHEDULER_TABLES.join(", ")}`);
     const o = await schedulerOverview(db);
-    assert.deepEqual([o.jobs[0].checkpoint, o.jobs[0].runs.total, o.findings], [null, 0, { open: 0, dismissed: 0 }]);
+    assert.deepEqual([o.jobs[0].checkpoint, o.jobs[0].runs.total, o.findings], [null, 0, { open: 0, dismissed: 0, resolved: 0, superseded: 0 }]);
     const r = await run();
     assert.deepEqual([r.window.fromAuditId, r.summary!.assessments.length], [0, 0]);
   });

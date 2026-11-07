@@ -92,7 +92,7 @@ function sourceRefs(sides: OverlapSide[], downstream: string[], changedAssetId: 
   return refs;
 }
 
-function observe(s: MergeSuggestion, changedAssetId: string, triggers: ChangeTrigger[], usageNote: string): Observation {
+export function observe(s: MergeSuggestion, changedAssetId: string, triggers: ChangeTrigger[], usageNote: string): Observation {
   const mergeAway = side(s.mergeAway);
   const keep = side(s.keep);
   const basis = basisOf({ mergeAway, keep });
