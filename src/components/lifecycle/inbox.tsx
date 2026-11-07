@@ -4,7 +4,7 @@ import { useState } from "react";
 import { formatDate } from "@/lib/format";
 import { useLifecycle, type PendingProposal } from "./lifecycle-context";
 
-type Filter = "all" | "escalated" | "retire" | "renew" | "promote" | "build_temporary";
+type Filter = "all" | "escalated" | "retire" | "renew" | "promote" | "build_temporary" | "merge";
 
 // Approval inbox (Manager). Approval follows each proposal's required approvers
 // (Rule 11), so every card offers only its own approvers to decide as (D12).
@@ -29,8 +29,8 @@ export function Inbox() {
           You decide as one of each card&apos;s approvers: the owner (lease reviews), a team Lead (promotions and
           builds), or the data steward once escalated.
         </p>
-        <div className="flex gap-1">
-          {(["all", "escalated", "retire", "renew", "promote", "build_temporary"] as Filter[]).map((f) => (
+        <div className="flex flex-wrap gap-1">
+          {(["all", "escalated", "retire", "renew", "promote", "build_temporary", "merge"] as Filter[]).map((f) => (
             <button
               key={f}
               type="button"
@@ -68,10 +68,12 @@ export function ProposalCard({ p }: { p: PendingProposal }) {
   // Only active approvers can decide; defaults to the first one (the owner when active).
   const [chosen, setChosen] = useState<string | null>(null);
   const people = data?.people ?? {};
-  const eligible = p.requiredApprovers.filter((id) => people[id]?.active);
+  const ev = p.evidence;
+  // A merge needs every listed approver (T22): those who already approved cannot decide again.
+  const approved = "kind" in ev && ev.kind === "merge_pair" ? ev.approvals : [];
+  const eligible = p.requiredApprovers.filter((id) => people[id]?.active && !approved.includes(id));
   const decider = chosen && eligible.includes(chosen) ? chosen : (eligible[0] ?? null);
   const canDecide = decider !== null;
-  const ev = p.evidence;
 
   const decide = async (action: "approve" | "reject") => {
     const ok = await post(`/api/proposals/${p.id}/decision`, { actor: decider, action, reason });
@@ -94,7 +96,9 @@ export function ProposalCard({ p }: { p: PendingProposal }) {
                     ? "bg-[#eef7e4] text-green-deep"
                     : p.type === "build_temporary"
                       ? "bg-navy text-white"
-                      : "bg-[#e6f4fc] text-[#00609a]"
+                      : p.type === "merge"
+                        ? "bg-[#f1ecfa] text-[#5b3e96]"
+                        : "bg-[#e6f4fc] text-[#00609a]"
               }`}
             >
               {p.type === "build_temporary" ? "build" : p.type}
@@ -137,10 +141,35 @@ export function ProposalCard({ p }: { p: PendingProposal }) {
             </dd>
           </dl>
         </div>
+      ) : "kind" in ev && ev.kind === "merge_pair" ? (
+        <div className="mt-2 space-y-1.5 text-ink-2">
+          <p>
+            Merge into <span className="font-medium text-ink">{ev.targetName}</span> ({ev.targetId})
+          </p>
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+            <dt className="text-ink-3">Shared KPIs</dt>
+            <dd>{ev.sharedKpis.join(", ")}</dd>
+            <dt className="text-ink-3">Kept adds</dt>
+            <dd>{ev.targetExtraKpis.join(", ") || "nothing"}</dd>
+            <dt className="text-ink-3">Users / month</dt>
+            <dd className="tabular">
+              {ev.usage.sourceUsers ?? "?"} here · {ev.usage.targetUsers ?? "?"} on kept
+            </dd>
+            <dt className="text-ink-3">Downstream</dt>
+            <dd className={ev.downstreamAssets.length ? "text-warn" : ""}>
+              {ev.downstreamAssets.length ? `${ev.downstreamAssets.join(", ")} (redirected)` : "none"}
+            </dd>
+            <dt className="text-ink-3">Approved</dt>
+            <dd>
+              {approved.length} of {p.requiredApprovers.length}
+              {approved.length ? ` (${approved.map((id) => people[id]?.name ?? id).join(", ")})` : ""}
+            </dd>
+          </dl>
+        </div>
       ) : "kind" in ev && (ev.kind as string) !== "team_use" ? (
         // A proposal type this app does not know (e.g. one written by another branch's code): show its rationale only.
         <p className="mt-2 text-ink-2">{p.rationale}</p>
-      ) : "kind" in ev ? (
+      ) : "kind" in ev && ev.kind === "team_use" ? (
         <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-0.5 text-ink-2">
           <dt className="text-ink-3">Used by ({ev.region})</dt>
           <dd>
@@ -177,7 +206,7 @@ export function ProposalCard({ p }: { p: PendingProposal }) {
           <button
             key={id}
             type="button"
-            disabled={!people[id]?.active}
+            disabled={!people[id]?.active || approved.includes(id)}
             onClick={() => setChosen(id)}
             title={people[id]?.active ? `Decide as ${people[id]?.name ?? id}` : "Inactive: cannot decide"}
             className={`rounded-full border px-2 py-px ${
@@ -189,6 +218,7 @@ export function ProposalCard({ p }: { p: PendingProposal }) {
             {people[id]?.name ?? id}
             {people[id]?.role === "Data Steward" ? " (steward)" : ""}
             {people[id] && !people[id].active ? " (inactive)" : ""}
+            {approved.includes(id) ? " ✓" : ""}
           </button>
         ))}
       </div>

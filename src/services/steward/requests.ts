@@ -3,6 +3,7 @@
 // region names and the word "global" in the request text. Anything else is
 // left to the structured context; any disagreement asks the requester.
 import type { Client } from "@libsql/client";
+import { CHAT_REQUEST_SHEET, findChatRequest } from "./drafts";
 import { TEAM_REQUEST_SHEET, findTeamRequest } from "./team-requests";
 import type { Clarification, Scope, ScopeConflict, SourceRef } from "./types";
 
@@ -40,7 +41,10 @@ export async function loadRequest(db: Client, requestId: string): Promise<Loaded
   const pack = res.rows[0] as unknown as RequestRow | undefined;
   if (pack) return { ...pack, _source_sheet: "Business_Requests" };
   const team = findTeamRequest(requestId);
-  return team ? { ...team, _source_sheet: TEAM_REQUEST_SHEET } : null;
+  if (team) return { ...team, _source_sheet: TEAM_REQUEST_SHEET };
+  // Then requests drafted from a typed chat question (T22, labelled ours).
+  const draft = await findChatRequest(db, requestId);
+  return draft ? { ...draft, _source_sheet: CHAT_REQUEST_SHEET } : null;
 }
 
 export async function loadVocabulary(db: Client): Promise<Vocabulary> {

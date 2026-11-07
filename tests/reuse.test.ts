@@ -77,6 +77,12 @@ describe("confirmReuse", () => {
     assert.equal(await appOpens("AST-2", "OWN-R"), 0);
   });
 
+  it("refuses an archived candidate (restore it first)", async () => {
+    await db.execute(`UPDATE asset_state SET status = 'archived' WHERE asset_id = 'AST-1'`);
+    await assert.rejects(confirmReuse(db, { requestId: "REQ-S01", assetId: "AST-1" }, DAY), /archived/);
+    assert.equal(await appOpens("AST-1", "OWN-R"), 0);
+  });
+
   it("refuses when the analysis does not recommend reuse", async () => {
     await assert.rejects(confirmReuse(db, { requestId: "REQ-S03", assetId: "AST-2" }, DAY), LifecycleError);
   });

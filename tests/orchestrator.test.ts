@@ -116,14 +116,42 @@ describe("production tool map", () => {
   it("exposes the governed steward tools, propose-build and the read-only inbox, and no approval or register tool", () => {
     assert.deepEqual(Object.keys(tools).sort(), [
       "analyzeRequest",
+      "checkDuplicate",
       "checkKpiDefinitions",
       "computeKpi",
+      "draftRequest",
+      "getAsset",
+      "listArchived",
       "listPendingProposals",
+      "portfolioSummary",
+      "prepareRestore",
       "proposeBuild",
+      "proposeMerge",
+      "proposeRetire",
+      "searchEstate",
+      "suggestMerge",
+      "whoSignsOff",
     ]);
     assert.deepEqual(
       Object.values(tools).map((t) => (t as { id: string }).id).sort(),
-      ["analyze-request", "check-kpi-definitions", "compute-kpi", "list-pending-proposals", "propose-build"],
+      [
+        "analyze-request",
+        "check-duplicate",
+        "check-kpi-definitions",
+        "compute-kpi",
+        "draft-request",
+        "get-asset",
+        "list-archived",
+        "list-pending-proposals",
+        "portfolio-summary",
+        "prepare-restore",
+        "propose-build",
+        "propose-merge",
+        "propose-retire",
+        "search-estate",
+        "suggest-merge",
+        "who-signs-off",
+      ],
     );
     for (const name of Object.keys(tools)) assert.doesNotMatch(name, /approve|reject|decide|register/i);
   });

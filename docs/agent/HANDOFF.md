@@ -29,6 +29,33 @@
   D22 team catalog dashboards (#25), D23 telemetry window (#27), T19 docs
   (#26), T16B live orchestrator (#28) and F5 build provenance (#29). Open:
   T21 (`feat/T21-chat-assistant`, PR #31, Viet / Claude).
+- **T22 orchestrator tools (`feat/T22-orchestrator-tools`, not pushed):**
+  new estate service (`src/services/estate`) over catalog + app-built
+  insights with lifecycle state, exposed as tools in
+  `src/mastra/tools/estate-tools.ts`: `searchEstate` (replaces
+  `searchAssets`), `checkDuplicate` (verdict reuse / pending / restore /
+  partial / none), `listArchived`, `getAsset`, `whoSignsOff`,
+  `portfolioSummary`, `prepareRestore` (offer only; a person clicks Restore
+  on the existing restore route), `draftRequest` (typed question →
+  `DRAFT-nnn` in app table `chat_requests`, sheet "Chat_Requests (drafted
+  in chat)", loaded by `loadRequest`), `proposeRetire` (engine
+  `proposeRetire`; only on the exact user command "Propose retiring <ID>
+  because <reason>"; owner decides, 14-day escalation, reject renews).
+  `proposeBuild` now returns `duplicate` when an active/app-built asset,
+  archived asset or another waiting build covers scope + KPIs;
+  `confirmReuse` refuses archived assets. Chat cards for every new view.
+  Merge: `suggestMerge` (read-only; asset or scope; verdict merge /
+  keep_both when the target adds >= 4 and > 2x unrelated KPIs / partial;
+  usage is per dashboard, never per metric) and `proposeMerge` (exact
+  command "Propose merging <SRC> into <TARGET>"; D14 checks; new proposal
+  type `merge`, evidence kind `merge_pair`). Both owners must approve (a
+  steward stands in for an inactive owner); one reject closes it; the last
+  approval archives the source with a `merged` audit row redirecting to the
+  target. No due date / escalation for merges yet. KayTee's fingerprint
+  duplicate scan can feed pairs into `proposeMerge` later.
+  Smoke on the pack: Xarelto / DE typed request → DRAFT-001 → build
+  proposal; Beyonttra AST-0323 → AST-0015 merge approved by OWN-008 then
+  OWN-022. Not verified: live Sonnet run, browser.
 - **T21 chat assistant (`feat/T21-chat-assistant`):** colleague tone in the
   prompt (verdict first, no process narration, cards carry the detail).
   Chat collapses tool steps into one line and renders cards
