@@ -257,12 +257,12 @@ Governance of `propose-build`:
   the approval inbox (`POST /api/proposals/:id/decision` → `decideBuild`).
 - Service errors (unknown request, answer not offered, no requester) are
   tool errors; malformed input returns the validation object.
-- Known T17 defect, not worked around: `build.ts` stores
-  `{ sheet: "Business_Requests" }` as the request source, so a TEAM-REQ-01
-  proposal's evidence and `build_proposed` audit row cite the Bayer sheet.
-  The chat view labels the request from the loader (`Team_Requests
-  (team-authored)`) and lists the defect in `knownIssues`; the inbox labels
-  `TEAM-` IDs by prefix.
+- Request provenance (F5): `build.ts` stores the sheet the loader read the
+  request from (`Business_Requests` or `Team_Requests (team-authored)`) in
+  the proposal evidence and `build_proposed` audit row, and refuses a request
+  without one. The chat view labels the request from that stored evidence,
+  never from the ID; a missing sheet shows as `unknown` with a `knownIssues`
+  entry. The inbox still labels `TEAM-` IDs by prefix (display only).
 
 Chat UI: step labels and summaries for the new tools; when a
 `propose-build` output is `proposed`, the chat calls the lifecycle context's

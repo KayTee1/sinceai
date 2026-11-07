@@ -3,7 +3,7 @@
 // region names and the word "global" in the request text. Anything else is
 // left to the structured context; any disagreement asks the requester.
 import type { Client } from "@libsql/client";
-import { TEAM_REQUEST_SHEET, findTeamRequest, isTeamRequest } from "./team-requests";
+import { TEAM_REQUEST_SHEET, findTeamRequest } from "./team-requests";
 import type { Clarification, Scope, ScopeConflict, SourceRef } from "./types";
 
 export const ALL_PRODUCTS = "All Pharma";
@@ -20,20 +20,27 @@ export type RequestRow = {
   _source_row: number;
 };
 
+/** A request with the sheet the loader actually read it from (F5: not inferred from its ID). */
+export type LoadedRequest = RequestRow & { _source_sheet: string };
+
 export type Vocabulary = {
   products: { id: string; name: string; row: number }[];
   markets: { id: string; name: string; region: string; row: number }[];
   regions: string[];
 };
 
-export async function loadRequest(db: Client, requestId: string): Promise<RequestRow | null> {
+export async function loadRequest(db: Client, requestId: string): Promise<LoadedRequest | null> {
   const res = await db.execute({
     sql: `SELECT request_id, request_date, product_context, market_context, request_text, urgency, status, _source_row
           FROM Business_Requests WHERE request_id = ?`,
     args: [requestId.trim().toUpperCase()],
   });
   // Pack requests first; then team-authored demo requests (F1, labelled ours).
-  return (res.rows[0] as unknown as RequestRow) ?? findTeamRequest(requestId);
+  // Each branch records its own sheet, so the source follows where the row came from.
+  const pack = res.rows[0] as unknown as RequestRow | undefined;
+  if (pack) return { ...pack, _source_sheet: "Business_Requests" };
+  const team = findTeamRequest(requestId);
+  return team ? { ...team, _source_sheet: TEAM_REQUEST_SHEET } : null;
 }
 
 export async function loadVocabulary(db: Client): Promise<Vocabulary> {
@@ -54,9 +61,8 @@ export async function loadVocabulary(db: Client): Promise<Vocabulary> {
   };
 }
 
-export function requestSource(r: RequestRow): SourceRef {
-  const sheet = isTeamRequest(r.request_id) ? TEAM_REQUEST_SHEET : "Business_Requests";
-  return { sheet, row: r._source_row, id: r.request_id };
+export function requestSource(r: LoadedRequest): SourceRef {
+  return { sheet: r._source_sheet, row: r._source_row, id: r.request_id };
 }
 
 function mentions(text: string, phrase: string): boolean {

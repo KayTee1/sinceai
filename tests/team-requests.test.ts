@@ -40,6 +40,27 @@ describe("team-authored requests (fixture)", () => {
     const n = await db.execute(`SELECT COUNT(*) AS n FROM Business_Requests WHERE request_id LIKE 'TEAM-%'`);
     assert.equal(Number(n.rows[0].n), 0);
   });
+  it("labels a request by the sheet it was loaded from, not by its ID (F5)", async () => {
+    // A workbook row whose ID equals a team request ID is still workbook data.
+    const d = mkdtempSync(join(tmpdir(), "team-req-collide-"));
+    const sheets = FIXTURE_SHEETS.map((s) =>
+      s.sheet === "Business_Requests"
+        ? { sheet: s.sheet, data: [...s.data, ["TEAM-REQ-01", ...s.data[1].slice(1)]] }
+        : s,
+    );
+    const expected = { ...FIXTURE_EXPECTED, Business_Requests: FIXTURE_EXPECTED.Business_Requests + 1 };
+    await importWorkbook({ sheets, dest: join(d, "collide.db"), expected });
+    const other = openDb(join(d, "collide.db"));
+    try {
+      const r = await loadRequest(other, "TEAM-REQ-01");
+      const row = Number((await other.execute(`SELECT _source_row FROM Business_Requests WHERE request_id = 'TEAM-REQ-01'`)).rows[0]._source_row);
+      assert.deepEqual(requestSource(r!), { sheet: "Business_Requests", row, id: "TEAM-REQ-01" });
+      assert.deepEqual((await analyzeRequest(other, "TEAM-REQ-01")).request.source.sheet, "Business_Requests");
+    } finally {
+      other.close();
+      rmSync(d, { recursive: true, force: true });
+    }
+  });
 });
 
 const PACK = process.env.PACK_XLSX;

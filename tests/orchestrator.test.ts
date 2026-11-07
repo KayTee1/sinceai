@@ -19,7 +19,7 @@ import readXlsxFile from "read-excel-file/node";
 import { importWorkbook, type ParsedSheet } from "../src/db/import-workbook";
 import { openDb } from "../src/db/open";
 import { ORCHESTRATOR_INSTRUCTIONS, createOrchestratorTools } from "../src/mastra/agents/orchestrator-config";
-import { BUILD_SOURCE_DEFECT, authorizeSubmission, parseSubmitCommand, type BuildProposalView } from "../src/mastra/tools/build-tools";
+import { MISSING_REQUEST_SOURCE, authorizeSubmission, buildProposalView, parseSubmitCommand, type BuildProposalView } from "../src/mastra/tools/build-tools";
 import { analysisView, isToolValidationError, type AnalysisView } from "../src/mastra/tools/steward-views";
 import { decideBuild, getInsight, proposeBuild } from "../src/services/build";
 import type { ProposalListResult, ProposalListView } from "../src/mastra/tools/inbox-tools";
@@ -187,7 +187,7 @@ describe("TEAM-REQ-01 through the live orchestrator", () => {
     ]);
     assert.deepEqual([v.proposal.requesterId, v.proposal.requesterSource, v.proposal.requiredApprovers], ["OWN-NA", "team_mapping", ["OWN-NL"]]);
     assert.match(v.next, /Pending human approval/);
-    assert.deepEqual(v.knownIssues, [BUILD_SOURCE_DEFECT]);
+    assert.deepEqual(v.knownIssues, []);
     // The chat view carries no stored evidence sources.
     assert.ok(!JSON.stringify(v).includes('"source"'));
 
@@ -199,9 +199,9 @@ describe("TEAM-REQ-01 through the live orchestrator", () => {
     assert.equal(await getInsight(db, insightId), null);
     assert.equal(await getAssetState(db, insightId), null);
 
-    // Known T17 defect (build.ts): the stored evidence cites Business_Requests for a team request.
+    // F5: the stored evidence cites the team-authored sheet the request was loaded from.
     const ev = (await getProposal(db, v.proposal.id))!.evidence as BuildEvidence;
-    assert.equal(ev.source[0].sheet, "Business_Requests");
+    assert.deepEqual(ev.source[0], { sheet: TEAM_REQUEST_SHEET, ids: ["TEAM-REQ-01"] });
 
     // A second explicit submission does not duplicate it.
     const again = await turn("Submit a build proposal for TEAM-REQ-01", [
@@ -226,6 +226,39 @@ describe("TEAM-REQ-01 through the live orchestrator", () => {
     assert.equal(proposal.status, "approved");
     assert.equal(insight?.builtBy, "OWN-NL");
     assert.equal((await getAssetState(db, v.proposal.insightId!))?.tier, "temporary");
+  });
+});
+
+describe("build-proposal view request provenance (F5)", () => {
+  type Proposed = Extract<Parameters<typeof buildProposalView>[0], { status: "proposed" }>;
+  const stored = (requestId: string, source: unknown) =>
+    ({
+      status: "proposed",
+      proposal: {
+        id: "PRP-X",
+        type: "build_temporary",
+        status: "open",
+        assetIds: ["INS-X-1"],
+        requiredApprovers: ["OWN-NL"],
+        createdOn: DAY,
+        evidence: { requestId, scope: { product: "Xarelto", market: "North America" }, kpis: [], gaps: [], requesterId: "OWN-NA", requesterSource: "team_mapping", source },
+      },
+    }) as unknown as Proposed;
+  const view = (requestId: string, source: unknown) => buildProposalView(stored(requestId, source)) as Stored;
+
+  it("labels the request with the stored sheet, not one inferred from the ID", () => {
+    // A workbook row whose ID looks team-authored stays Business_Requests.
+    const collision = view("TEAM-REQ-01", [{ sheet: "Business_Requests", ids: ["TEAM-REQ-01"] }, { sheet: "KPI_Catalog", ids: ["KPI-001"] }]);
+    assert.deepEqual([collision.request.sourceSheet, collision.request.teamAuthored, collision.knownIssues], ["Business_Requests", false, []]);
+    const team = view("TEAM-REQ-01", [{ sheet: TEAM_REQUEST_SHEET, ids: ["TEAM-REQ-01"] }, { sheet: "KPI_Catalog", ids: ["KPI-001"] }]);
+    assert.deepEqual([team.request.sourceSheet, team.request.teamAuthored, team.knownIssues], [TEAM_REQUEST_SHEET, true, []]);
+  });
+
+  it("never defaults a missing request source to Business_Requests", () => {
+    for (const source of [undefined, [], [{ sheet: "KPI_Catalog", ids: ["KPI-001"] }]]) {
+      const v = view("REQ-S05", source);
+      assert.deepEqual([v.request.sourceSheet, v.request.teamAuthored, v.knownIssues], ["unknown", false, [MISSING_REQUEST_SOURCE]]);
+    }
   });
 });
 

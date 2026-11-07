@@ -10,7 +10,7 @@ are to `be5e560`. Previous T15 F1 is resolved by merged #22 / D18.
 | F2 | P1 | Fixed in `4e10510`: whole-message submit command only. Verified fixed by Codex. |
 | F3 | P1 | Fixed in `4e10510`: command bound to `requestId` and scope; confirmed scope checked against the resolved analysis. Verified fixed by Codex. |
 | F4 | P2 | Open. Small, independent follow-up (chat-view + lifecycle refresh); not in this fix. |
-| F5 | P2 | Open. Pre-existing T17 `build.ts:149`; separate change with Viet. |
+| F5 | P2 | Fixed in PR #29 (`fix/T17-build-provenance`, not yet on master): stored provenance follows the loaded sheet; the orchestrator test asserts Team_Requests and `BUILD_SOURCE_DEFECT` is removed. Awaits re-review after the master merge. |
 
 Contract and tests: `docs/ARCHITECTURE.md` ("Governance of propose-build"),
 `tests/orchestrator.test.ts` ("submission authorization"). The Codex report
