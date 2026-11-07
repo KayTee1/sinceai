@@ -49,6 +49,11 @@
 // proposeMerge's own evidence.reason is the comparator's wording and can
 // describe the opposite direction; the rationale says so when it does.
 //
+// Tier policy: a Temporary insight never replaces a certified asset. Whether a
+// Personal or Team asset may replace a Certified dashboard (and who would sign
+// it off) is an unresolved product policy question (Codex B3-F4): such a
+// direction is blocked with `certified_replacement_policy`, never authorised.
+//
 // Rejection suppression: a rejected or expired proposal blocks a new raise
 // while the finding's fingerprint is the one it was raised on. Only a
 // material evidence change (new fingerprint after a scheduler run) makes it
@@ -309,6 +314,18 @@ async function evaluate(
       if (target.tier === "temporary" && source.tier === "certified") {
         d.reasons.push(
           reason("temporary_over_certified", `A Temporary insight (${target.assetId}) cannot replace a certified asset (${source.assetId})`),
+        );
+      } else if (source.tier === "certified" && target.tier !== "certified") {
+        // Codex B3-F4: unresolved product policy. No rule says whether a Personal or Team (or
+        // unknown-tier) asset may replace a Certified dashboard, or who would have to sign that off;
+        // blocked rather than authorised by the two owners alone. No approver role or certification
+        // exception is invented here.
+        d.reasons.push(
+          reason(
+            "certified_replacement_policy",
+            `Blocked by policy: whether a ${target.tier} asset (${target.assetId}) may replace a Certified dashboard ` +
+              `(${source.assetId}) is an unresolved product policy question (no approver or certification rule exists yet)`,
+          ),
         );
       }
       const id = mergeProposalId(source.assetId, target.assetId, opts.date);

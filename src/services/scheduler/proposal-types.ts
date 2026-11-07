@@ -67,6 +67,8 @@ export type EligibilityCode =
   | "target_does_not_cover_scope"
   | "target_lacks_kpis"
   | "temporary_over_certified"
+  /** Unresolved product policy (Codex B3-F4): a Personal / Team / unknown-tier target replacing a Certified source. */
+  | "certified_replacement_policy"
   | "proposal_id_taken";
 
 export type EligibilityReason = { code: EligibilityCode; message: string };

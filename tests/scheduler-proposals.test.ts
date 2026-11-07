@@ -31,7 +31,7 @@ import { importWorkbook, type ParsedSheet } from "../src/db/import-workbook";
 import { openDb } from "../src/db/open";
 import { decideBuild, proposeBuild } from "../src/services/build";
 import { proposeMerge, suggestMerge } from "../src/services/estate";
-import { decide, listPendingProposals, proposeRetire, readClock, resetLifecycle, restore } from "../src/services/lifecycle";
+import { decide, listPendingProposals, proposeRetire, readClock, recordUsage, resetLifecycle, restore } from "../src/services/lifecycle";
 import {
   FINDING_PROPOSALS_ENABLED,
   SchedulerError,
@@ -277,6 +277,43 @@ describe("raising a proposal from a finding", () => {
     const pv = await previewFindingProposal(db, { findingId: f.findingId });
     assert.equal(pv.eligible, false);
     assert.match(pv.reasons.find((r) => r.code === "asset_under_review")!.message, new RegExp(retire.id));
+  });
+});
+
+describe("certified replacement policy (Codex B3-F4, unresolved)", () => {
+  /** After the insight's tier changes, a run updates the finding (tier is material); returns it. */
+  async function rerun(f: Finding, tier: string): Promise<Finding> {
+    assert.equal((await run()).summary!.findings.updated, 1);
+    const g = (await getFinding(db, f.findingId))!;
+    assert.equal([g.evidence.mergeAway, g.evidence.keep].find((s) => s.assetId === INSIGHT)?.tier, tier);
+    return g;
+  }
+
+  async function blockedByPolicy(g: Finding) {
+    const pv = await previewFindingProposal(db, { findingId: g.findingId, sourceId: "AST-1", targetId: INSIGHT });
+    assert.equal(pv.eligible, false);
+    assert.deepEqual(pv.reasons.map((r) => r.code), ["certified_replacement_policy"]);
+    assert.match(pv.reasons[0].message, /^Blocked by policy: .*unresolved product policy/);
+    const d = pv.directions.find((x) => x.sourceId === "AST-1")!;
+    assert.deepEqual([d.allowed, d.reasons.map((r) => r.code)], [false, ["certified_replacement_policy"]]);
+    await refused(raise(g, { sourceId: "AST-1", targetId: INSIGHT }), "certified_replacement_policy");
+    // The other direction stays refused on its own checks; nothing is eligible.
+    assert.equal((await previewFindingProposal(db, { findingId: g.findingId })).eligible, false);
+  }
+
+  it("a Personal asset replacing a Certified dashboard is blocked by policy, not authorised", async () => {
+    const f = await insightFinding();
+    await recordUsage(db, { assetId: INSIGHT, userId: "OWN-R" }, DAY); // the owner opens it again: Personal
+    await blockedByPolicy(await rerun(f, "personal"));
+  });
+
+  it("a Team asset replacing a Certified dashboard is blocked by policy, not authorised", async () => {
+    const f = await insightFinding();
+    for (const user of ["OWN-1", "OWN-S", "OWN-T"]) await recordUsage(db, { assetId: INSIGHT, userId: user }, DAY);
+    const p = (await listPendingProposals(db)).find((x) => x.type === "promote");
+    assert.ok(p);
+    await decide(db, { proposalId: p.id, actor: "OWN-1", action: "approve" }, DAY);
+    await blockedByPolicy(await rerun(f, "team"));
   });
 });
 
