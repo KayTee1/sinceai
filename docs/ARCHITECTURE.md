@@ -165,8 +165,8 @@ source rows: `npx tsx src/services/semantic/cli.ts KPI-004 P-NUB DE
 adapters: `createStewardTools(getDb)` returns three `createTool()` tools. Each
 validates the input shape, calls the service and returns its result unchanged;
 service errors are re-thrown unchanged (Mastra streams them as
-`tool-output-error`). Not yet wired into the orchestrator (needs Viet's
-approval; see `docs/agent/T16-orchestrator-proposal.md`).
+`tool-output-error`). T16B wires them into the live orchestrator; see "Live
+orchestrator (T16B)" below.
 
 | Tool (id / key) | Input | Calls | Errors |
 | --- | --- | --- | --- |
@@ -207,6 +207,66 @@ the full result with the inputs echoed in the view (`request.id`,
 `clarification.resolved`, KPI `filters`) and return provenance on demand. Once
 app-owned state (lifecycle, proposals) affects results, evidence must come from
 the snapshot stored per proposal version (contract §6), not a recompute.
+
+### Live orchestrator (T16B, provisional until agreed with Viet)
+
+`src/mastra/agents/orchestrator-config.ts` holds the production prompt
+(`ORCHESTRATOR_INSTRUCTIONS`) and governed tool map
+(`createOrchestratorTools(getDb)`); `orchestrator.ts` binds them to the
+server DB and adds `search-assets`. Production tools: `analyzeRequest`,
+`computeKpi`, `checkKpiDefinitions`, `proposeBuild`, `searchAssets`.
+`get-business-request` and `find-kpi-definitions` left the map (still
+exported in `catalog-tools.ts`): `analyzeRequest` loads the request, and the
+LIKE-based KPI check conflated Net Sales with Net Sales Growth.
+
+| Tool (id / key) | Input | Calls | Output (model and UI) |
+| --- | --- | --- | --- |
+| `propose-build` / `proposeBuild` | `requestId`, optional `answer {product, market}` | `proposeBuild` (T17) at the lifecycle clock date (`ensureLifecycle` + `tick`, as `POST /api/builds`) | `build-proposal/v1`: `proposed` / `already_proposed` (proposal ID, insight ID, scope, KPIs, gaps, requester, approvers, request source label, `knownIssues`), `not_proposed` (recommendation, rationale), or `intent_required` (`reason`: `no_command` / `request_mismatch` / `scope_mismatch`, message with the accepted syntax) |
+
+Governance of `propose-build`:
+
+- The service re-runs the steward analysis; only `build_proposal` with a
+  resolved scope stores a `build_temporary` proposal. Clarification (an
+  offered `answer` only) and eligibility stay in the services.
+- Submission authorization (ours, after Codex F2/F3): the tool reads the
+  latest user message from the agent execution context (never the model's
+  arguments) and stores nothing unless the whole message is one command:
+
+  ```text
+  Submit a build proposal for <REQUEST-ID>
+  Submit a build proposal for <REQUEST-ID> with product <PRODUCT> and market <MARKET>
+  ```
+
+  Case-insensitive; spaces collapse; one optional final period. No question
+  mark, quote, newline, prefix or second sentence, so questions, negations,
+  quotations, hypotheticals and discussion are refused (`no_command`). The
+  command's request ID must equal the call's `requestId` after trim and
+  upper-casing (`request_mismatch`). The call's `answer` must equal the
+  command's product and market (case-insensitive), and is allowed only when
+  the command names them (`scope_mismatch`). A confirmed scope must also be
+  the analysis's resolved scope, so a fixed-scope request cannot store a
+  different confirmed scope. Use the scope form only for a request that needed
+  clarification, with one of the offered options. Missing or invalid
+  execution context refuses. All refusals return `intent_required` before
+  `proposeBuild` runs. The services stay authoritative for eligibility.
+  `parseSubmitCommand` / `authorizeSubmission` in `build-tools.ts`.
+- No `requesterId` input: the chat has no identity, so the requester comes
+  from the D12 region mapping (`team_mapping`). The model cannot choose the
+  requester and so cannot steer the approvers.
+- No approve, reject or register tool exists. A proposal is decided only in
+  the approval inbox (`POST /api/proposals/:id/decision` → `decideBuild`).
+- Service errors (unknown request, answer not offered, no requester) are
+  tool errors; malformed input returns the validation object.
+- Request provenance (F5): `build.ts` stores the sheet the loader read the
+  request from (`Business_Requests` or `Team_Requests (team-authored)`) in
+  the proposal evidence and `build_proposed` audit row, and refuses a request
+  without one. The chat view labels the request from that stored evidence,
+  never from the ID; a missing sheet shows as `unknown` with a `knownIssues`
+  entry. The inbox still labels `TEAM-` IDs by prefix (display only).
+
+Chat UI: step labels and summaries for the new tools; when a
+`propose-build` output is `proposed`, the chat calls the lifecycle context's
+`refresh()` so the inbox shows it without a clock tick.
 
 Code layout: `src/app` (page + `api/chat`), `src/components` (shell, dashboard,
 agentic chat), `src/lib` (catalog loader, shared types), `src/mastra` (agent +
