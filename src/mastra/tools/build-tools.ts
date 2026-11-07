@@ -23,17 +23,17 @@
 //   "team_mapping"). The model cannot pick who requests, and so cannot steer
 //   who approves.
 //
-// Known T17 defect, not worked around here: build.ts stores
-// `{ sheet: "Business_Requests" }` as the request source for every build, so a
-// TEAM-REQ-01 proposal's stored evidence and audit row cite the Bayer sheet.
-// The view labels the request from the request loader and states the defect.
+// Request provenance (F5): the view labels the request with the sheet stored
+// in the proposal's evidence (the sheet the loader read it from), never one
+// inferred from the ID. A missing sheet is shown as "unknown" and listed in
+// `knownIssues`, never defaulted to Business_Requests.
 import type { Client } from "@libsql/client";
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { proposeBuild, type ProposeBuildResult } from "../../services/build/build";
 import { ensureLifecycle, tick, type BuildEvidence, type Proposal } from "../../services/lifecycle";
 import { analyzeRequest } from "../../services/steward/analyze";
-import { TEAM_REQUEST_SHEET, isTeamRequest } from "../../services/steward/team-requests";
+import { TEAM_REQUEST_SHEET } from "../../services/steward/team-requests";
 import { passErrors } from "./steward-views";
 
 /** The only accepted submission syntax, shown to the model and the user. */
@@ -157,9 +157,8 @@ const PENDING_NOTE =
   "Pending human approval. Nothing is built, approved or registered yet. An authorised Lead (or the region's data " +
   "steward once escalated) decides in the approval inbox; the requester cannot approve their own build.";
 
-export const BUILD_SOURCE_DEFECT =
-  "Known T17 defect: the stored proposal evidence and audit row cite Business_Requests as the request source " +
-  "(src/services/build/build.ts), although this request is team-authored. Owner: T17 build service.";
+export const MISSING_REQUEST_SOURCE =
+  "The stored proposal evidence names no source sheet for this request; its provenance is unknown.";
 
 /** Compact chat view: the proposal's identity, scope, KPIs, approvers and status; no stored evidence sources. */
 export function buildProposalView(o: ProposeBuildToolOutput): BuildProposalView {
@@ -175,11 +174,12 @@ export function buildProposalView(o: ProposeBuildToolOutput): BuildProposalView 
   }
   const p = o.proposal;
   const ev = p.evidence as BuildEvidence;
-  const teamAuthored = isTeamRequest(ev.requestId);
+  const requestSheet = ev.source?.find((s) => s.ids?.includes(ev.requestId))?.sheet ?? null;
+  const teamAuthored = requestSheet === TEAM_REQUEST_SHEET;
   return {
     view: "build-proposal/v1",
     status: o.status,
-    request: { id: ev.requestId, sourceSheet: teamAuthored ? TEAM_REQUEST_SHEET : "Business_Requests", teamAuthored },
+    request: { id: ev.requestId, sourceSheet: requestSheet ?? "unknown", teamAuthored },
     proposal: {
       id: p.id,
       type: p.type,
@@ -194,7 +194,7 @@ export function buildProposalView(o: ProposeBuildToolOutput): BuildProposalView 
       createdOn: p.createdOn,
     },
     next: PENDING_NOTE,
-    knownIssues: teamAuthored ? [BUILD_SOURCE_DEFECT] : [],
+    knownIssues: requestSheet ? [] : [MISSING_REQUEST_SOURCE],
   };
 }
 

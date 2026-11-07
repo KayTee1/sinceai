@@ -92,6 +92,10 @@ export async function proposeBuild(
   }
   const scope = analysis.clarification.resolved;
   const requestId = analysis.request.id;
+  // F5: cite the sheet the analysis loaded the request from (Business_Requests
+  // or the team-authored sheet). No fallback: a missing source is an error.
+  const requestSheet = analysis.request.source?.sheet;
+  if (!requestSheet) throw new LifecycleError(`Request ${requestId} has no source sheet; refusing to guess its provenance`, "invalid");
 
   const pending = await db.execute({
     sql: `SELECT id FROM proposals WHERE type = 'build_temporary' AND status IN ('open', 'escalated')
@@ -146,7 +150,7 @@ export async function proposeBuild(
     gaps,
     rationale: analysis.recommendation.rationale,
     source: [
-      { sheet: "Business_Requests", ids: [requestId] },
+      { sheet: requestSheet, ids: [requestId] },
       { sheet: "KPI_Catalog", ids: kpis.map((k) => k.kpiId) },
     ],
   };

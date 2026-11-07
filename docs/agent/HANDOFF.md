@@ -11,8 +11,8 @@
   Target an evidence-backed, human-governed before/after demo. Schema, seeding,
   detection, UI, owner, schedule and size are undecided. Separate from D18's
   TEAM-REQ-01 and current tool/build contracts. Integration context checked
-  2026-11-07: T16 (#18) is merged; T16B is open as PR #28 and the F5 build
-  provenance fix as PR #29. Finish that work first; this documentation does
+  2026-11-07: T16 (#18), T16B (#28) and the T19 docs (#26) are merged; the F5
+  build provenance fix is open as PR #29. Finish that work first; this documentation does
   not change existing task/PR statuses.
 - **D23 (`fix/telemetry-window`):** pack telemetry counts only for months in
   the 90 days before a review; after ~Jan 2027 only app views keep a dashboard
@@ -26,10 +26,10 @@
   (#17), T8 lifecycle UI (#19), usage counts / D17 (#20), T17 build step
   (#21), the F1 demo request / D18 (#22), T18 data separation / D19 + D20
   (#23), D21 auto-renew (#24), T16 / T16A steward tool adapters (#18),
-  D22 team catalog dashboards (#25) and D23 telemetry window (#27). Open:
-  T16B live orchestrator (PR #28; Viet with Claude takes over, agreed with
-  KayTee; master merged in up to T19 `1409a31`) and the F5 build provenance fix (PR #29).
-- **T16B (PR #28):** Codex reviewed `be5e560` (CHANGES
+  D22 team catalog dashboards (#25), D23 telemetry window (#27), T19 docs
+  (#26) and T16B live orchestrator (#28). Open: the F5 build provenance fix
+  (PR #29).
+- **T16B (merged #28):** Codex reviewed `be5e560` (CHANGES
   REQUIRED; report in `docs/agent/REVIEW.md`). P1 F2/F3 are fixed in
   `4e10510` and **verified fixed by Codex**:
   `proposeBuild` now stores a proposal only if the latest user message (from
@@ -40,7 +40,7 @@
   `intent_required` with a `reason` and stores nothing. Contract in
   `docs/ARCHITECTURE.md`; tests in `tests/orchestrator.test.ts`
   ("submission authorization"). Open: F4 (P2, inbox refresh recovery,
-  Viet's files) and F5 (P2, T17 `build.ts:149` provenance, with Viet).
+  Viet's files). F5 (P2, T17 provenance) is fixed in PR #29.
   The live orchestrator uses the deterministic
   services: `analyzeRequest`, `computeKpi`, `checkKpiDefinitions`,
   `proposeBuild` (`src/mastra/tools/build-tools.ts`) and `searchAssets`.
@@ -112,15 +112,18 @@
      contract decision with Viet: exclude `archived`, include app-built
      assets, and use app tier instead of `endorsement`; in discovery or via a
      lifecycle query. Add regression tests.
-  2. Build-service provenance (T17 owner, not T16):
-     `src/services/build/build.ts:149` hardcodes
-     `{ sheet: "Business_Requests" }`, so a TEAM-REQ-01 build proposal cites
-     the Bayer sheet instead of `Team_Requests (team-authored)`. Live since
-     T16B: a chat-submitted TEAM-REQ-01 proposal stores that wrong source in
-     its evidence and `build_proposed` audit row. The chat view labels the
-     request correctly and lists the defect in `knownIssues`; the inbox
-     labels `TEAM-` IDs by prefix. Fix is F5, open as
-     PR #29 (Viet to review); not on master yet.
+  2. Fixed by F5 (PR #29, `fix/T17-build-provenance`; Viet approved
+     `a41c24c`, master merged in afterwards): `proposeBuild` cites
+     `analysis.request.source.sheet` in the proposal evidence and its
+     `build_proposed` audit row, and `loadRequest` records the sheet it read
+     the row from (`_source_sheet`) instead of `requestSource` guessing it
+     from the ID; a missing sheet is refused, never defaulted. Schemas
+     unchanged. Proposals stored before the fix keep `Business_Requests`
+     (audit log is append-only; no migration); a demo reset drops them. The
+     merge with T16B drops `BUILD_SOURCE_DEFECT`: `buildProposalView` reads
+     the request sheet from the stored evidence (missing → `unknown` plus a
+     `knownIssues` entry) and `orchestrator.test.ts` asserts `Team_Requests`.
+     The inbox still labels `TEAM-` IDs by prefix (`inbox.tsx`, display only).
   3. Fixed (T16A, `597b79b`): the `analyze-request` view now keeps
      `request.sourceSheet` and `request.teamAuthored` (no row), so
      TEAM-REQ-01 stays labelled team-authored in model and UI output.
@@ -145,14 +148,12 @@
   provisional until Viet agrees.
 - **Needs:** `ANTHROPIC_API_KEY` in `.env.local` for any live chat run (none
   done for T16 or T16B).
-- **Next:** Viet reviews T16B (PR #28: steward tools plus a build-proposal
-  tool wired into the orchestrator) and F5 (PR #29); both are open. Codex's
-  independent review of T16B and its verification of the P1 authorization
-  fix are done. Live Sonnet / browser verification of T16B is still
-  outstanding. Once F5 merges, PR #28 needs the follow-up listed in PR #29
-  (provenance assertion, `BUILD_SOURCE_DEFECT` warning, stored provenance in
-  the build-proposal view). Then fix the discovery issue above with Viet.
-  T19 (D24) planning comes after T16B and the golden path.
+- **Next:** Viet re-reviews F5 (PR #29) after the master merge, which
+  carries the T16B follow-up (provenance assertion, `BUILD_SOURCE_DEFECT`
+  removed, stored provenance in the build-proposal view). T16B is merged;
+  live Sonnet / browser verification of it is still outstanding. Then fix
+  the discovery issue above with Viet. T19 (D24) planning comes after the
+  golden path.
 - **MVP limit:** chat history is client-supplied, not authenticated server
   state; the latest user message is trusted as typed by the person at the
   keyboard. The command syntax is English-only and strict by design.
