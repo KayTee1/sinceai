@@ -445,6 +445,35 @@ async function archiveAsset(tx: Db, assetId: string, date: string) {
     sql: `UPDATE asset_state SET status = 'archived', prev_tier = tier WHERE asset_id = ?`,
     args: [assetId],
   });
+  await closeProposalsForArchived(tx, assetId, date);
+}
+
+/**
+ * Once an asset is archived, other open proposals on it are stale: a chat
+ * retire, a lease review or a merge can all be open at once. Close them so a
+ * later reject cannot renew (reactivate) the archived asset; bringing it back
+ * is only done through restore (D14).
+ */
+async function closeProposalsForArchived(tx: Db, assetId: string, date: string) {
+  const open = await tx.execute({
+    sql: `SELECT id FROM proposals WHERE status IN ('open', 'escalated') AND (
+            EXISTS (SELECT 1 FROM json_each(asset_ids) WHERE value = ?)
+            OR (type = 'merge' AND json_extract(evidence, '$.targetId') = ?))`,
+    args: [assetId, assetId],
+  });
+  for (const row of open.rows) {
+    const id = row.id as string;
+    await tx.execute({ sql: `UPDATE proposals SET status = 'expired', due_on = NULL WHERE id = ?`, args: [id] });
+    await appendAudit(tx, {
+      simDate: date,
+      actor: "policy",
+      action: "proposal_closed",
+      assetId,
+      proposalId: id,
+      policyVersion: POLICY_VERSION,
+      rationale: `Closed without a decision: ${assetId} was archived. Restore it first if it is needed again.`,
+    });
+  }
 }
 
 /**
@@ -583,6 +612,11 @@ export async function decide(db: Client, input: DecisionInput, date: string): Pr
     }
 
     const assetId = p.assetIds[0];
+    // Never decide on an archived asset: a renew here would skip restore (D14).
+    const current = await getAssetState(tx, assetId);
+    if (current?.status === "archived") {
+      throw new LifecycleError(`${assetId} is archived; restore it before deciding ${p.id}`, "invalid");
+    }
     // approve renew / reject retire -> renew; approve retire / reject renew -> retire.
     const renew = (p.type === "renew") === (input.action === "approve");
     await recordDecision(tx, p, input, reason, date);

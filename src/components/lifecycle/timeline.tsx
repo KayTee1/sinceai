@@ -20,6 +20,7 @@ const LABEL: Record<string, string> = {
   review_escalated: "Escalated to data steward",
   proposal_approved: "Proposal approved",
   proposal_rejected: "Proposal rejected",
+  proposal_closed: "Proposal closed (asset archived)",
   renewed: "Lease renewed",
   retired: "Retired and archived",
   restored: "Restored",
