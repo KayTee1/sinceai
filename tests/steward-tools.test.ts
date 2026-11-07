@@ -13,6 +13,7 @@ import { analysisView, CANDIDATES_SHOWN, isToolValidationError, kpiResultView, O
 import { InvalidKpiQueryError, computeKpi, computeKpiByMarket } from "../src/services/semantic/compute";
 import { analyzeRequest, RequestNotFoundError } from "../src/services/steward/analyze";
 import { checkKpis, loadKpis } from "../src/services/steward/kpis";
+import { TEAM_REQUEST_SHEET } from "../src/services/steward/team-requests";
 import { FIXTURE_EXPECTED, FIXTURE_SHEETS } from "./fixtures/catalog";
 import { FACT_EXPECTED, FACT_SHEETS } from "./fixtures/facts";
 import { runChat, toolResults, userMessage } from "./helpers/mock-agent";
@@ -229,6 +230,42 @@ describe("analyze-request: complete match beyond the compact limit (Codex F1)", 
       out.candidates.slice(0, CANDIDATES_SHOWN).map((c) => c.assetId),
     );
   });
+});
+
+describe("analyze-request: request source label (T16A)", () => {
+  const cases = [
+    { requestId: "TEAM-REQ-01", sourceSheet: TEAM_REQUEST_SHEET, teamAuthored: true },
+    { requestId: "REQ-T02", sourceSheet: "Business_Requests", teamAuthored: false },
+  ];
+  for (const { requestId, sourceSheet, teamAuthored } of cases) {
+    it(`${requestId}: model and UI views keep the source sheet, never a row`, async () => {
+      const out = (await run(catalog.analyzeRequest, { requestId })) as Awaited<ReturnType<typeof analyzeRequest>>;
+      // The adapter result is still the unchanged service result.
+      assert.deepEqual(out, await analyzeRequest(catalogDb, requestId));
+      assert.equal(out.request.source.sheet, sourceSheet);
+      for (const [label, view] of [
+        ["toModelOutput", modelView(catalog.analyzeRequest, out).value],
+        ["transform.display", uiView(catalog.analyzeRequest, out)],
+      ] as const) {
+        const v = view as ReturnType<typeof analysisView>;
+        assert.deepEqual(
+          v.request,
+          {
+            id: out.request.id,
+            text: out.request.text,
+            productContext: out.request.productContext,
+            marketContext: out.request.marketContext,
+            status: out.request.status,
+            sourceSheet,
+            teamAuthored,
+          },
+          label,
+        );
+        assert.equal(v.recommendation.kind, out.recommendation.kind, label);
+        assertNoStructuredProvenance(v, label);
+      }
+    });
+  }
 });
 
 describe("compute-kpi", () => {

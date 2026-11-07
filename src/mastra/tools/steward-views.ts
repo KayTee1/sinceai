@@ -18,10 +18,16 @@
 // "P-BET / FR / 2026-10-01 is forecast_like_synthetic (row 11)". No raw
 // source records (row contents) are included in any view.
 //
+// Also kept: where the business request came from, as the sheet label only
+// (`request.sourceSheet`, `request.teamAuthored`). Without it a team-authored
+// demo request (TEAM-REQ-01, D18) would look like Bayer data in chat. No row
+// number is copied, so no workbook row is ever implied for a team request.
+//
 // PROVISIONAL contract (T16): to be agreed with the frontend lane (Viet).
 import type { KpiCheck, StewardAnalysis } from "../../services/steward/types";
 import type { KpiResult } from "../../services/semantic/types";
 import { presentCandidates } from "../../services/steward/discovery";
+import { TEAM_REQUEST_SHEET } from "../../services/steward/team-requests";
 
 export const OMITTED_NOTE =
   "Compact chat view. Structured provenance (source references, SQL queries and source-row lists) is omitted from " +
@@ -59,7 +65,12 @@ export function kpiCheckView(k: KpiCheck): KpiCheckView {
 
 export type AnalysisView = {
   view: "steward-analysis/v1";
-  request: Omit<StewardAnalysis["request"], "source">;
+  request: Omit<StewardAnalysis["request"], "source"> & {
+    /** The service's own source label: "Business_Requests" (Bayer pack) or the team-authored sheet. Never a row. */
+    sourceSheet: string;
+    /** True only for team-authored demo requests (not Bayer data). */
+    teamAuthored: boolean;
+  };
   clarification: Omit<StewardAnalysis["clarification"], "detected">;
   kpiChecks: KpiCheckView[];
   candidates: {
@@ -93,11 +104,19 @@ export type AnalysisView = {
 };
 
 export function analysisView(a: StewardAnalysis): AnalysisView {
-  const { id, text, productContext, marketContext, status } = a.request;
+  const { id, text, productContext, marketContext, status, source } = a.request;
   const { needed, conflicts, question, options, resolved, notes } = a.clarification;
   return {
     view: "steward-analysis/v1",
-    request: { id, text, productContext, marketContext, status },
+    request: {
+      id,
+      text,
+      productContext,
+      marketContext,
+      status,
+      sourceSheet: source.sheet,
+      teamAuthored: source.sheet === TEAM_REQUEST_SHEET,
+    },
     clarification: { needed, conflicts, question, options, resolved, notes },
     kpiChecks: a.kpiChecks.map(kpiCheckView),
     candidates: {

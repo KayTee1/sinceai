@@ -186,7 +186,10 @@ text and source-row counts. Structured provenance (SourceRefs, SQL and its
 arguments, source-row lists) is omitted, and every view's `omitted` note says
 so. Human-readable diagnostic reasons are kept verbatim and may name a workbook
 row (e.g. "… is forecast_like_synthetic (row 11)"); no raw source records are
-included. Reuse candidates are cut to 5 with the same rule as discovery
+included. `steward-analysis/v1` keeps the request's origin as
+`request.sourceSheet` (`Business_Requests` or `Team_Requests (team-authored)`)
+and `request.teamAuthored`, without a row, so TEAM-REQ-01 (D18) is never shown
+as Bayer data. Reuse candidates are cut to 5 with the same rule as discovery
 (`presentCandidates`): if none of the top 5 is a complete match, the best one
 takes the last slot, so the asset behind `reuse_candidates` is always shown. Validation errors pass through
 both projections unchanged. Measured on the pack: REQ-0001 Nubeqa / Global

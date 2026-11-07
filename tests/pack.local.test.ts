@@ -16,6 +16,7 @@ import { createStewardTools } from "../src/mastra/tools/steward-tools";
 import { analysisView } from "../src/mastra/tools/steward-views";
 import { modelVisible, runChat, toolResults, userMessage } from "./helpers/mock-agent";
 import { analyzeRequest } from "../src/services/steward/analyze";
+import { TEAM_REQUEST_SHEET } from "../src/services/steward/team-requests";
 
 const PACK = process.env.PACK_XLSX;
 const skip = !PACK || !existsSync(PACK) ? "PACK_XLSX not set to an existing workbook" : false;
@@ -65,6 +66,26 @@ describe("Bayer pack (local)", { skip }, () => {
       { from: "context", product: "Beyonttra", market: "EMEA" },
       { from: "text", product: "Nubeqa", market: "Global" },
     ]);
+  });
+
+  it("T16A: compact views label TEAM-REQ-01 as team-authored and REQ-0001 as Business_Requests", async () => {
+    const tools = createStewardTools(() => db);
+    const toolsMeta = tools.analyzeRequest as unknown as {
+      toModelOutput: (o: unknown) => { value: ReturnType<typeof analysisView> };
+      transform: { display: { output: (c: { output: unknown }) => ReturnType<typeof analysisView> } };
+    };
+    const team = await analyzeRequest(db, "TEAM-REQ-01");
+    const pack = await analyzeRequest(db, "REQ-0001");
+    for (const v of [toolsMeta.toModelOutput(team).value, toolsMeta.transform.display.output({ output: team })]) {
+      assert.equal(v.request.sourceSheet, TEAM_REQUEST_SHEET);
+      assert.equal(v.request.teamAuthored, true);
+      assert.equal(v.recommendation.kind, "build_proposal");
+      assert.ok(!("row" in v.request));
+    }
+    for (const v of [toolsMeta.toModelOutput(pack).value, toolsMeta.transform.display.output({ output: pack })]) {
+      assert.equal(v.request.sourceSheet, "Business_Requests");
+      assert.equal(v.request.teamAuthored, false);
+    }
   });
 
   it("REQ-0001: flags KPI-004 vs. KPI-005 and the other requested metrics", async () => {

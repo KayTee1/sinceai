@@ -46,7 +46,7 @@
   before/after panel is on the Dashboard tab. D17: a Temporary insight
   opened by 3+ people in the owner's region gets a promote-to-Team proposal
   for the region's Leads, and expiry is held while it waits.
-- **Integration issues after merging master into T16 (not fixed):**
+- **Integration issues after merging master into T16:**
   1. Discovery ignores lifecycle state. `discoverCandidates`
      (`src/services/steward/discovery.ts`) reads only the imported
      `Analytics_Assets`. An asset archived in `asset_state` can still be
@@ -55,11 +55,9 @@
      contract decision with Viet: exclude `archived`, include app-built
      assets, and use app tier instead of `endorsement`; in discovery or via a
      lifecycle query. Add regression tests.
-  2. The T16 compact view drops the request source. `analysisView` omits
-     `request.source`, so the `analyze-request` view for TEAM-REQ-01 no
-     longer says it is team-authored (only the ID prefix shows it). The full
-     service result still carries it. Keep the sheet label (or a
-     `teamAuthored` flag) in the view before wiring the tool.
+  2. Fixed (T16A, local commit): the `analyze-request` view now keeps
+     `request.sourceSheet` and `request.teamAuthored` (no row), so
+     TEAM-REQ-01 stays labelled team-authored in model and UI output.
 - **Measured (pack):** for REQ-0001 Nubeqa / Global, the full analysis is
   55 KB, the view 12.3 KB and the model-visible follow-up replay 12.7 KB.
   Mastra also keeps the model output in `providerOptions.mastra.modelOutput`,
@@ -80,8 +78,8 @@
   provisional until Viet agrees.
 - **Needs:** `ANTHROPIC_API_KEY` in `.env.local` for any live chat run (none
   done for T16).
-- **Next:** push the T16 merge and get PR #18 reviewed. Then fix the two
-  integration issues above with Viet, and wire the steward tools plus a
+- **Next:** push the T16 merge + T16A and get PR #18 reviewed. Then fix the
+  discovery issue above with Viet, and wire the steward tools plus a
   build-proposal tool (`proposeBuild`) into the orchestrator.
 - **Open:** one agent vs. three (D11/R17); free-text requests have no
   governed entry point; IP / external AI terms (more catalog data reaches
