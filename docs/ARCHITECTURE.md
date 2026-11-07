@@ -127,6 +127,8 @@ Names only; values go in `.env` (ignored):
 
 - `ANTHROPIC_API_KEY`
 - `DATABASE_URL` (libSQL file path)
+- `SCHEDULER_DEMO_ACTIONS` (optional, `1` enables scheduler run / dismiss /
+  abandon over HTTP for the demo `manager` actor; off by default, D25)
 
 ## Run commands
 
@@ -271,6 +273,47 @@ Chat UI: step labels and summaries for the new tools; when a
 Code layout: `src/app` (page + `api/chat`), `src/components` (shell, dashboard,
 agentic chat), `src/lib` (catalog loader, shared types), `src/mastra` (agent +
 read-only catalog tools), `src/db` (SQLite client, import).
+
+### Governance scheduler (T25, D25)
+
+`src/services/scheduler` (no Mastra, no LLM). Jobs `incremental_overlap`
+(mode `incremental`) and `periodic_reassessment` (mode `reassessment`), both
+trigger `manual`; finding-writing runs are serialised (409 while one runs).
+UI: Scheduler tab in the Agentic side panel (Pipeline | Scheduler | Inbox,
+`src/components/agentic/scheduler-view.tsx`). Routes, errors as `{ error }`
+with 400 / 403 / 404 / 409:
+
+- `GET /api/scheduler`: job descriptor (rules, watched actions,
+  limitations), checkpoint, run counts, latest run, finding counts.
+- `GET /api/scheduler/runs?limit=` and `GET /api/scheduler/runs/[id]`: run
+  history with window, assessments per changed asset, finding counts, error.
+- `GET /api/scheduler/runs?jobId=` filters by job.
+- `POST /api/scheduler/runs` `{ actor, jobId? }` (default
+  `incremental_overlap`): run now; 200 with the finished run
+  (succeeded, or failed with `error.code` `evaluation_failed` /
+  `commit_failed`), 409 while another runs or the database stayed locked,
+  and 409 with `outcome` `abandoned` / `reset` / `unrecorded`, `runId` and
+  the original `failure` when the failure could not be settled as a failed
+  run (`unrecorded`: the run is still running; abandon it).
+- `POST /api/scheduler/runs/[id]/abandon` `{ actor, reason }`: recovery.
+- `GET /api/scheduler/findings?status=open|dismissed|resolved|superseded|any&assetId=&limit=`,
+  `GET /api/scheduler/findings/[id]`,
+  `POST /api/scheduler/findings/[id]/dismiss` `{ actor, reason }`.
+  A finding carries `evidence` (latest observation), `dismissal` (with the
+  evidence it was dismissed on), `resolution`, `proposalId` (only while its
+  proposal is open/escalated) and `proposal` `{ proposalId, outcome,
+  sourceId, targetId }` derived from the lifecycle `proposals` row.
+- `GET /api/scheduler/findings/[id]/proposal?sourceId=&targetId=`:
+  read-only eligibility preview per direction, comparator preference as
+  evidence, `enabled: false` and `blockedBy`.
+- `POST /api/scheduler/findings/[id]/proposal`: disabled, always 409
+  `{ error, blockedBy: ["MERGE-APPROVERS", "CODEX-REVIEW"], blockers }`.
+
+POST routes need `SCHEDULER_DEMO_ACTIONS=1` and `actor: "manager"`; the
+check runs before any database access. Scheduler writes use their own
+short-lived `libsql` connections, never the shared client (D25).
+Operator CLI: `npx tsx src/services/scheduler/cli.ts status | run <actor> |
+findings | dismiss <id> <actor> <reason> | abandon <id> <actor> <reason>`.
 
 ## Demo reset and fallback
 

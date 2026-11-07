@@ -413,3 +413,123 @@ golden path; see T19 in PLAN.
 Alternative: regenerating scenarios each demo; reviewed fixtures are preferred
 for repeatability.
 Agreed by: KayTee + Viet (direction only, confirmed by the user)
+
+D25: Governance scheduler: incremental and periodic runs, findings, proposals from findings (2026-11-07)
+Status: proposed (KayTee, T25 B1-B4 on `integrate/T24-scheduler`; awaiting
+Codex re-review). Needs Viet's agreement on: the reset-list lines in
+`src/services/lifecycle/schema.ts`; the MERGE-APPROVERS fix in
+`src/services/estate/merge.ts` and the merge approval guard in
+`src/services/lifecycle/engine.ts` (his code; made in the T25 integration
+with the owner's authorisation); the sentence B3 appends to
+`proposals.rationale` when a proposal is raised from a finding. B0
+(archiving closes other open proposals; no decision on an archived asset)
+is Viet's and is on master since `16c868d` (#36).
+Choice and why:
+- Scheduler runs, checkpoints and findings live in their own tables
+  (`scheduler_*`), apart from request pipeline `runs` and from `proposals`.
+  Run IDs are random (`SCH-<uuid>`), finding IDs `FND-<uuid>`.
+- Mode 2 (incremental) reads `audit_log` IDs after the last committed
+  checkpoint up to a bound fixed when the run is claimed (inside a write
+  transaction, so no lower ID can commit later). Watched actions:
+  `temporary_registered`, `insight_built`, `restored`, `promoted`;
+  `scheduler_*` rows are ignored. No change, no estate read.
+- Rule `active_overlap` (`overlap-v2`) reuses `suggestMerge` unchanged, in both
+  directions (the changed asset as covered or covering side). Only its
+  `merge` verdict becomes a finding; `keep_both` / `partial` are counted.
+  A finding is not a proposal and never merges, archives or changes KPIs.
+- Findings: one row per rule + asset pair; `open` or `dismissed`. Dismiss
+  needs a reason and is audited. Fingerprint (material evidence) = verdict
+  + per asset: scope, KPI set and governance tier. Tier is material
+  (Codex F2): it is the governed standing, `suggestMerge` ranks by it, and
+  a dismissal of an overlap with a Temporary insight says nothing once it
+  is Personal or Team. Excluded (evidence only): usage counts and merge
+  direction (move with the clock), name, lease/TTL dates, owner (no in-app
+  transfer; revisit when B3 routes findings to owners), active vs
+  lease_due. Same fingerprint: open stays open, dismissed stays
+  dismissed; new fingerprint on a dismissed finding reopens it (audited).
+  Every observation (incremental or periodic) refreshes the current
+  evidence, also when the fingerprint is unchanged; the evidence a finding
+  was dismissed on is kept apart (`dismissed_evidence`) until the dismissal
+  is cleared (Codex B2-F2).
+  `overlap-v1` findings (local demo DBs only; B1 is unmerged) reopen once
+  on their next observation because the basis changed.
+- Concurrency: one running run per job (partial unique index), and one
+  running run across all finding-writing jobs (incremental + periodic,
+  second partial unique index checked in the claim transaction; Codex
+  B2-F1: an older incremental run could otherwise reopen a finding a
+  periodic run had just resolved). A blocked claim is a conflict (HTTP
+  409); abandoning or finishing the run releases it. Claim,
+  read-only evaluation, and one commit transaction that marks the run
+  succeeded and moves the checkpoint by compare-and-set together with the
+  findings. Failures are recorded and never move the checkpoint.
+- Database access (Codex F1): libsql 0.5 keeps the lock of a statement that
+  failed with SQLITE_BUSY until that statement is run again or
+  garbage-collected, and @libsql/client puts the connection back in its
+  pool; a failed COMMIT then blocks every writer. Scheduler writes
+  therefore use their own short-lived `libsql` connection per attempt
+  (BEGIN IMMEDIATE, `cache_spill` off, closed afterwards); a busy BEGIN
+  holds nothing and is retried asynchronously on a new connection; a
+  failed COMMIT is rolled back and that COMMIT statement is run once more
+  so it releases its lock at once. Evaluation reads use a scheduler-owned
+  client closed after the run. The app's shared client is never written
+  through or closed by the scheduler. `libsql` (already installed under
+  @libsql/client) is now a direct dependency.
+- Failure reporting (Codex C4): after an evaluation or commit failure the
+  run is marked failed if possible, then the stored state decides what is
+  reported: failed run; conflict `abandoned`; conflict `reset`; or conflict
+  `unrecorded` (recording failed too, the run stays running, abandon it).
+  The original failure and run ID are always in the error detail.
+- Crash recovery: no automatic stale-run timeout (no heartbeat to tell a dead
+  run from a slow one). A manager abandons a stuck run with a reason
+  (audited); a late commit of that run is refused.
+- Reset: `resetLifecycle` drops the `scheduler_*` tables with `audit_log`, so
+  no checkpoint, run or finding outlives the audit IDs and assets it points at.
+- HTTP writes (run, dismiss, abandon) are off unless the server sets
+  `SCHEDULER_DEMO_ACTIONS=1`, then accept only the demo `manager` actor. This
+  is attribution, not authentication (no auth in the prototype). The gate
+  is checked before any database access (Codex C3). Reads are open like
+  other GET routes. Operators can use the CLI.
+- The scheduler does not tick the clock (ticking writes lifecycle state); it
+  evaluates at the stored clock date.
+- Mode 3 (B2, job `periodic_reassessment`, manual trigger only): re-checks
+  open and dismissed findings with the same rule; a finding whose overlap no
+  longer holds is `resolved` (with a reason). `superseded` is reserved in the
+  schema, types and API filter, but no transition produces it yet; no
+  superseding behaviour is implemented. Pending proposals that rest on
+  changed findings are reported (`staleProposals`, relation `linked` / `same_pair` / `shares_asset`),
+  never changed.
+- Proposals from findings (B3): a manager picks the direction (source merged
+  into target); the backend re-validates both assets, scope, KPIs, tier and
+  open proposals, re-runs the comparator, and calls `proposeMerge`
+  unchanged. Link table `scheduler_finding_proposals` keeps actor,
+  direction, fingerprint and an evidence snapshot. The outcome shown for a
+  finding (pending / approved / rejected / expired) is derived on every
+  read from the lifecycle `proposals` row (Codex B3-F1); a stored outcome
+  is a cache only, and a missing row (reset) is never shown as pending. The
+  comparator's preferred direction is recorded as comparison evidence,
+  never as authorisation (B3-F2). A Personal or Team asset replacing a
+  Certified dashboard is blocked as an unresolved product policy (B3-F4).
+- The POST that raises a proposal is hard-disabled
+  (`FINDING_PROPOSALS_ENABLED = false`, 409 `blockedBy`
+  `["MERGE-APPROVERS", "CODEX-REVIEW"]`) until Viet has reviewed the
+  MERGE-APPROVERS fix and Codex has reviewed the module. No UI control
+  raises proposals.
+- MERGE-APPROVERS (Codex P1, fixed in the T25 integration): `proposeMerge`
+  resolves the source and target approvers separately (active owner, else
+  the region's active data steward, as before) and refuses, writing
+  nothing, when either side has none. Identities are deduplicated only
+  after both sides are found, so one steward may represent both. The
+  engine refuses to approve a stored merge whose evidence lacks an approver
+  for a side or whose `required_approvers` omit one (a pre-fix proposal);
+  the row is left as stored and can still be rejected or cleared by a reset.
+Not covered (later): clock/cron triggers, a full-estate sweep, external
+catalog changes (imported tables are read-only; nothing to observe), merge
+expiry/escalation (merge proposals have no due date).
+History (Codex C1): a finding keeps only its latest evidence (and, while
+dismissed, the evidence it was dismissed on); earlier observations are not
+reconstructible. B3 must snapshot the evidence a proposal is made from.
+Alternatives considered: reusing `runs`/`run_events` (request-specific);
+timestamp-based reset detection (not reliable); a stale-run timeout (no
+evidence for any value); persisting `keep_both`/`partial` overlaps as findings
+(suggestMerge itself treats them as no action).
+Agreed by: KayTee (proposed); Viet pending
