@@ -52,6 +52,10 @@ const DDL = [
 // (JSON FindingResolution, set while resolved). B1 databases have the old
 // status CHECK, which CREATE TABLE IF NOT EXISTS keeps, so ensureScheduler
 // rebuilds that table (rows preserved) when it finds the old definition.
+// B2-F2: `dismissed_evidence` (JSON OverlapEvidence) keeps the evidence a
+// finding was dismissed on, apart from `evidence`, which every observation
+// refreshes. Added by ALTER TABLE to a B2 table without it, and backfilled
+// (see backfillDismissedEvidence).
 function findingsDdl(name: string, ifNotExists = true) {
   return `CREATE TABLE ${ifNotExists ? "IF NOT EXISTS " : ""}${name} (
      finding_id TEXT PRIMARY KEY, dedup_key TEXT NOT NULL UNIQUE, rule_id TEXT NOT NULL, rule_version TEXT NOT NULL,
@@ -61,7 +65,7 @@ function findingsDdl(name: string, ifNotExists = true) {
      last_seen_at TEXT NOT NULL, last_seen_sim_date TEXT NOT NULL, last_run_id TEXT NOT NULL,
      observations INTEGER NOT NULL,
      dismissed_by TEXT, dismissed_reason TEXT, dismissed_at TEXT, dismissed_sim_date TEXT, dismissed_fingerprint TEXT,
-     proposal_id TEXT, resolution TEXT)`;
+     proposal_id TEXT, resolution TEXT, dismissed_evidence TEXT)`;
 }
 
 /** B1 columns, copied as they are when an old findings table is rebuilt. */
@@ -73,6 +77,8 @@ const B1_FINDING_COLUMNS = [
 
 /** The stored findings table predates B2 (old status CHECK or no resolution column). */
 const isOldFindings = (sql: string | undefined) => !!sql && (!/'resolved'/.test(sql) || !/\bresolution\b/.test(sql));
+/** The stored findings table lacks the B2-F2 dismissed_evidence column (rebuilt B1 tables get it from findingsDdl). */
+const lacksDismissedEvidence = (sql: string | undefined) => !!sql && !/\bdismissed_evidence\b/.test(sql);
 
 async function findingsSql(db: Client | Transaction): Promise<string | undefined> {
   const r = await db.execute(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'scheduler_findings'`);
@@ -88,13 +94,28 @@ export async function ensureScheduler(db: Client): Promise<void> {
     sql: `SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name IN (${SCHEDULER_TABLES.map(() => "?").join(", ")})`,
     args: [...SCHEDULER_TABLES],
   });
-  if (Number(r.rows[0]?.n) === SCHEDULER_TABLES.length && !isOldFindings(await findingsSql(db)) && (await hasWriterIndex(db))) return;
+  const current = await findingsSql(db);
+  if (Number(r.rows[0]?.n) === SCHEDULER_TABLES.length && !isOldFindings(current) && !lacksDismissedEvidence(current) && (await hasWriterIndex(db))) {
+    return;
+  }
   await writeTx(db, async (tx) => {
     // Checked again inside the write transaction: another connection may have upgraded it meanwhile.
-    if (isOldFindings(await findingsSql(tx))) await rebuildFindings(tx);
+    const sql = await findingsSql(tx);
+    if (isOldFindings(sql)) await rebuildFindings(tx);
+    else if (lacksDismissedEvidence(sql)) await tx.execute(`ALTER TABLE scheduler_findings ADD COLUMN dismissed_evidence TEXT`);
+    if (sql && (isOldFindings(sql) || lacksDismissedEvidence(sql))) await backfillDismissedEvidence(tx);
     if (!(await hasWriterIndex(tx))) await releaseConcurrentWriters(tx);
-    for (const sql of DDL) await tx.execute(sql);
+    for (const ddl of DDL) await tx.execute(ddl);
   });
+}
+
+/**
+ * Upgrade step for B2-F2. Before it, a dismissed finding's `evidence` was
+ * never refreshed while it stayed dismissed or resolved, so for every row that
+ * still carries a dismissal it IS the evidence it was dismissed on.
+ */
+async function backfillDismissedEvidence(tx: Transaction) {
+  await tx.execute(`UPDATE scheduler_findings SET dismissed_evidence = evidence WHERE dismissed_by IS NOT NULL AND dismissed_evidence IS NULL`);
 }
 
 async function hasWriterIndex(db: Client | Transaction): Promise<boolean> {

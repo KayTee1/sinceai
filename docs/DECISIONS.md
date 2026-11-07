@@ -440,6 +440,10 @@ Choice and why:
   transfer; revisit when B3 routes findings to owners), active vs
   lease_due. Same fingerprint: open stays open, dismissed stays
   dismissed; new fingerprint on a dismissed finding reopens it (audited).
+  Every observation (incremental or periodic) refreshes the current
+  evidence, also when the fingerprint is unchanged; the evidence a finding
+  was dismissed on is kept apart (`dismissed_evidence`) until the dismissal
+  is cleared (Codex B2-F2).
   `overlap-v1` findings (local demo DBs only; B1 is unmerged) reopen once
   on their next observation because the basis changed.
 - Concurrency: one running run per job (partial unique index), and one

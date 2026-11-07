@@ -270,12 +270,21 @@ export type Finding = {
   ruleVersion: string;
   assetIds: string[];
   status: FindingStatus;
+  /** Current evidence: the latest observation, refreshed on every observation (also while dismissed; B2-F2). */
   evidence: OverlapEvidence;
   fingerprint: string;
   firstSeen: { at: string; simDate: string; runId: string };
   lastSeen: { at: string; simDate: string; runId: string };
   observations: number;
-  dismissal: { actor: string; reason: string; at: string; simDate: string; fingerprint: string } | null;
+  dismissal: {
+    actor: string;
+    reason: string;
+    at: string;
+    simDate: string;
+    fingerprint: string;
+    /** The evidence the finding was dismissed on (B2-F2); `Finding.evidence` is the latest observation. Null only for a legacy row without it. */
+    evidence: OverlapEvidence | null;
+  } | null;
   /** Reserved for a later finding-to-proposal step; always null in B1. */
   proposalId: string | null;
   /** Set while status is resolved: why and on what evidence (Mode 3). Cleared when the finding reopens. */

@@ -17,7 +17,7 @@ import type { Client } from "@libsql/client";
 import { importWorkbook, type ParsedSheet } from "../src/db/import-workbook";
 import { openDb } from "../src/db/open";
 import { decideBuild, proposeBuild } from "../src/services/build";
-import { proposeMerge, suggestMerge } from "../src/services/estate";
+import { proposeMerge, suggestMerge, type MergeSuggestion } from "../src/services/estate";
 import { decide, listPendingProposals, proposeRetire, recordUsage, resetLifecycle, restore } from "../src/services/lifecycle";
 import {
   B1_FINDINGS_DDL,
@@ -165,7 +165,7 @@ describe("periodic reassessment run", () => {
     assert.equal(await getCheckpoint(db, "periodic_reassessment"), null, "no checkpoint for the periodic job");
   });
 
-  it("reassesses an open finding: same evidence => unchanged, only last seen and count move; compares only the pair", async () => {
+  it("reassesses an open finding: same material evidence => unchanged; current evidence refreshed; compares only the pair", async () => {
     const f = await openFinding();
     const calls: string[] = [];
     const r = await periodic(async (d, input, date) => (calls.push(input.assetId), suggestMerge(d, input, date)));
@@ -179,7 +179,9 @@ describe("periodic reassessment run", () => {
     assert.deepEqual(r.summary!.findings, { created: 0, updated: 0, unchanged: 1, reopened: 0, suppressed: 0, resolved: 0 });
     const after = (await getFinding(db, f.findingId))!;
     assert.deepEqual([after.status, after.fingerprint, after.observations, after.lastSeen.runId], ["open", f.fingerprint, 2, r.runId]);
-    assert.deepEqual(after.evidence, f.evidence, "evidence untouched when nothing material changed");
+    // B2-F2: current evidence is the periodic observation (no audit triggers), everything else equal here.
+    const auditRef = (e: Finding["evidence"]) => e.source.map((x) => (x.sheet === "audit_log (app)" ? { ...x, ids: [] } : x));
+    assert.deepEqual({ ...after.evidence, source: auditRef(after.evidence) }, { ...f.evidence, triggers: [], source: auditRef(f.evidence) });
   });
 
   it("updates an open finding whose evidence changed (tier Temporary -> Personal)", async () => {
@@ -264,15 +266,16 @@ describe("periodic reassessment run", () => {
     assert.deepEqual(await auditSince(mark), []);
     assert.equal(again.window.fromAuditId, (await listRuns(db, { jobId: "periodic_reassessment", limit: 2 }))[1].window.toAuditId);
 
-    // Open + unchanged: a second run only moves last seen / count.
+    // Open + unchanged: a second run on the same estate rewrites the same evidence; only last seen / count move.
     await resetLifecycle(db, 0);
     const f = await openFinding();
     await periodic();
+    const e2 = (await getFinding(db, f.findingId))!.evidence;
     const m2 = await maxAuditId();
     const third = await periodic();
     assert.equal(third.summary!.reassessment!.counts.unchanged, 1);
     const g = (await getFinding(db, f.findingId))!;
-    assert.deepEqual([g.status, g.fingerprint, g.evidence], ["open", f.fingerprint, f.evidence]);
+    assert.deepEqual([g.status, g.fingerprint, g.evidence], ["open", f.fingerprint, e2]);
     assert.deepEqual(await auditSince(m2), []);
   });
 });
@@ -331,6 +334,83 @@ describe("dismissed findings", () => {
     assert.deepEqual([back.status, back.resolution, back.dismissal], ["open", null, null]);
     assert.deepEqual((await auditSince(mark)).map((a) => a.action), ["scheduler_finding_reopened"]);
     assert.equal((await listFindings(db)).total, 1, "same row, no duplicate");
+  });
+});
+
+describe("current evidence vs dismissal evidence (Codex B2-F2)", () => {
+  type Tweak = (s: MergeSuggestion) => MergeSuggestion;
+  /** suggestMerge, with each suggestion passed through `tweak` (non-material edits only). */
+  const tweaked = (tweak: Tweak): Comparator => async (d, input, date) => {
+    const r = await suggestMerge(d, input, date);
+    return { ...r, suggestions: r.suggestions.map(tweak) };
+  };
+  const swap: Tweak = (s) => ({ ...s, mergeAway: s.keep, keep: s.mergeAway });
+  const describeAnew: Tweak = (s) => ({ ...s, reason: `${s.reason} (reworded)`, keep: { ...s.keep, name: `${s.keep.name} (renamed)` } });
+  /** Usage counters through the app: one more open by a non-owner (no tier change, nothing audited as a watched change). */
+  const moreUsage = async () => void (await recordUsage(db, { assetId: INSIGHT, userId: "OWN-T" }, DAY));
+  const cases: { name: string; setup?: () => Promise<void>; compare?: Comparator; check: (e: Finding["evidence"]) => void }[] = [
+    { name: "usage counters", setup: moreUsage, check: (e) => assert.equal(sideOf({ evidence: e } as Finding, INSIGHT).appOpens90d, 1) },
+    { name: "comparator direction", compare: tweaked(swap), check: (e) => assert.equal(e.keep.assetId, "AST-1") },
+    { name: "descriptive evidence", compare: tweaked(describeAnew), check: (e) => assert.match(e.reason, /\(reworded\)$/) },
+  ];
+
+  for (const c of cases) {
+    it(`open finding: ${c.name} changed => current evidence refreshed, still open, same fingerprint`, async () => {
+      const f = await openFinding();
+      assert.equal(f.evidence.keep.assetId, INSIGHT, "fixture: the insight is the kept side");
+      await c.setup?.();
+      const mark = await maxAuditId();
+      const r = await periodic(c.compare);
+      assert.equal(r.summary!.reassessment!.counts.unchanged, 1);
+      const after = (await getFinding(db, f.findingId))!;
+      assert.deepEqual([after.status, after.fingerprint, after.lastSeen.runId], ["open", f.fingerprint, r.runId]);
+      assert.notDeepEqual(after.evidence, f.evidence);
+      c.check(after.evidence);
+      assert.deepEqual(await auditSince(mark), []);
+    });
+
+    it(`dismissed finding: ${c.name} changed => stays dismissed, dismissal evidence kept, current evidence refreshed`, async () => {
+      const f = await openFinding();
+      const d = await dismissFinding(db, { findingId: f.findingId, actor: "manager", reason: "Known overlap." });
+      assert.deepEqual(d.dismissal?.evidence, f.evidence, "dismissal records the evidence it was based on");
+      await c.setup?.();
+      const mark = await maxAuditId();
+      const r = await periodic(c.compare);
+      assert.equal(r.summary!.reassessment!.counts.suppressed, 1);
+      const after = (await getFinding(db, f.findingId))!;
+      assert.deepEqual([after.status, after.fingerprint, after.dismissal?.reason, after.dismissal?.fingerprint], ["dismissed", f.fingerprint, "Known overlap.", f.fingerprint]);
+      assert.deepEqual(after.dismissal?.evidence, f.evidence, "dismissal basis preserved");
+      c.check(after.evidence);
+      assert.deepEqual(await auditSince(mark), [], "not reopened, nothing audited");
+
+      // A material change still reopens per the existing rules, and clears the dismissal with its evidence.
+      await recordUsage(db, { assetId: INSIGHT, userId: "OWN-R" }, DAY); // promoted to Personal
+      const again = await periodic(c.compare);
+      assert.equal(again.summary!.reassessment!.counts.reopened, 1);
+      const reopened = (await getFinding(db, f.findingId))!;
+      assert.deepEqual([reopened.status, reopened.dismissal], ["open", null]);
+      assert.equal(sideOf(reopened, INSIGHT).tier, "personal");
+      assert.equal((await db.execute({ sql: `SELECT dismissed_evidence FROM scheduler_findings WHERE finding_id = ?`, args: [f.findingId] })).rows[0].dismissed_evidence, null);
+    });
+  }
+
+  it("an incremental re-observation of a dismissed finding also refreshes current evidence and keeps the dismissal basis", async () => {
+    const f = await openFinding();
+    await dismissFinding(db, { findingId: f.findingId, actor: "manager", reason: "Known overlap." });
+    await moreUsage();
+    // A watched audit row for the insight with no material change (the audit log only refuses updates and deletes).
+    await db.execute({
+      sql: `INSERT INTO audit_log (sim_date, actor, action, asset_id, policy_version, rationale, evidence, created_at)
+            VALUES (?, 'fixture', 'promoted', ?, 'fixture', 'Fixture: watched change without a material change.', '{}', ?)`,
+      args: [DAY, INSIGHT, new Date().toISOString()],
+    });
+    const inc = await runIncremental(db, { actor: "manager", compare: tweaked(describeAnew) });
+    assert.deepEqual([inc.summary!.findings.suppressed, inc.summary!.findings.reopened], [1, 0]);
+    const after = (await getFinding(db, f.findingId))!;
+    assert.deepEqual([after.status, after.fingerprint, after.dismissal?.evidence], ["dismissed", f.fingerprint, f.evidence]);
+    assert.equal(sideOf(after, INSIGHT).appOpens90d, 1);
+    assert.match(after.evidence.reason, /\(reworded\)$/);
+    assert.equal(after.evidence.triggers[0]?.action, "promoted");
   });
 });
 
@@ -518,12 +598,42 @@ describe("schema migration from B1", () => {
     assert.match(sql, /resolution TEXT/);
     const f = (await getFinding(db, "FND-old"))!;
     assert.deepEqual([f.status, f.observations, f.dismissal?.reason, f.proposalId, f.resolution], ["dismissed", 3, "why", "PRP-1", null]);
+    assert.deepEqual(f.dismissal?.evidence, {}, "B2-F2 backfill: a dismissed row's stored evidence is what it was dismissed on");
     await db.execute(`UPDATE scheduler_findings SET status = 'resolved' WHERE finding_id = 'FND-old'`);
     await assert.rejects(db.execute(`UPDATE scheduler_findings SET status = 'bogus'`), /CHECK constraint/);
     assert.equal((await db.execute(`SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'scheduler_findings_b2'`)).rows[0].n, 0);
     // Idempotent: nothing to do on the next call.
     await ensureScheduler(db);
     assert.equal((await getFinding(db, "FND-old"))?.status, "resolved");
+  });
+});
+
+describe("schema migration from B2 (before B2-F2)", () => {
+  it("adds dismissed_evidence, backfills it for rows with a dismissal only, keeps every row; idempotent", async () => {
+    const f = await openFinding();
+    await dismissFinding(db, { findingId: f.findingId, actor: "manager", reason: "Known overlap." });
+    await db.execute(`INSERT INTO scheduler_findings (finding_id, dedup_key, rule_id, rule_version, asset_ids, status, evidence, fingerprint,
+                        first_seen_at, first_seen_sim_date, first_run_id, last_seen_at, last_seen_sim_date, last_run_id, observations)
+                      SELECT 'FND-open', 'active_overlap:X|Y', rule_id, rule_version, '["X","Y"]', 'open', evidence, fingerprint,
+                        first_seen_at, first_seen_sim_date, first_run_id, last_seen_at, last_seen_sim_date, last_run_id, 1 FROM scheduler_findings`);
+    // Recreate the table as B2 shipped it (no dismissed_evidence), keeping the rows.
+    const current = (await db.execute(`SELECT sql FROM sqlite_master WHERE name = 'scheduler_findings'`)).rows[0].sql as string;
+    const b2 = current.replace(/,\s*dismissed_evidence TEXT/, "").replace("scheduler_findings", "scheduler_findings_pre");
+    assert.doesNotMatch(b2, /dismissed_evidence/);
+    await db.execute(b2);
+    const cols = (await db.execute(`SELECT name FROM pragma_table_info('scheduler_findings_pre')`)).rows.map((r) => r.name as string).join(", ");
+    await db.execute(`INSERT INTO scheduler_findings_pre (${cols}) SELECT ${cols} FROM scheduler_findings`);
+    await db.execute(`DROP TABLE scheduler_findings`);
+    await db.execute(`ALTER TABLE scheduler_findings_pre RENAME TO scheduler_findings`);
+
+    await ensureScheduler(db);
+    const sql = (await db.execute(`SELECT sql FROM sqlite_master WHERE name = 'scheduler_findings'`)).rows[0].sql as string;
+    assert.match(sql, /dismissed_evidence TEXT/);
+    const dismissed = (await getFinding(db, f.findingId))!;
+    assert.deepEqual([dismissed.status, dismissed.dismissal?.reason, dismissed.dismissal?.evidence], ["dismissed", "Known overlap.", f.evidence]);
+    assert.deepEqual([(await getFinding(db, "FND-open"))?.status, (await getFinding(db, "FND-open"))?.dismissal], ["open", null]);
+    await ensureScheduler(db);
+    assert.deepEqual((await getFinding(db, f.findingId))!.dismissal?.evidence, f.evidence);
   });
 });
 

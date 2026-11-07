@@ -2,10 +2,16 @@
 // dedup key (rule + sorted asset pair); repeated observations update it.
 //
 // Re-observation rules (tested in tests/scheduler.test.ts):
-// - open, same fingerprint      -> stays open; last seen + count updated ("unchanged")
+// - open, same fingerprint      -> stays open; current evidence refreshed, last seen + count updated ("unchanged")
 // - open, new fingerprint       -> stays open; evidence replaced ("updated")
-// - dismissed, fingerprint it was dismissed on -> stays dismissed; last seen + count updated ("suppressed")
+// - dismissed, fingerprint it was dismissed on -> stays dismissed; current evidence refreshed,
+//   dismissal evidence kept, last seen + count updated ("suppressed")
 // - dismissed, new fingerprint  -> open again, dismissal cleared, audited ("reopened")
+// Current evidence (`evidence`) always shows the latest observation (Codex
+// B2-F2), so usage counters, merge direction and descriptive text stay
+// current; only the fingerprint (material basis) decides suppression. The
+// evidence a dismissal was based on is kept apart (`dismissed_evidence`,
+// Finding.dismissal.evidence) until the dismissal is cleared.
 // - resolved / superseded (Mode 3, B2): the overlap is back. If the finding
 //   was dismissed before it was resolved and the evidence is the one it was
 //   dismissed on, it goes back to dismissed ("suppressed"); otherwise it
@@ -55,6 +61,7 @@ function toFinding(r: Row): Finding {
           at: r.dismissed_at as string,
           simDate: r.dismissed_sim_date as string,
           fingerprint: r.dismissed_fingerprint as string,
+          evidence: typeof r.dismissed_evidence === "string" && r.dismissed_evidence ? (JSON.parse(r.dismissed_evidence) as OverlapEvidence) : null,
         }
       : null,
     proposalId: (r.proposal_id as string | null) ?? null,
@@ -108,18 +115,19 @@ export async function applyObservations(
       });
       counts[same ? "unchanged" : "updated"]++;
     } else if (f.dismissal && f.dismissal.fingerprint === o.fingerprint) {
-      // Same evidence it was dismissed on: stays dismissed; the stored evidence stays what was dismissed.
+      // Same material evidence it was dismissed on: stays dismissed. Current evidence is refreshed;
+      // the evidence it was dismissed on stays in dismissed_evidence.
       await tx.execute({
-        sql: `UPDATE scheduler_findings SET last_seen_at = ?, last_seen_sim_date = ?, last_run_id = ?, observations = observations + 1
-              WHERE finding_id = ?`,
-        args: [...seen, f.findingId],
+        sql: `UPDATE scheduler_findings SET evidence = ?, rule_version = ?, last_seen_at = ?, last_seen_sim_date = ?, last_run_id = ?,
+                observations = observations + 1 WHERE finding_id = ?`,
+        args: [JSON.stringify(o.evidence), OVERLAP_RULE.version, ...seen, f.findingId],
       });
       counts.suppressed++;
     } else {
       await tx.execute({
         sql: `UPDATE scheduler_findings SET status = 'open', evidence = ?, fingerprint = ?, rule_version = ?, last_seen_at = ?,
                 last_seen_sim_date = ?, last_run_id = ?, observations = observations + 1, dismissed_by = NULL, dismissed_reason = NULL,
-                dismissed_at = NULL, dismissed_sim_date = NULL, dismissed_fingerprint = NULL
+                dismissed_at = NULL, dismissed_sim_date = NULL, dismissed_fingerprint = NULL, dismissed_evidence = NULL
               WHERE finding_id = ?`,
         args: [JSON.stringify(o.evidence), o.fingerprint, OVERLAP_RULE.version, ...seen, f.findingId],
       });
@@ -147,11 +155,11 @@ async function recur(tx: Transaction, f: Finding, o: Observation, ctx: { runId: 
   const seen = [ctx.nowIso, ctx.simDate, ctx.runId] as const;
   const was = f.resolution ? `${f.status} (${f.resolution.reason}, run ${f.resolution.runId})` : f.status;
   if (f.dismissal && f.dismissal.fingerprint === o.fingerprint) {
-    // Keeps the evidence it was dismissed on, as a suppressed observation does.
+    // As a suppressed observation: current evidence refreshed, the dismissal (and its evidence) kept.
     await tx.execute({
-      sql: `UPDATE scheduler_findings SET status = 'dismissed', resolution = NULL, last_seen_at = ?, last_seen_sim_date = ?, last_run_id = ?,
-              observations = observations + 1 WHERE finding_id = ?`,
-      args: [...seen, f.findingId],
+      sql: `UPDATE scheduler_findings SET status = 'dismissed', resolution = NULL, evidence = ?, rule_version = ?, last_seen_at = ?,
+              last_seen_sim_date = ?, last_run_id = ?, observations = observations + 1 WHERE finding_id = ?`,
+      args: [JSON.stringify(o.evidence), OVERLAP_RULE.version, ...seen, f.findingId],
     });
     await appendAudit(tx, {
       simDate: ctx.simDate,
@@ -168,7 +176,7 @@ async function recur(tx: Transaction, f: Finding, o: Observation, ctx: { runId: 
   await tx.execute({
     sql: `UPDATE scheduler_findings SET status = 'open', resolution = NULL, evidence = ?, fingerprint = ?, rule_version = ?, last_seen_at = ?,
             last_seen_sim_date = ?, last_run_id = ?, observations = observations + 1, dismissed_by = NULL, dismissed_reason = NULL,
-            dismissed_at = NULL, dismissed_sim_date = NULL, dismissed_fingerprint = NULL
+            dismissed_at = NULL, dismissed_sim_date = NULL, dismissed_fingerprint = NULL, dismissed_evidence = NULL
           WHERE finding_id = ?`,
     args: [JSON.stringify(o.evidence), o.fingerprint, OVERLAP_RULE.version, ...seen, f.findingId],
   });
@@ -203,7 +211,7 @@ export const emptyReassessmentCounts = (): ReassessmentCounts => ({
  * Writes one reassessment's decisions inside the commit transaction. Each
  * finding is re-read first: if its status, fingerprint or last run changed
  * since evaluation (another run, a dismissal), it is skipped and left as is.
- * - open, same fingerprint: last seen + count only (evidence kept)
+ * - open, same fingerprint: current evidence refreshed, last seen + count ("unchanged")
  * - open, new fingerprint: evidence replaced ("updated")
  * - dismissed: suppressed / reopened (audited) exactly as applyObservations
  * - overlap gone: status resolved with the reason and evidence (audited);
@@ -268,24 +276,18 @@ export async function applyReassessment(
     const o = d.observation;
     if (was.status === "open") {
       const same = was.fingerprint === o.fingerprint;
-      if (same) {
-        await tx.execute({
-          sql: `UPDATE scheduler_findings SET last_seen_at = ?, last_seen_sim_date = ?, last_run_id = ?, observations = observations + 1 WHERE finding_id = ?`,
-          args: [...seen, was.findingId],
-        });
-      } else {
-        await tx.execute({
-          sql: `UPDATE scheduler_findings SET evidence = ?, fingerprint = ?, rule_version = ?, last_seen_at = ?, last_seen_sim_date = ?,
-                  last_run_id = ?, observations = observations + 1 WHERE finding_id = ?`,
-          args: [JSON.stringify(o.evidence), o.fingerprint, OVERLAP_RULE.version, ...seen, was.findingId],
-        });
-      }
+      // Current evidence is refreshed either way (B2-F2); the fingerprint only decides unchanged vs updated.
+      await tx.execute({
+        sql: `UPDATE scheduler_findings SET evidence = ?, fingerprint = ?, rule_version = ?, last_seen_at = ?, last_seen_sim_date = ?,
+                last_run_id = ?, observations = observations + 1 WHERE finding_id = ?`,
+        args: [JSON.stringify(o.evidence), o.fingerprint, OVERLAP_RULE.version, ...seen, was.findingId],
+      });
       counts[same ? "unchanged" : "updated"]++;
       results.push({
         ...base,
         toStatus: "open",
         outcome: same ? "unchanged" : "updated",
-        reason: same ? "Still a merge overlap on the same evidence." : "Still a merge overlap; scope, KPIs or tier changed, evidence replaced.",
+        reason: same ? "Still a merge overlap on the same material evidence; current evidence refreshed." : "Still a merge overlap; scope, KPIs or tier changed, evidence replaced.",
         fingerprint: o.fingerprint,
       });
       continue;
@@ -298,7 +300,7 @@ export async function applyReassessment(
       ...base,
       toStatus: outcome === "suppressed" ? "dismissed" : "open",
       outcome,
-      reason: outcome === "suppressed" ? "Still a merge overlap on the evidence it was dismissed on; stays dismissed." : "Still a merge overlap, but the evidence changed since it was dismissed; open again.",
+      reason: outcome === "suppressed" ? "Still a merge overlap on the material evidence it was dismissed on; stays dismissed (current evidence refreshed)." : "Still a merge overlap, but the evidence changed since it was dismissed; open again.",
       fingerprint: o.fingerprint,
     });
   }
@@ -330,7 +332,8 @@ export async function dismissFinding(
     const simDate = (await readClock(tx)).date;
     await tx.execute({
       sql: `UPDATE scheduler_findings SET status = 'dismissed', dismissed_by = ?, dismissed_reason = ?, dismissed_at = ?,
-              dismissed_sim_date = ?, dismissed_fingerprint = fingerprint WHERE finding_id = ? AND status = 'open'`,
+              dismissed_sim_date = ?, dismissed_fingerprint = fingerprint, dismissed_evidence = evidence
+            WHERE finding_id = ? AND status = 'open'`,
       args: [actor, reason, nowIso, simDate, f.findingId],
     });
     await appendAudit(tx, {
