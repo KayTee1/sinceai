@@ -268,3 +268,19 @@ Alternatives considered: owner-only (original rule); any repeat use promotes
 to Personal.
 Agreed by: Viet
 
+D18: F1 demo strategy: one team-authored demo request (2026-11-07)
+Status: accepted. Resolves REVIEW F1; D15's every-market build gate is unchanged.
+Choice and why: no request in the pack reaches a build proposal (F1), so the
+demo uses TEAM-REQ-01, written by the team and labelled as ours: "Net sales
+and forecast variance for Xarelto in North America, by country." Checked on
+the real pack: Net Sales is covered by existing assets, Forecast Variance
+(KPI-042) by none in scope, and both KPIs compute for US and CA, so the
+analysis honestly recommends a build. Only the request text is ours; the
+catalog, KPIs, values and rules are the pack's and ours as before. The
+request lives in code (src/services/steward/team-requests.ts), is never
+written into Business_Requests, and every source reference names
+"Team_Requests (team-authored)". The agent says so when it uses one.
+Alternatives considered: partial builds for computable markets (changes D15);
+no live build in the demo.
+Agreed by: Viet
+

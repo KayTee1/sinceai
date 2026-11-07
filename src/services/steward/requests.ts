@@ -3,6 +3,7 @@
 // region names and the word "global" in the request text. Anything else is
 // left to the structured context; any disagreement asks the requester.
 import type { Client } from "@libsql/client";
+import { TEAM_REQUEST_SHEET, findTeamRequest, isTeamRequest } from "./team-requests";
 import type { Clarification, Scope, ScopeConflict, SourceRef } from "./types";
 
 export const ALL_PRODUCTS = "All Pharma";
@@ -31,7 +32,8 @@ export async function loadRequest(db: Client, requestId: string): Promise<Reques
           FROM Business_Requests WHERE request_id = ?`,
     args: [requestId.trim().toUpperCase()],
   });
-  return (res.rows[0] as unknown as RequestRow) ?? null;
+  // Pack requests first; then team-authored demo requests (F1, labelled ours).
+  return (res.rows[0] as unknown as RequestRow) ?? findTeamRequest(requestId);
 }
 
 export async function loadVocabulary(db: Client): Promise<Vocabulary> {
@@ -53,7 +55,8 @@ export async function loadVocabulary(db: Client): Promise<Vocabulary> {
 }
 
 export function requestSource(r: RequestRow): SourceRef {
-  return { sheet: "Business_Requests", row: r._source_row, id: r.request_id };
+  const sheet = isTeamRequest(r.request_id) ? TEAM_REQUEST_SHEET : "Business_Requests";
+  return { sheet, row: r._source_row, id: r.request_id };
 }
 
 function mentions(text: string, phrase: string): boolean {

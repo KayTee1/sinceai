@@ -1,5 +1,11 @@
 # Handoff
 
+- **F1 resolved (D18, `feat/F1-team-demo-request`):** demo build trigger is
+  TEAM-REQ-01 (team-authored, labelled), "Net sales and forecast variance for
+  Xarelto in North America". Reaches build_proposal on the real pack (local
+  test). Loader falls back to `team-requests.ts`; Business_Requests untouched.
+- **Local DB needs a rebuild:** databases imported before #14 lack
+  `_source_row`; run `rm data/private/steward.db && npm run db:import`.
 - **Usage + counts (Viet / Claude, `feat/T7-usage-counts`):** Employee
   "viewing as" picker (D13); opening a dashboard logs an app open for that
   person (manager browsing is not logged). Manager before/after panel on the

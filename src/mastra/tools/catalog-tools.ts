@@ -1,13 +1,14 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { rows } from "@/db/client";
+import { TEAM_REQUEST_SHEET, findTeamRequest } from "@/services/steward/team-requests";
 
 // Read-only tools over the imported catalog. They return source IDs so the
 // agent can cite evidence; they never write.
 
 export const getBusinessRequest = createTool({
   id: "get-business-request",
-  description: "Look up a business request from the catalog by ID, e.g. REQ-0001.",
+  description: "Look up a business request by ID, e.g. REQ-0001 (Bayer pack) or TEAM-REQ-01 (team-authored demo request).",
   inputSchema: z.object({ requestId: z.string().describe("Request ID such as REQ-0001") }),
   execute: async ({ requestId }) => {
     const [req] = await rows<Record<string, unknown>>(
@@ -15,7 +16,15 @@ export const getBusinessRequest = createTool({
        FROM Business_Requests WHERE request_id = ?`,
       [requestId.trim().toUpperCase()],
     );
-    return req ? { found: true, request: { ...req } } : { found: false, request: null };
+    if (req) return { found: true, source: "Business_Requests", request: { ...req } };
+    // F1: team-authored demo requests are labelled as ours, never as Bayer data.
+    const team = findTeamRequest(requestId);
+    if (team) {
+      const { _source_row: _row, ...request } = team;
+      void _row;
+      return { found: true, source: TEAM_REQUEST_SHEET, note: "Team-authored demo request, not from the Bayer pack.", request };
+    }
+    return { found: false, request: null };
   },
 });
 
