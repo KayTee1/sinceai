@@ -9,6 +9,8 @@ import { LifecycleProvider, useLifecycle } from "./lifecycle/lifecycle-context";
 import { ClockBar } from "./lifecycle/clock-bar";
 import { Inbox } from "./lifecycle/inbox";
 import { PipelineView } from "./agentic/pipeline-view";
+import { SchedulerView } from "./agentic/scheduler-view";
+import { AGENTIC_SIDE_TABS, type AgenticSideTab } from "@/lib/scheduler-client";
 
 type Tab = "agentic" | "dashboard";
 
@@ -45,9 +47,13 @@ export function StewardApp({ data }: { data: DashboardData }) {
   );
 }
 
-type Side = "pipeline" | "inbox";
+type Side = AgenticSideTab;
 
-// T23: the chat with the live Pipeline view beside it (default) or the approval inbox.
+const SIDE_LABEL: Record<Side, string> = { pipeline: "Pipeline", scheduler: "Scheduler", inbox: "Inbox" };
+
+// T23: the chat with the live Pipeline view beside it (default), the
+// governance Scheduler (T24) or the approval inbox. ChatView sits outside the
+// aside, so switching side tabs never remounts the chat.
 function AgenticLayout() {
   const [side, setSide] = useState<Side>("pipeline");
   const { data } = useLifecycle();
@@ -58,21 +64,21 @@ function AgenticLayout() {
         <ChatView />
       </div>
       <aside
-        className={`flex shrink-0 flex-col border-l border-line bg-surface ${side === "pipeline" ? "w-[46%] min-w-[420px]" : "w-[380px]"}`}
+        className={`flex shrink-0 flex-col border-l border-line bg-surface ${side === "inbox" ? "w-[380px]" : "w-[46%] min-w-[420px]"}`}
       >
         <div className="flex shrink-0 gap-1 border-b border-line px-3 py-2">
-          {(["pipeline", "inbox"] as Side[]).map((s) => (
+          {AGENTIC_SIDE_TABS.map((s) => (
             <button
               key={s}
               type="button"
               onClick={() => setSide(s)}
               className={`rounded-sm px-2.5 py-1 text-xs font-medium ${side === s ? "bg-navy text-white" : "text-ink-2 hover:bg-canvas"}`}
             >
-              {s === "pipeline" ? "Pipeline" : `Inbox${waiting ? ` (${waiting})` : ""}`}
+              {s === "inbox" && waiting ? `Inbox (${waiting})` : SIDE_LABEL[s]}
             </button>
           ))}
         </div>
-        <div className="min-h-0 flex-1">{side === "pipeline" ? <PipelineView /> : <Inbox />}</div>
+        <div className="min-h-0 flex-1">{side === "pipeline" ? <PipelineView /> : side === "scheduler" ? <SchedulerView /> : <Inbox />}</div>
       </aside>
     </div>
   );
