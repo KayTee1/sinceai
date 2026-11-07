@@ -1,5 +1,19 @@
 # Handoff
 
+- **New direction (D22, both developers; not implemented):** after T16B and
+  the current golden path, plan T19's additional team-authored, LLM-generated
+  synthetic estate scenarios (KPI forks, duplicate/overlapping assets, stale
+  products, governance inconsistencies). Preserve the original Bayer workbook
+  and imported records; carry distinct origins through analysis, recommendations,
+  audit and UI. Prefer reviewed, deterministic fixtures with known outcomes;
+  real validation/governance evaluates them, never hardcoded success. Forks may
+  be legitimate; an LLM cannot authorize retirement or delete source/audit data.
+  Target an evidence-backed, human-governed before/after demo. Schema, seeding,
+  detection, UI, owner, schedule and size are undecided. Separate from D18's
+  TEAM-REQ-01 and current tool/build contracts. Integration context checked
+  2026-11-07: PR #18 remains open, ready for review; T16B is local on
+  `feat/T16B-live-orchestrator`, awaiting independent review. Finish that work
+  first; this documentation does not change existing task/PR statuses.
 - **D21 auto-renew (`feat/auto-renew-used`):** at lease end, used assets
   (any app view in 90 days, or pack telemetry >= 10 users/month) with an
   active owner renew automatically; unused ones get a retire proposal;

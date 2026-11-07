@@ -340,3 +340,41 @@ Alternatives considered: review every asset (D12-D14); auto-archive unused
 assets (rejected in D16).
 Agreed by: Viet
 
+D22: LLM-authored synthetic analytics sprawl scenarios (2026-11-07)
+Status: accepted direction (both developers); implementation is planned, not
+built. Complete T16B and the current golden-path integration first.
+Choice and why: augment the original Bayer-provided synthetic estate with
+additional **team-authored, LLM-generated synthetic data** to demonstrate
+realistic analytics sprawl beyond querying the workbook. Candidate scenarios
+include KPI forks with different formulas, filters or meanings; duplicate or
+near-duplicate dashboards; noncanonical, unapproved or misleading definitions;
+overlapping assets; stale or underused products; and ownership, lineage or
+other governance inconsistencies. These are scenario ideas, not claims that
+the current system detects or resolves every case. A forked KPI may express a
+legitimate business requirement; a difference alone does not make it invalid.
+
+- Preserve the original Bayer workbook and imported source records. Generated
+  records and planted problems must never be attributed to Bayer's dataset.
+  Keep origins distinguishable in analysis, recommendations, audit and UI.
+- Prefer generating scenarios once, reviewing them and storing deterministic
+  fixtures with known expected outcomes for regression tests. Deterministic
+  validation and governance logic must evaluate them; do not hardcode
+  successful detection results. The LLM assists fixture authoring, not approval.
+- Planned demo: labelled original-plus-generated estate -> explain duplication
+  and KPI conflicts -> evidence-backed reuse, consolidation, canonicalization
+  or retirement recommendations -> human-governed decisions and required
+  lifecycle transitions -> measurable before/after results. This is not yet an
+  implemented capability. "Eliminating" sprawl means approved consolidation,
+  retirement, deprecation or other governed actions, never silent deletion of
+  source records or audit history. The LLM cannot bypass governance or
+  independently authorize retirement.
+- Separate from T16A, T16B, T17 and D18's existing TEAM-REQ-01; complements
+  their contracts rather than replacing them. D14-D21 remain unchanged.
+
+Open: fixture schema, seed workflow, detection methods, UI presentation,
+implementation owner, schedule and final dataset size. No approval of these
+implementation details is implied. Plan and implement only after T16B and the
+golden path; see T19 in PLAN.
+Alternative: regenerating scenarios each demo; reviewed fixtures are preferred
+for repeatability.
+Agreed by: KayTee + Viet (direction only, confirmed by the user)
