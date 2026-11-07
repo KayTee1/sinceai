@@ -1,5 +1,5 @@
 // T24 (B4): pure logic behind the Scheduler tab (src/lib/scheduler-client.ts).
-// No DOM library in the repo, so the React parts are not rendered here; this
+// The React tab itself is rendered in scheduler-view.test.tsx (happy-dom); this
 // covers response/error mapping, validation, generic status/job/summary
 // rendering and the fetch helpers' requests (with an injected fetch stub).
 import { describe, it } from "node:test";

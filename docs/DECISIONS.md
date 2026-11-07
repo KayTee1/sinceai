@@ -491,9 +491,10 @@ Choice and why:
   evaluates at the stored clock date.
 - Mode 3 (B2, job `periodic_reassessment`, manual trigger only): re-checks
   open and dismissed findings with the same rule; a finding whose overlap no
-  longer holds is `resolved` (with a reason), one replaced by a new pair is
-  `superseded`; pending proposals that rest on changed findings are reported
-  (`staleProposals`, relation `linked` / `same_pair` / `shares_asset`),
+  longer holds is `resolved` (with a reason). `superseded` is reserved in the
+  schema, types and API filter, but no transition produces it yet; no
+  superseding behaviour is implemented. Pending proposals that rest on
+  changed findings are reported (`staleProposals`, relation `linked` / `same_pair` / `shares_asset`),
   never changed.
 - Proposals from findings (B3): a manager picks the direction (source merged
   into target); the backend re-validates both assets, scope, KPIs, tier and

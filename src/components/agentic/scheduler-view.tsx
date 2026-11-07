@@ -28,6 +28,14 @@ const api = schedulerApi();
 
 export function SchedulerView() {
   const { data: lifecycle } = useLifecycle();
+  // Re-read when the simulated date settles (lifecycle changes add audit
+  // rows); not every tick while the clock runs.
+  const clockKey = lifecycle?.clock.running ? "running" : (lifecycle?.clock.date ?? "");
+  return <SchedulerPanel clockKey={clockKey} />;
+}
+
+/** The tab body; exported so tests can render it without the lifecycle provider. */
+export function SchedulerPanel({ clockKey }: { clockKey: string }) {
   const [section, setSection] = useState<Section>("jobs");
   const [statusFilter, setStatusFilter] = useState("open");
   const [overview, setOverview] = useState<SchedulerOverviewResponse | null>(null);
@@ -38,27 +46,37 @@ export function SchedulerView() {
   const [inFlight, setInFlight] = useState<string | null>(null);
   const [flash, setFlash] = useState<Flash>(null);
 
-  // Only the newest load may write state: an older response (e.g. for the
-  // previous status filter) that lands later is dropped.
+  // `load` is stable and reads the filter from a ref at call time, so an
+  // action that started under an older filter (dismiss while viewing Open,
+  // then switch to Dismissed) refreshes the filter selected when it finishes,
+  // not the one its callback captured. A response is applied only if it is
+  // the newest load AND the filter it asked for is still selected; anything
+  // older is dropped.
+  const filterRef = useRef(statusFilter);
   const loadSeq = useRef(0);
   const load = useCallback(async () => {
     const seq = ++loadSeq.current;
-    const [o, r, f] = await Promise.all([api.overview(), api.runs(20), api.findings(statusFilter)]);
-    if (seq !== loadSeq.current) return;
+    const filter = filterRef.current;
+    const [o, r, f] = await Promise.all([api.overview(), api.runs(20), api.findings(filter)]);
+    if (seq !== loadSeq.current || filter !== filterRef.current) return;
     const firstError = [o, r, f].find((x): x is Extract<ApiResult<unknown>, { ok: false }> => !x.ok);
     setLoadError(firstError ? firstError.message : null);
     if (o.ok) setOverview(o.data);
     if (r.ok) setRuns(r.data.runs);
     if (f.ok) setFindings({ total: f.data.total, list: f.data.findings });
     setLoading(false);
-  }, [statusFilter]);
+  }, []);
 
-  // Re-read on mount, on a filter change and when the simulated date settles
-  // (lifecycle changes add audit rows); not every tick while the clock runs.
-  const clockKey = lifecycle?.clock.running ? "running" : (lifecycle?.clock.date ?? "");
+  const selectFilter = (s: string) => {
+    if (s === filterRef.current) return;
+    filterRef.current = s;
+    setStatusFilter(s);
+  };
+
+  // Re-read on mount, on a filter change and when the simulated date settles.
   useEffect(() => {
     Promise.resolve().then(load);
-  }, [load, clockKey]);
+  }, [load, statusFilter, clockKey]);
 
   // While the server reports a run in progress (e.g. started elsewhere), poll.
   const anyRunning = overview?.jobs.some((j) => j.running) ?? false;
@@ -175,7 +193,7 @@ export function SchedulerView() {
                   key={s}
                   type="button"
                   aria-pressed={statusFilter === s}
-                  onClick={() => setStatusFilter(s)}
+                  onClick={() => selectFilter(s)}
                   className={`rounded-sm px-2 py-0.5 font-medium capitalize ${
                     statusFilter === s ? "bg-navy text-white" : "text-ink-2 hover:bg-surface"
                   }`}
