@@ -322,3 +322,21 @@ Alternatives considered: keep the catalog for employees (D8); employees see
 business performance and catalog side by side (D19 as first built).
 Agreed by: Viet
 
+D21: Used assets renew automatically at lease end (2026-11-07)
+Status: accepted. Refines D12-D16 (lease review).
+Choice and why: reviewing every asset every 90 days creates work for IT and
+owners even when the asset is clearly in use. At lease end the engine now
+checks use: any in-app view in the last 90 days, or pack telemetry averaging
+at least 10 monthly users over its latest 3 months (the pack is a snapshot
+ending Oct 2026; its latest months stand in for current telemetry). A used
+asset with an active owner renews automatically for 90 days in the same tier,
+logged as a policy action. A used asset without an active owner goes straight
+to the region's data steward (Rule 8: missing owners block automatic
+changes). Only unused assets get a retire proposal for the owner; silence
+still escalates and never archives (D16). On the pack a 90-day fast-forward
+renews 178 assets automatically, opens 134 retire reviews and sends 52 to
+stewards. Policy version lifecycle-v4.
+Alternatives considered: review every asset (D12-D14); auto-archive unused
+assets (rejected in D16).
+Agreed by: Viet
+

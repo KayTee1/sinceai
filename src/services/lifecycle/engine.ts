@@ -210,55 +210,81 @@ async function buildEvidence(tx: Db, state: AssetState, date: string): Promise<R
   };
 }
 
-function reviewProposalType(ev: ReviewEvidence): { type: Proposal["type"]; rationale: string } {
-  const lowUsage = (ev.avgMonthlyUsers ?? 0) < LOW_USAGE_USERS && ev.appOpens90d === 0;
-  if (lowUsage) {
-    return {
-      type: "retire",
-      rationale:
-        `Lease ended. Average ${ev.avgMonthlyUsers ?? 0} monthly users over the last ${ev.usageMonths.length} months ` +
-        `(below ${LOW_USAGE_USERS}) and no app opens in 90 days. Proposed: retire (archive, restorable).`,
-    };
-  }
-  return {
-    type: "renew",
-    rationale:
-      `Lease ended. Average ${ev.avgMonthlyUsers ?? 0} monthly users over the last ${ev.usageMonths.length} months` +
-      `${ev.appOpens90d ? ` and ${ev.appOpens90d} app opens` : ""}. Proposed: renew for ${LEASE_DAYS} days.`,
-  };
+/** D21: used = any in-app view in the last 90 days, or pack telemetry at or above the usage threshold. */
+function wasUsed(ev: ReviewEvidence): boolean {
+  return ev.appOpens90d > 0 || (ev.avgMonthlyUsers ?? 0) >= LOW_USAGE_USERS;
 }
 
+function usageText(ev: ReviewEvidence): string {
+  return (
+    `average ${ev.avgMonthlyUsers ?? 0} monthly users over the latest ${ev.usageMonths.length} months of pack telemetry ` +
+    `and ${ev.appOpens90d} app views in the last 90 days`
+  );
+}
+
+/**
+ * Lease end (D21): a used asset with an active owner is renewed automatically,
+ * with no human step. Only unused assets get a retire proposal for the owner;
+ * silence escalates to the steward (D16). A used asset without an active owner
+ * cannot be renewed automatically (Rule 8) and goes straight to the steward.
+ */
 async function openLeaseReview(tx: Db, assetId: string, date: string) {
   const state = await getAssetState(tx, assetId);
   if (!state) return;
   const evidence = await buildEvidence(tx, state, date);
-  const { type, rationale } = reviewProposalType(evidence);
+  const used = wasUsed(evidence);
+
+  if (used && evidence.ownerStatus === "active") {
+    const leaseEnd = addDays(date, LEASE_DAYS);
+    await tx.execute({
+      sql: `UPDATE asset_state SET status = 'active', lease_end = ? WHERE asset_id = ?`,
+      args: [leaseEnd, assetId],
+    });
+    await appendAudit(tx, {
+      simDate: date,
+      actor: "policy",
+      action: "renewed",
+      assetId,
+      policyVersion: POLICY_VERSION,
+      rationale: `Lease ended and the asset is in use (${usageText(evidence)}). Renewed automatically until ${leaseEnd}; tier unchanged.`,
+      evidence,
+    });
+    return;
+  }
+
   const id = `PRP-${assetId}-${date}`;
-  const due = addDays(date, REVIEW_WINDOW_DAYS);
+  const steward = used ? await regionSteward(tx, state.ownerId) : null;
+  const type: Proposal["type"] = used ? "renew" : "retire";
+  const rationale = used
+    ? `Lease ended. In use (${usageText(evidence)}), but the owner is ${evidence.ownerStatus}, so it cannot renew ` +
+      `automatically. Proposed: renew; the data steward confirms and assigns an owner.`
+    : `Lease ended. Not used (${usageText(evidence)}; threshold ${LOW_USAGE_USERS} users). ` +
+      `Proposed: retire (archive, restorable). The owner decides within ${REVIEW_WINDOW_DAYS} days; then it escalates to the data steward.`;
   await tx.execute({
     sql: `INSERT INTO proposals (id, version, type, asset_ids, rationale, evidence, required_approvers, status, created_on, due_on)
-          VALUES (?, 1, ?, ?, ?, ?, ?, 'open', ?, ?)`,
+          VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id,
       type,
       JSON.stringify([assetId]),
       rationale,
       JSON.stringify(evidence),
-      // Owner review: the asset owner decides (Rule 11). No owner -> nobody can approve until one is assigned.
-      JSON.stringify(state.ownerId ? [state.ownerId] : []),
+      // Unused: the owner decides (Rule 11). Used but ownerless: the steward (Rule 8).
+      JSON.stringify(used ? (steward ? [steward] : []) : state.ownerId ? [state.ownerId] : []),
+      used ? "escalated" : "open",
       date,
-      due,
+      used ? null : addDays(date, REVIEW_WINDOW_DAYS),
     ],
   });
   await tx.execute({ sql: `UPDATE asset_state SET status = 'lease_due' WHERE asset_id = ?`, args: [assetId] });
   await appendAudit(tx, {
     simDate: date,
     actor: "scheduler",
-    action: "lease_review_opened",
+    action: used ? "review_escalated" : "lease_review_opened",
     assetId,
     proposalId: id,
     policyVersion: POLICY_VERSION,
-    rationale: `${rationale} Owner has ${REVIEW_WINDOW_DAYS} days to decide; then it escalates to the data steward.`,
+    rationale,
     evidence,
   });
 }

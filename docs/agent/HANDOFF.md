@@ -1,5 +1,9 @@
 # Handoff
 
+- **D21 auto-renew (`feat/auto-renew-used`):** at lease end, used assets
+  (any app view in 90 days, or pack telemetry >= 10 users/month) with an
+  active owner renew automatically; unused ones get a retire proposal;
+  used but ownerless go straight to the steward. Policy `lifecycle-v4`.
 - **D19 + D20 (`feat/T18-data-separation`, PR #23):** Employees see only
   team dashboards (Commercial, Market Access, Supply Chain, Launch wallboards
   on the business facts + built insights). Managers: Team dashboards (with
