@@ -14,6 +14,9 @@ import { proposeMerge } from "../src/services/estate";
 import { decide, getProposal, proposeRetire, readClock, resetLifecycle, restore } from "../src/services/lifecycle";
 import {
   B1_FINDINGS_DDL,
+  dismissFinding,
+  previewFindingProposal,
+  SchedulerError,
   ensureScheduler,
   getFinding,
   listFindings,
@@ -208,4 +211,78 @@ describe("shared merge approvers (estate/merge.ts, Viet; MERGE-APPROVERS)", () =
       });
     },
   );
+});
+
+describe("combined reset and migration (B1 + B2 + B3 schema together)", () => {
+  const n = async (sql: string) => Number((await db.execute(sql)).rows[0].n);
+
+  it("a reset during a periodic run with a raised proposal commits nothing and releases the writer exclusion", async () => {
+    const f = await betavexFinding();
+    await raise(f);
+    await assert.rejects(
+      runReassessment(db, { actor: "manager", compare: noOverlap, beforeCommit: () => resetLifecycle(db, 0) }),
+      (e: unknown) => e instanceof SchedulerError && e.code === "conflict",
+    );
+    await ensureScheduler(db);
+    for (const t of ["scheduler_runs", "scheduler_checkpoints", "scheduler_findings", "scheduler_finding_proposals"]) {
+      assert.equal(await n(`SELECT COUNT(*) AS n FROM ${t}`), 0, t);
+    }
+    assert.equal(await n(`SELECT COUNT(*) AS n FROM proposals WHERE type = 'merge'`), 0);
+    // Neither finding-writing job is left blocked by the interrupted run.
+    assert.equal((await runIncremental(db, { actor: "manager" })).status, "succeeded");
+    assert.equal((await runReassessment(db, { actor: "manager" })).status, "succeeded");
+  });
+
+  it("one ensureScheduler upgrades a B1 database with concurrent running writers, a dismissed finding and no link table", async () => {
+    await ensureScheduler(db);
+    await db.execute(`DROP TABLE scheduler_finding_proposals`);
+    await db.execute(`DROP INDEX scheduler_runs_one_finding_writer`);
+    await db.execute(`DROP TABLE scheduler_findings`);
+    await db.execute(B1_FINDINGS_DDL);
+    await db.execute(`INSERT INTO scheduler_findings (finding_id, dedup_key, rule_id, rule_version, asset_ids, status, evidence, fingerprint,
+                        first_seen_at, first_seen_sim_date, first_run_id, last_seen_at, last_seen_sim_date, last_run_id, observations,
+                        dismissed_by, dismissed_reason, dismissed_at, dismissed_sim_date, dismissed_fingerprint)
+                      VALUES ('FND-d', 'active_overlap:A|B', 'active_overlap', 'overlap-v2', '["A","B"]', 'dismissed', '{"verdict":"merge"}', 'fp',
+                        't', '2026-11-01', 'SCH-1', 't', '2026-11-01', 'SCH-1', 2, 'manager', 'known', 't', '2026-11-01', 'fp')`);
+    for (const [id, job, at] of [["SCH-old", "incremental_overlap", "2026-11-07T10:00:00Z"], ["SCH-new", "periodic_reassessment", "2026-11-07T10:05:00Z"]]) {
+      await db.execute({
+        sql: `INSERT INTO scheduler_runs (run_id, job_id, mode, trigger, actor, sim_date, status, started_at, from_audit_id, to_audit_id, rules, policy_version)
+              VALUES (?, ?, 'manual', 'manual', 'manager', '2026-11-07', 'running', ?, 0, 0, '[]', 'p')`,
+        args: [id, job, at],
+      });
+    }
+    await ensureScheduler(db);
+    const runs = (await db.execute(`SELECT run_id, status, error FROM scheduler_runs ORDER BY run_id`)).rows;
+    assert.deepEqual(runs.map((r) => [r.run_id, r.status]), [["SCH-new", "failed"], ["SCH-old", "running"]], "oldest writer kept");
+    assert.match(String(runs[0].error), /abandoned/);
+    const f = (await getFinding(db, "FND-d"))!;
+    assert.deepEqual([f.status, f.dismissal?.reason, f.dismissal?.evidence, f.proposal, f.resolution], ["dismissed", "known", { verdict: "merge" }, null, null]);
+    assert.ok(await tableSql("scheduler_finding_proposals"));
+    await assert.rejects(
+      db.execute(`INSERT INTO scheduler_runs (run_id, job_id, mode, trigger, actor, sim_date, status, started_at, from_audit_id, to_audit_id, rules, policy_version)
+                  VALUES ('SCH-x', 'periodic_reassessment', 'manual', 'manual', 'manager', '2026-11-07', 'running', 't', 0, 0, '[]', 'p')`),
+      /UNIQUE/,
+    );
+    const before = await db.execute(`SELECT * FROM scheduler_runs ORDER BY run_id`);
+    await ensureScheduler(db);
+    assert.deepEqual((await db.execute(`SELECT * FROM scheduler_runs ORDER BY run_id`)).rows, before.rows, "idempotent");
+  });
+});
+
+describe("imported catalog data", () => {
+  const CATALOG = ["Analytics_Assets", "Asset_KPI_Map", "Owners", "Asset_Usage", "Lineage_Edges"];
+  const snapshot = async () =>
+    Object.fromEntries(await Promise.all(CATALOG.map(async (t) => [t, (await db.execute(`SELECT * FROM ${t} ORDER BY rowid`)).rows] as const)));
+
+  it("a full scheduler cycle (incremental, raise, preview, periodic, dismiss) leaves the imported sheets unchanged", async () => {
+    const f = await betavexFinding();
+    const before = await snapshot();
+    await previewFindingProposal(db, { findingId: f.findingId });
+    await raise(f);
+    await runReassessment(db, { actor: "manager" });
+    await runIncremental(db, { actor: "manager" });
+    const open = (await listFindings(db, { status: "open" })).findings;
+    for (const x of open) await dismissFinding(db, { findingId: x.findingId, actor: "manager", reason: "Fixture: known overlap." });
+    assert.deepEqual(await snapshot(), before);
+  });
 });
