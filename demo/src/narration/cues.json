@@ -1,0 +1,205 @@
+{
+  "version": 1,
+  "film": {
+    "title": "Analytics Steward cinematic demo",
+    "duration": 55,
+    "narrationEndsBy": 54.45,
+    "timingSource": "demo/src/story.ts (T, CHAPTERS, CAPTIONS) at v1 ad4d1a8"
+  },
+  "audio": {
+    "src": "audio/voiceover.mp3",
+    "offset": 0,
+    "measuredDuration": 55.0,
+    "note": "offset = timeline second at which audio time 0 plays. voiceover.mp3 is the owner's single ElevenLabs take, cut only inside its natural pauses and placed per cue by narration/place.py (no time-stretching). Cue start/end are the measured voiced times in the final file. The film is never stretched to fit the audio."
+  },
+  "voice": {
+    "style": "calm, confident, cinematic, professional",
+    "targetRate": "about 4 to 4.5 syllables per second, never rushed",
+    "language": "en"
+  },
+  "pronunciations": [
+    {
+      "term": "Xarelto",
+      "say": "zuh-REL-toh",
+      "ipa": "zəˈrɛltoʊ",
+      "fallbackSpelling": "Zarelto"
+    },
+    {
+      "term": "KPI",
+      "say": "kay-pee-eye (letters)",
+      "fallbackSpelling": "K.P.I."
+    },
+    {
+      "term": "Mastra",
+      "say": "MASS-truh",
+      "note": "confirm with the owner"
+    },
+    {
+      "term": "Lead",
+      "say": "leed (the role, not the metal)"
+    },
+    {
+      "term": "provenance",
+      "say": "PROV-uh-nunss"
+    },
+    {
+      "term": "Analytics Steward",
+      "say": "an-uh-LIT-iks STOO-erd"
+    }
+  ],
+  "chapters": [
+    {
+      "id": "sprawl",
+      "start": 0,
+      "end": 8,
+      "title": "Analytics sprawl"
+    },
+    {
+      "id": "request",
+      "start": 8,
+      "end": 15,
+      "title": "Business request"
+    },
+    {
+      "id": "pipeline",
+      "start": 15,
+      "end": 35,
+      "title": "Mastra investigation"
+    },
+    {
+      "id": "approval",
+      "start": 35,
+      "end": 47,
+      "title": "Human approval"
+    },
+    {
+      "id": "governed",
+      "start": 47,
+      "end": 55,
+      "title": "Resolution and branding"
+    }
+  ],
+  "cues": [
+    {
+      "id": "c01",
+      "chapter": "sprawl",
+      "start": 0.7,
+      "end": 2.67,
+      "text": "Analytics keeps multiplying.",
+      "anchor": "tiles fade in 0-2.6 s; links draw 1.2-3.5 s"
+    },
+    {
+      "id": "c02",
+      "chapter": "sprawl",
+      "start": 3.8,
+      "end": 7.38,
+      "text": "Duplicate dashboards. Conflicting KPI definitions.",
+      "anchor": "'Duplicate dashboards' label 2.4-7.4 s; 'Conflicting KPI definitions' label 3.4-7.6 s"
+    },
+    {
+      "id": "c03",
+      "chapter": "request",
+      "start": 8.2,
+      "end": 10.15,
+      "text": "Then a business question arrives.",
+      "anchor": "TEAM-REQ-01 card flies in 8.0-11.6 s; caption from 8.6 s"
+    },
+    {
+      "id": "c04",
+      "chapter": "request",
+      "start": 10.4,
+      "end": 14.56,
+      "text": "Net sales and forecast variance. Xarelto, North America.",
+      "anchor": "request label 9.4-14.5 s; card lands 11.6 s; collapses to token 14.3-15.0 s"
+    },
+    {
+      "id": "c05",
+      "chapter": "pipeline",
+      "start": 15.5,
+      "end": 18.59,
+      "text": "Analytics Steward maps the request to its KPIs.",
+      "anchor": "Intent gate 15-19 s; mapped KPIs label 16.0-18.9 s"
+    },
+    {
+      "id": "c06",
+      "chapter": "pipeline",
+      "start": 19.6,
+      "end": 22.47,
+      "text": "A Mastra workflow searches the catalog for candidates,",
+      "anchor": "Discovery gate 19-23 s; scan 19.9-22.0 s; candidates label 21.1-23.05 s"
+    },
+    {
+      "id": "c07",
+      "chapter": "pipeline",
+      "start": 23.7,
+      "end": 26.08,
+      "text": "checks for conflicting KPI definitions,",
+      "anchor": "Conflict gate 23-27 s; approved vs variant definition 23.9-26.95 s"
+    },
+    {
+      "id": "c08",
+      "chapter": "pipeline",
+      "start": 27.7,
+      "end": 30.23,
+      "text": "and for existing copies and pending builds.",
+      "anchor": "Duplicate gate 27-31 s; check label 28.2-30.9 s"
+    },
+    {
+      "id": "c09",
+      "chapter": "pipeline",
+      "start": 31.1,
+      "end": 35.14,
+      "text": "Net sales has reuse candidates. Forecast variance is a gap.",
+      "anchor": "Recommend gate 31-35 s; reuse label 31.9-34.85 s; gap label 32.3-34.95 s"
+    },
+    {
+      "id": "c10",
+      "chapter": "approval",
+      "start": 35.45,
+      "end": 38.57,
+      "text": "The gap becomes a proposal. Nothing is built yet.",
+      "anchor": "proposal reaches the boundary 35.0-36.6 s; proposal label 36.6-41.5 s"
+    },
+    {
+      "id": "c11",
+      "chapter": "approval",
+      "start": 38.85,
+      "end": 40.54,
+      "text": "A regional Lead must approve it.",
+      "anchor": "Inbox card rises 38.4 s; cursor hover 40.2 s"
+    },
+    {
+      "id": "c12",
+      "chapter": "approval",
+      "start": 41.6,
+      "end": 44.08,
+      "text": "Only then is the approved insight created,",
+      "anchor": "Approve pressed 40.9 s (silent beat); decision 41.4 s; crosses 41.9-43.1 s; insight forms 42.1-43.0 s"
+    },
+    {
+      "id": "c13",
+      "chapter": "approval",
+      "start": 44.5,
+      "end": 46.19,
+      "text": "temporary, with provenance.",
+      "anchor": "30-day TTL ring 43.2-45.0 s; insight label 43.3-46.9 s"
+    },
+    {
+      "id": "c14",
+      "chapter": "governed",
+      "start": 46.65,
+      "end": 49.84,
+      "text": "Over time, approved decisions keep the estate lean.",
+      "anchor": "estate organizes 46.9-49.5 s; caption (illustrative outcome) 47.4-51.0 s; archive label 49.3-51.0 s"
+    },
+    {
+      "id": "c15",
+      "chapter": "governed",
+      "start": 50.2,
+      "end": 54.4,
+      "text": "Analytics Steward. Find before you build. Govern what you keep.",
+      "anchor": "brand fades in 50.9 s, fully visible 51.6-54.45 s, gone by 54.95 s",
+      "fallbackText": "Analytics Steward. Find before you build."
+    }
+  ]
+}

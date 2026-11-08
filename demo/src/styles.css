@@ -557,3 +557,43 @@ body,
     display: none;
   }
 }
+
+/* ---------------------------------------------------------------- narration */
+
+.narration-prompt {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 1cqw 2cqw;
+  font: inherit;
+  font-size: 1.2cqw;
+  color: var(--ink);
+  background: rgba(8, 10, 16, 0.86);
+  border: 1px solid var(--faint);
+  border-radius: 0.5cqw;
+  cursor: pointer;
+}
+
+.controls__cue {
+  max-width: 28ch;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+
+.controls .controls__narration {
+  white-space: nowrap;
+}
+
+.controls .controls__narration.is-missing,
+.controls .controls__narration.is-checking {
+  color: var(--muted);
+}
+
+.controls .controls__narration.is-blocked,
+.controls .controls__narration.is-unseekable,
+.controls .controls__narration.is-error {
+  color: var(--warn);
+}

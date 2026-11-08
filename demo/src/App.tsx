@@ -1,6 +1,7 @@
 import { Canvas } from "@react-three/fiber";
 import { useEffect, useState, type CSSProperties } from "react";
 import { clock, useClock } from "./clock";
+import { cueAt, narration, useNarration } from "./narration";
 import { Overlay } from "./Overlay";
 import { Scene } from "./scene/Scene";
 import { CHAPTERS, chapterAt, DURATION } from "./story";
@@ -10,7 +11,10 @@ import { CHAPTERS, chapterAt, DURATION } from "./story";
 //   ?autoplay=1    start playing immediately
 //   ?record=1      hide controls and cursor (clean 16:9 frame for capture)
 //   ?size=1920x1080  fixed stage size in CSS pixels instead of fit-to-window
-//   ?fixed=60      advance exactly 1/60 s per rendered frame (frame-exact capture)
+//   ?fixed=60      advance exactly 1/60 s per rendered frame (frame-exact capture,
+//                  always silent)
+//   ?narration=0   ignore public/audio/voiceover.mp3 even if present (silent)
+//   ?cues=1        show the intended narration cue in the control bar
 const params = new URLSearchParams(window.location.search);
 const startAt = Number(params.get("t") ?? 0);
 const recordMode = params.get("record") === "1";
@@ -19,6 +23,8 @@ const sizeMatch = /^(\d+)x(\d+)$/.exec(params.get("size") ?? "");
 if (fixed > 0) clock.fixedStep = 1 / fixed;
 clock.seek(Number.isFinite(startAt) ? startAt : 0);
 if (params.get("autoplay") === "1") clock.play();
+void narration.init(!(fixed > 0) && params.get("narration") !== "0");
+const showCues = params.get("cues") === "1";
 
 const FRAME = 1 / 30;
 
@@ -78,6 +84,10 @@ export function App() {
         case "H":
           setUiHidden((v) => !v);
           break;
+        case "m":
+        case "M":
+          narration.toggleMuted();
+          break;
         case "f":
         case "F":
           if (document.fullscreenElement) void document.exitFullscreen();
@@ -108,15 +118,38 @@ export function App() {
           <Scene />
         </Canvas>
         <Overlay />
+        <NarrationPrompt />
       </div>
       {!uiHidden && <Controls onHide={() => setUiHidden(true)} />}
     </div>
   );
 }
 
+/** Shown only when the browser refused to start narrated playback on its own. */
+function NarrationPrompt() {
+  const { status } = useNarration();
+  if (status !== "blocked") return null;
+  return (
+    <button className="narration-prompt" onClick={() => clock.play()}>
+      ▶ Play with narration
+    </button>
+  );
+}
+
+const NARRATION_LABEL: Record<string, string> = {
+  checking: "Narration…",
+  missing: "No narration",
+  ready: "Narration",
+  blocked: "Narration blocked",
+  unseekable: "Narration needs a range-capable server",
+  error: "Narration error",
+};
+
 function Controls({ onHide }: { onHide: () => void }) {
   const { time, playing } = useClock();
+  const { status, muted } = useNarration();
   const current = chapterAt(time);
+  const cue = showCues ? cueAt(time) : null;
   return (
     <div className="controls" role="toolbar" aria-label="Playback">
       <button onClick={() => clock.restart()} title="Restart (R)" aria-label="Restart">
@@ -149,6 +182,18 @@ function Controls({ onHide }: { onHide: () => void }) {
       <span className="controls__time">
         {time.toFixed(2).padStart(5, "0")} / {DURATION.toFixed(2)}
       </span>
+      {showCues && <span className="controls__cue">{cue ? `${cue.id} · ${cue.text}` : "—"}</span>}
+      {status !== "off" && (
+        <button
+          className={`controls__narration is-${status}`}
+          onClick={() => narration.toggleMuted()}
+          disabled={status !== "ready"}
+          title="Mute / unmute narration (M)"
+        >
+          {NARRATION_LABEL[status]}
+          {status === "ready" && (muted ? " · muted" : " · on")}
+        </button>
+      )}
       <div className="controls__chapters">
         {CHAPTERS.map((c, i) => (
           <button
