@@ -532,6 +532,17 @@ async function decideMergeTx(tx: Db, p: Proposal, input: DecisionInput, reason: 
     });
     return null;
   }
+  // A proposal stored before both sides were required (MERGE-APPROVERS) may
+  // name no approver for a side, or omit it from required_approvers. Approving
+  // it could archive an unrepresented source, so approval is refused; the row
+  // is left as stored (a reject or a lifecycle reset closes it).
+  const sides = [ev.sourceApprover, ev.targetApprover];
+  if (sides.some((a) => !a || !p.requiredApprovers.includes(a))) {
+    throw new LifecycleError(
+      `${p.id} does not require an approver for both ${ev.sourceId} and ${ev.targetId}; it cannot be approved. Reject it and propose the merge again`,
+      "invalid",
+    );
+  }
   if (ev.approvals.includes(input.actor)) throw new LifecycleError(`${input.actor} has already approved ${p.id}`, "invalid");
   const approvals = [...ev.approvals, input.actor];
   const waiting = p.requiredApprovers.filter((a) => !approvals.includes(a));

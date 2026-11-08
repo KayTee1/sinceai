@@ -36,6 +36,12 @@ a working AI demo by **Sunday 10:00 EET**. Speed and a working demo beat process
 ## Git
 
 - One branch per task (`feat/T<id>-short-name`), branched from `master`.
+  Exception: owner-approved documentation refresh uses
+  `docs/mvp-repository-refresh` from the verified committed integration baseline.
+  Document that SHA, use an isolated worktree during parallel development,
+  edit only approved documentation paths, and reconcile against the final
+  approved integration before publishing a PR. Documentation approval does not
+  approve implementation or clear independent-review gates.
   When both developers work at once, use separate worktrees (see README).
 - Small, focused commits. Stage explicit paths and check the diff for secrets.
 - Commit and push only when your human asks. Never force-push or rewrite

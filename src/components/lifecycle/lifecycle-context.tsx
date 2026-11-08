@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { clockSchedulerNotice, type ClockSchedulerNotice } from "@/lib/scheduler-client";
 
 export type Person = { name: string; role: string; region: string; active: boolean };
 
@@ -109,6 +110,12 @@ type Ctx = {
   logOpen: (assetId: string) => void;
   /** Re-reads the snapshot (inbox, counts) after a change made elsewhere, e.g. a chat build proposal. */
   refresh: () => void;
+  /**
+   * B5 (Codex B5-F1): set when a clock action succeeded but the simulated-clock
+   * scheduler failed or deferred its checks. Cleared by the next action or dismiss.
+   */
+  schedulerNotice: ClockSchedulerNotice | null;
+  dismissSchedulerNotice: () => void;
 };
 
 const LifecycleContext = createContext<Ctx | null>(null);
@@ -124,6 +131,7 @@ export function LifecycleProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<LifecycleSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [schedulerNotice, setSchedulerNotice] = useState<ClockSchedulerNotice | null>(null);
   const lastDate = useRef<string | null>(null);
   const [viewer, setViewer] = useState("");
 
@@ -144,6 +152,21 @@ export function LifecycleProvider({ children }: { children: React.ReactNode }) {
       .catch((e) => setError(e.message));
   }, [load]);
 
+  // Proposals can be created outside this tab (another window, the HTTP API).
+  // While the clock is paused nothing polls, so re-read when the window regains focus.
+  useEffect(() => {
+    const onFocus = () => load().catch((e) => setError(e.message));
+    const onVisible = () => {
+      if (document.visibilityState === "visible") onFocus();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [load]);
+
   // While the clock runs (1 day per second), poll once a second.
   const running = data?.clock.running ?? false;
   useEffect(() => {
@@ -156,6 +179,7 @@ export function LifecycleProvider({ children }: { children: React.ReactNode }) {
     async (url: string, body: object = {}) => {
       setBusy(true);
       setError(null);
+      setSchedulerNotice(null);
       try {
         const res = await fetch(url, {
           method: "POST",
@@ -164,6 +188,8 @@ export function LifecycleProvider({ children }: { children: React.ReactNode }) {
         });
         const json = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(json.error ?? `Request failed (${res.status})`);
+        // The clock change stands; only report a scheduler that did not finish its checks (B5 gates off: no field, null).
+        if (url.startsWith("/api/clock/")) setSchedulerNotice(clockSchedulerNotice(json, url.endsWith("/advance") ? "Clock advanced" : "Clock updated"));
         await load();
         router.refresh();
         return true;
@@ -203,9 +229,11 @@ export function LifecycleProvider({ children }: { children: React.ReactNode }) {
     load().catch((e) => setError(e.message));
   }, [load]);
 
+  const dismissSchedulerNotice = useCallback(() => setSchedulerNotice(null), []);
+
   const value = useMemo(
-    () => ({ data, error, busy, post, viewer: viewerId, setViewer, logOpen, refresh }),
-    [data, error, busy, post, viewerId, logOpen, refresh],
+    () => ({ data, error, busy, post, viewer: viewerId, setViewer, logOpen, refresh, schedulerNotice, dismissSchedulerNotice }),
+    [data, error, busy, post, viewerId, logOpen, refresh, schedulerNotice, dismissSchedulerNotice],
   );
   return <LifecycleContext.Provider value={value}>{children}</LifecycleContext.Provider>;
 }

@@ -222,9 +222,20 @@ export async function proposeMerge(
   if (open.rows[0]) throw new LifecycleError(`${sourceId} or ${targetId} is already under review (${open.rows[0].id as string})`, "invalid");
 
   const s = await pair(db, source, target, date);
+  // Both sides need their own approval authority (active owner, else the
+  // region's active steward). A side nobody can represent refuses the merge:
+  // otherwise the target's approver alone could archive the source. Only
+  // then are identities deduplicated, so one person may represent both sides
+  // when they are the authority for each (e.g. the same region steward).
   const [sourceApprover, targetApprover] = [await approverFor(db, source), await approverFor(db, target)];
-  const approvers = [...new Set([sourceApprover, targetApprover].filter((x): x is string => !!x))];
-  if (approvers.length === 0) throw new LifecycleError("Nobody active can approve this merge", "invalid");
+  const unrepresented = [!sourceApprover && `source ${sourceId}`, !targetApprover && `target ${targetId}`].filter(Boolean);
+  if (unrepresented.length) {
+    throw new LifecycleError(
+      `Nobody active can approve for the ${unrepresented.join(" and the ")} (owner inactive and no active data steward); no merge proposal was created`,
+      "invalid",
+    );
+  }
+  const approvers = [...new Set([sourceApprover!, targetApprover!])];
 
   const evidence: MergeEvidence = {
     kind: "merge_pair",

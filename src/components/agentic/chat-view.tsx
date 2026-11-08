@@ -8,6 +8,7 @@ import type { AnalysisView, KpiChecksView } from "@/mastra/tools/steward-views";
 import type { BuildProposalView } from "@/mastra/tools/build-tools";
 import type { ProposalListView } from "@/mastra/tools/inbox-tools";
 import { useLifecycle } from "../lifecycle/lifecycle-context";
+import { safeChatErrorText } from "@/lib/chat-error";
 import type { MergeProposalView, RetireView } from "@/mastra/tools/estate-tools";
 import type { PipelineRunView } from "@/mastra/tools/pipeline-tools";
 import type {
@@ -452,12 +453,7 @@ function Thinking() {
   );
 }
 
+// The server sends a short message; never show a serialized error object or stack trace.
 function readError(error: Error): string {
-  try {
-    const parsed = JSON.parse(error.message);
-    if (parsed?.error) return parsed.error;
-  } catch {
-    // not JSON
-  }
-  return error.message || "Something went wrong.";
+  return safeChatErrorText(error.message);
 }

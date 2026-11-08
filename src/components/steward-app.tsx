@@ -10,6 +10,8 @@ import { ClockBar } from "./lifecycle/clock-bar";
 import { Inbox } from "./lifecycle/inbox";
 import { PipelineView } from "./agentic/pipeline-view";
 import { NavigationProvider } from "./navigation";
+import { SchedulerView } from "./agentic/scheduler-view";
+import { AGENTIC_SIDE_TABS, type AgenticSideTab } from "@/lib/scheduler-client";
 
 type Tab = "agentic" | "dashboard";
 
@@ -50,34 +52,45 @@ export function StewardApp({ data }: { data: DashboardData }) {
   );
 }
 
-type Side = "pipeline" | "inbox";
+type Side = AgenticSideTab;
 
-// T23: the chat with the live Pipeline view beside it (default) or the approval inbox.
+const SIDE_LABEL: Record<Side, string> = { pipeline: "Pipeline", scheduler: "Scheduler", inbox: "Inbox" };
+
+// T23: the chat with the live Pipeline view beside it (default), the
+// governance Scheduler (T24) or the approval inbox. ChatView sits outside the
+// aside, so switching side tabs never remounts the chat.
 function AgenticLayout() {
   const [side, setSide] = useState<Side>("pipeline");
   const { data } = useLifecycle();
   const waiting = data?.pending.length ?? 0;
   return (
-    <div className="flex h-full">
-      <div className="min-w-0 flex-1">
+    // Below md the chat and side panel stack (each keeps a usable height and
+    // the page scrolls) instead of the panel's min width squeezing the chat
+    // to nothing; ChatView stays mounted either way.
+    <div className="flex h-full flex-col overflow-y-auto md:flex-row md:overflow-hidden">
+      <div className="h-[70vh] min-w-0 shrink-0 md:h-auto md:flex-1 md:shrink">
         <ChatView />
       </div>
       <aside
-        className={`flex shrink-0 flex-col border-l border-line bg-surface ${side === "pipeline" ? "w-[46%] min-w-[420px]" : "w-[380px]"}`}
+        className={`flex h-[85vh] w-full shrink-0 flex-col border-t border-line bg-surface md:h-auto md:border-l md:border-t-0 ${side === "inbox" ? "md:w-[380px]" : "md:w-[46%] md:min-w-[420px]"}`}
       >
-        <div className="flex shrink-0 gap-1 border-b border-line px-3 py-2">
-          {(["pipeline", "inbox"] as Side[]).map((s) => (
+        <div role="tablist" aria-label="Agentic side panel" className="flex shrink-0 gap-1 border-b border-line px-3 py-2">
+          {AGENTIC_SIDE_TABS.map((s) => (
             <button
               key={s}
               type="button"
+              role="tab"
+              id={`agentic-side-${s}`}
+              aria-selected={side === s}
+              aria-controls="agentic-side-panel"
               onClick={() => setSide(s)}
               className={`rounded-sm px-2.5 py-1 text-xs font-medium ${side === s ? "bg-navy text-white" : "text-ink-2 hover:bg-canvas"}`}
             >
-              {s === "pipeline" ? "Pipeline" : `Inbox${waiting ? ` (${waiting})` : ""}`}
+              {s === "inbox" && waiting ? `Inbox (${waiting})` : SIDE_LABEL[s]}
             </button>
           ))}
         </div>
-        <div className="min-h-0 flex-1">{side === "pipeline" ? <PipelineView /> : <Inbox />}</div>
+        <div id="agentic-side-panel" role="tabpanel" aria-labelledby={`agentic-side-${side}`} className="min-h-0 flex-1">{side === "pipeline" ? <PipelineView /> : side === "scheduler" ? <SchedulerView /> : <Inbox />}</div>
       </aside>
     </div>
   );

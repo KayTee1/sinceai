@@ -1,0 +1,4 @@
+node_modules/
+dist/
+narration/source/
+.DS_Store
