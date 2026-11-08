@@ -314,6 +314,37 @@ async function openLeaseReview(tx: Db, assetId: string, date: string) {
   });
 }
 
+export type LeaseOutlook = {
+  leaseEnd: string;
+  /** What the lease review would do on leaseEnd if usage stays as it is now (D21). */
+  outcome: "auto_renew" | "steward_review" | "retire_review";
+  rationale: string;
+};
+
+/**
+ * Read-only preview of the lease review (same rules as openLeaseReview), so
+ * nobody has to guess whether an asset "needs a review". Null for Temporary,
+ * archived or lease-less assets.
+ */
+export async function leaseOutlook(db: Db, assetId: string): Promise<LeaseOutlook | null> {
+  const state = await getAssetState(db, assetId);
+  if (!state || state.status !== "active" || state.tier === "temporary" || !state.leaseEnd) return null;
+  const evidence = await buildEvidence(db, state, state.leaseEnd);
+  const used = wasUsed(evidence);
+  const outcome = !used ? "retire_review" : evidence.ownerStatus === "active" ? "auto_renew" : "steward_review";
+  const what =
+    outcome === "auto_renew"
+      ? `renews automatically for ${LEASE_DAYS} days with no human step`
+      : outcome === "steward_review"
+        ? `goes to the data steward (in use, but the owner is ${evidence.ownerStatus})`
+        : `gets a retire proposal for the owner (below ${LOW_USAGE_USERS} users and no app views)`;
+  return {
+    leaseEnd: state.leaseEnd,
+    outcome,
+    rationale: `If usage stays as now (${usageText(evidence)}), on ${state.leaseEnd} it ${what}.`,
+  };
+}
+
 /**
  * T22: a retire proposal before the lease ends, asked for by a person in chat
  * (e.g. "AST-0330 duplicates AST-0135"). Same evidence and rules as a lease

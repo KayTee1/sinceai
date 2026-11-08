@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { DashboardData, Role } from "@/lib/types";
 import { formatDate } from "@/lib/format";
 import { DashboardView } from "./dashboard/dashboard-view";
@@ -9,6 +9,7 @@ import { LifecycleProvider, useLifecycle } from "./lifecycle/lifecycle-context";
 import { ClockBar } from "./lifecycle/clock-bar";
 import { Inbox } from "./lifecycle/inbox";
 import { PipelineView } from "./agentic/pipeline-view";
+import { NavigationProvider } from "./navigation";
 import { SchedulerView } from "./agentic/scheduler-view";
 import { AGENTIC_SIDE_TABS, type AgenticSideTab } from "@/lib/scheduler-client";
 
@@ -20,29 +21,33 @@ export function StewardApp({ data }: { data: DashboardData }) {
 
   // Employees only browse dashboards (D8); the Agentic tab is shown but locked.
   const activeTab: Tab = role === "employee" ? "dashboard" : tab;
+  const showDashboard = useCallback(() => setTab("dashboard"), []);
 
   return (
     <LifecycleProvider>
-      <div className="flex h-dvh flex-col">
-        <header className="grid h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center bg-navy px-5 text-white">
-          <Brand />
-          <TabSwitch value={activeTab} onChange={setTab} agenticLocked={role === "employee"} />
-          <div className="flex items-center justify-end gap-4">
-            {role === "employee" ? <ViewerPicker /> : <SimDate fallback={data.clockDate} />}
-            <RoleSwitch value={role} onChange={setRole} />
-          </div>
-        </header>
+      <NavigationProvider onOpen={showDashboard}>
+        <div className="flex h-dvh flex-col">
+          <header className="grid h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center bg-navy px-5 text-white">
+            <Brand />
+            <TabSwitch value={activeTab} onChange={setTab} agenticLocked={role === "employee"} />
+            <div className="flex items-center justify-end gap-4">
+              {role === "employee" ? <ViewerPicker /> : <SimDate fallback={data.clockDate} />}
+              <RoleSwitch value={role} onChange={setRole} />
+            </div>
+          </header>
 
-        {role === "manager" && <ClockBar />}
+          {role === "manager" && <ClockBar />}
 
-        <main className="min-h-0 flex-1">
-          {activeTab === "dashboard" ? (
-            <DashboardView data={data} role={role} />
-          ) : (
-            <AgenticLayout />
-          )}
-        </main>
-      </div>
+          <main className="min-h-0 flex-1">
+            {activeTab === "dashboard" && <DashboardView data={data} role={role} />}
+            {/* Kept mounted while hidden: the chat history lives in this component, so
+                opening a dashboard from a chat card and coming back keeps the conversation. */}
+            <div className={activeTab === "agentic" ? "h-full" : "hidden"}>
+              <AgenticLayout />
+            </div>
+          </main>
+        </div>
+      </NavigationProvider>
     </LifecycleProvider>
   );
 }

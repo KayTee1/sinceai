@@ -45,6 +45,7 @@ export type MergeEvidence = {
   targetExtraKpis: string[];
   usage: { sourceUsers: number | null; targetUsers: number | null; sourceOpens90d: number; targetOpens90d: number };
   downstreamAssets: string[];
+  tierWarning?: string | null;
   approvals: string[];
   reason: string;
 };
@@ -68,6 +69,11 @@ export type LifecycleSnapshot = {
   counts: Record<string, number>;
   leaseDue: number;
   pending: PendingProposal[];
+  /** Recently closed proposals: how each one ended, in one line. */
+  decided: Record<
+    string,
+    { status: string; outcome: string; summary: string; open: { assetId: string; note: string }[] }
+  >;
   people: Record<string, Person>;
   appUsage: Record<string, { opens: number; viewers: number; last30: number; lastOpened: string }>;
   portfolio: {
