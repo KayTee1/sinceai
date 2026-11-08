@@ -3,9 +3,13 @@ import { useClock } from "./clock";
 import { labelElements } from "./labels";
 import { smoothstep, win } from "./math";
 import { Inbox, PipelineHeader, StepTracker } from "./Panels";
-import { brandOpacity, CAPTIONS, CHAPTERS, chapterAt, LABELS, T } from "./story";
+import { brandOpacity, CHAPTERS, chapterAt, LABELS, NOTES, T } from "./story";
+import { subtitleAt, subtitleOpacity } from "./subtitles";
 
-// HTML layer over the canvas: chapter tag, captions, 3D-anchored labels,
+// ?subtitles=0 hides the spoken subtitles (e.g. to add the .srt in an editor).
+const showSubtitles = new URLSearchParams(window.location.search).get("subtitles") !== "0";
+
+// HTML layer over the canvas: chapter tag, spoken subtitles and notes, 3D-anchored labels,
 // the illustration notice and the closing brand card. Sized in container
 // units (cqw) so it scales exactly with the 16:9 stage.
 
@@ -14,7 +18,8 @@ export function Overlay() {
   const chapter = CHAPTERS[chapterAt(t)];
   const brandOn = smoothstep(T.veil[0], T.veil[0] + 0.6, t);
   const chapterOpacity = win(t, chapter.start + 0.15, chapter.end + 0.05, 0.5) * (1 - brandOn);
-  const caption = CAPTIONS.find((c) => t >= c.start && t <= c.end);
+  const subtitle = showSubtitles ? subtitleAt(t) : null;
+  const note = NOTES.find((n) => t >= n.start && t <= n.end);
   const brand = brandOpacity(t);
   // veil: soften the estate behind the brand, then a clean frame to cut to the app
   const veil = 0.64 * smoothstep(T.veil[0], T.veil[1], t) + 0.36 * smoothstep(T.veil[2], T.veil[3], t);
@@ -40,16 +45,20 @@ export function Overlay() {
         Illustrative sequence · synthetic data
       </div>
 
-      {caption && (
-        <div
-          key={caption.start}
-          className="caption"
-          style={{ opacity: win(t, caption.start, caption.end, 0.45) }}
-        >
-          <div className="caption__text">{caption.text}</div>
-          {caption.sub && <div className="caption__sub">{caption.sub}</div>}
+      <div className="caption">
+        <div className="caption__text" aria-live="off">
+          {subtitle && (
+            <span key={subtitle.id} style={{ opacity: subtitleOpacity(subtitle, t) }}>
+              {subtitle.text}
+            </span>
+          )}
         </div>
-      )}
+        {note && (
+          <div className="caption__sub" style={{ opacity: win(t, note.start, note.end, 0.45) }}>
+            {note.text}
+          </div>
+        )}
+      </div>
 
       <div className="brand" style={{ opacity: brand }}>
         <div className="brand__mark">Analytics Steward</div>

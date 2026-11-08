@@ -1,7 +1,7 @@
 import { estate, ORIGINALS } from "./estate";
 import { eased, lerp, lerp3, smootherstep, smoothstep, win, type Key, type Vec3 } from "./math";
 
-// The film script. Every timing, camera key, caption and 3D label lives here
+// The film script. Every timing, camera key, note and 3D label lives here
 // as a function of timeline time t (seconds); scene components read `T`
 // instead of hard-coding numbers. Wording is checked against README,
 // ARCHITECTURE, MASTRA, GOVERNANCE and DEMO at 3cdfb60. Anything shown is
@@ -99,7 +99,7 @@ export const activeGate = (t: number) =>
     ? -1
     : Math.floor((t - GATE_START) / GATE_STEP);
 
-// ---------------------------------------------------------------- chapters & captions
+// ---------------------------------------------------------------- chapters & notes
 
 export interface Chapter {
   id: string;
@@ -122,43 +122,18 @@ export function chapterAt(t: number): number {
   return 0;
 }
 
-export interface Caption {
+// Spoken subtitles come from the narration cue manifest (src/subtitles.ts).
+// These are small informational notes shown under the subtitle line; they are
+// not narration and are not spoken.
+export interface Note {
   start: number;
   end: number;
   text: string;
-  sub?: string;
 }
 
-export const CAPTIONS: Caption[] = [
-  {
-    start: 0.6,
-    end: 7.6,
-    text: "Self-service BI multiplies dashboards, duplicates and conflicting KPIs.",
-  },
-  { start: 8.6, end: 14.6, text: "A business question arrives." },
-  {
-    start: 15.4,
-    end: 24.8,
-    text: "Analytics Steward checks what already exists before anything is built.",
-  },
-  {
-    start: 25.1,
-    end: 34.8,
-    text: "Reuse what fits. Only a real gap becomes a proposal.",
-  },
-  { start: 35.4, end: 40.7, text: "Analytics Steward proposes. Nothing is built yet." },
-  {
-    start: 41.0,
-    end: 46.7,
-    text: "A Lead approves. Only then is an approved insight created.",
-    sub: "No automatic approvals · every decision is audited",
-  },
-  {
-    start: 47.4,
-    end: 51.0,
-    text: "Over time, owner-approved decisions keep the estate lean.",
-    sub: "Illustrative outcome, not the result of one request",
-  },
+export const NOTES: Note[] = [
+  { start: 41.0, end: 46.7, text: "No automatic approvals · every decision is audited" },
+  { start: 47.4, end: 51.0, text: "Illustrative outcome, not the result of one request" },
 ];
 
 // ---------------------------------------------------------------- camera

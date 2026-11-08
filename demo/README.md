@@ -48,7 +48,8 @@ URL options: `?t=12.5` start time, `?autoplay=1`, `?record=1` (no controls,
 hidden cursor), `?size=1920x1080` (fixed stage in CSS pixels), `?fixed=60`
 (advance exactly 1/60 s per rendered frame for frame-exact capture; always
 silent), `?narration=0` (ignore the narration file), `?cues=1` (show the
-intended narration cue in the control bar).
+intended narration cue in the control bar), `?subtitles=0` (hide the spoken
+subtitles, e.g. to add the `.srt` in an editor instead).
 
 ## Recording at 1920×1080
 
@@ -108,6 +109,20 @@ How it behaves (`src/narration.ts`, hooks in `src/clock.ts`):
 5. Run `npm run build` and `npm run preview` and check once more from `dist/`.
    The file is copied into `dist/audio/`.
 
+### Subtitles
+
+The on-screen subtitles are the spoken words, nothing else. Text and timing come
+only from `src/narration/cues.json` (`src/subtitles.ts`): each cue shows from
+its measured voiced start to just after its end, never touching the next cue,
+so the screen is clear in every pause, including the Approve click (40.9 s). One
+line at the bottom centre (max two), anchored above the brand credit and below
+the 3D-label safe area. Small notes ("No automatic approvals…", "Illustrative
+outcome…", `NOTES` in `story.ts`) hang under the line and are not spoken.
+
+`narration/voiceover.srt` is the matching subtitle file for the final video,
+generated with `node narration/srt.mjs` from the same manifest and rules.
+Re-run it after changing cues.
+
 ### Recording with sound
 
 Silent frame-exact capture is unchanged (`?record=1&fixed=60`). To capture with
@@ -128,7 +143,7 @@ approach, an action and a readable hold; the camera settles during holds.
 | 8–15 s | 02 A business request | TEAM-REQ-01 card flies in (8–11.6), then holds with its label until 14.3 |
 | 15–35 s | 03 Mastra investigation | Five gates, 4 s each (0.9 s approach, action, hold): Intent (mapped KPIs, product, market), Discovery (scan, catalog candidates), Conflict (approved vs variant definition), Duplicate (copies and pending builds checked), Recommend (reuse candidates for Net Sales, gap for Forecast Variance) |
 | 35–47 s | 04 Human governance and approval | Proposal reaches the boundary (35–36.6) and waits; an illustrative Inbox card appears (38.4), the Lead presses Approve (40.9), only then the proposal crosses (41.4–43.1) and becomes an approved Temporary insight with a 30-tick TTL ring |
-| 47–55 s | 05 Resolution | Estate settles (47–49.5) and holds with the illustrative-outcome caption; Analytics Steward brand card (with "Orchestrated with Mastra" and the Since AI Hackathon credit) fades in at 50.9, is fully visible 51.6–54.45, then a clean dark end frame |
+| 47–55 s | 05 Resolution | Estate settles (47–49.5) and holds with the illustrative-outcome note; Analytics Steward brand card (with "Orchestrated with Mastra" and the Since AI Hackathon credit) fades in at 50.9, is fully visible 51.6–54.45, then a clean dark end frame |
 
 A screen-space header shows the orchestrator and active step in chapter 03,
 and the "AI proposes → Lead approves → Approved insight created" tracker in
@@ -153,7 +168,7 @@ labels fade near the frame edge instead of being clipped.
   values with provenance.
 - Temporary TTL is 30 days. Archive is shown as approved one owner decision at
   a time and restorable, never as deletion or automatic bulk archiving. The
-  organized estate is captioned as an illustrative outcome over time, not the
+  organized estate is noted as an illustrative outcome over time, not the
   result of one request.
 - The Inbox card is labelled "Illustration"; the film is not connected to a
   live approver.
@@ -175,21 +190,24 @@ labels fade near the frame edge instead of being clipped.
 
 ```text
 demo/src/
-  story.ts      film script: chapters, captions, camera keys, labels, request path
+  story.ts      film script: chapters, notes, camera keys, labels, request path
   estate.ts     seeded 360-node estate, relationships and governed layout
   clock.ts      single timeline clock (play, pause, seek, fixed-step, audio follow)
+  subtitles.ts  spoken subtitles from the cue manifest
   narration.ts  optional voiceover: file check, audio-as-master sync, autoplay handling
   narration/cues.json  machine-readable narration cue manifest
   math.ts       seeded PRNG, easing, windows, eased camera keys
   palette.ts    shared colours
   App.tsx       16:9 stage, controls, keyboard, URL options
-  Overlay.tsx   chapter tag, captions, notice, brand card, label elements
+  Overlay.tsx   chapter tag, subtitles + notes, notice, brand card, label elements
   Panels.tsx    pipeline header and step tracker, approval tracker, Inbox card
   scene/        Estate (instanced tiles + links), Pipeline, Governance,
                 Protagonist (request/proposal/insight), Scene (camera, labels)
 demo/narration/
   SCRIPT.md     ElevenLabs script, cue sheet, pronunciation, delivery, pauses
   assemble.mjs  prints an ffmpeg command placing per-cue clips at cue starts
+  srt.mjs       writes voiceover.srt from the cue manifest
+  voiceover.srt subtitles for the final video
   place.py      places the single raw take on the timeline (how voiceover.mp3 was made)
   source/       raw ElevenLabs take (git-ignored)
 demo/public/audio/

@@ -111,26 +111,40 @@ body,
   color: var(--faint);
 }
 
+/* The subtitle line is anchored (bottom 9cqh = 97 px at 1080p) and the note
+   hangs below it, so neither moves when the other appears. This clears the
+   brand credit (bottom 6cqh) and stays under the 3D-label safe area (16%). */
 .caption {
   position: absolute;
   left: 50%;
-  bottom: 7.2cqh;
+  bottom: 9cqh;
   transform: translateX(-50%);
   width: 70cqw;
   text-align: center;
 }
 
+/* Spoken subtitle: fixed one-line slot (max two lines) so the note below and
+   the labels above never move when a cue starts or ends. */
 .caption__text {
+  min-height: 1.3em;
   font-size: 1.72cqw;
   font-weight: 400;
   letter-spacing: -0.005em;
   line-height: 1.3;
   color: var(--ink);
-  text-shadow: 0 0 1.2cqw rgba(0, 0, 0, 0.9);
+  text-shadow: 0 0 1.2cqw rgba(0, 0, 0, 0.9), 0 0 0.25cqw #000;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .caption__sub {
-  margin-top: 0.8cqh;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 0.6cqh;
   font-size: 0.86cqw;
   letter-spacing: 0.18em;
   text-transform: uppercase;

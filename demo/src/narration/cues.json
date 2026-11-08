@@ -4,13 +4,19 @@
     "title": "Analytics Steward cinematic demo",
     "duration": 55,
     "narrationEndsBy": 54.45,
-    "timingSource": "demo/src/story.ts (T, CHAPTERS, CAPTIONS) at v1 ad4d1a8"
+    "timingSource": "demo/src/story.ts (T, CHAPTERS) at v1 ad4d1a8"
   },
   "audio": {
     "src": "audio/voiceover.mp3",
     "offset": 0,
     "measuredDuration": 55.0,
     "note": "offset = timeline second at which audio time 0 plays. voiceover.mp3 is the owner's single ElevenLabs take, cut only inside its natural pauses and placed per cue by narration/place.py (no time-stretching). Cue start/end are the measured voiced times in the final file. The film is never stretched to fit the audio."
+  },
+  "subtitles": {
+    "lead": 0.05,
+    "tail": 0.25,
+    "minGap": 0.1,
+    "note": "Subtitles show each cue's text from start - lead to end + tail, never closer than minGap to the next cue, so they clear during pauses (including the Approve click at 40.9 s). Cue text is the exact spoken wording. Read by src/subtitles.ts and narration/srt.mjs."
   },
   "voice": {
     "style": "calm, confident, cinematic, professional",
