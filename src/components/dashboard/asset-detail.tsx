@@ -54,7 +54,7 @@ export function AssetDetail({ asset, data, role }: { asset: AssetSummary; data: 
 
       <Note>
         {app
-          ? "Temporary insight built by Analytics Steward from certified KPIs on synthetic pack facts. Expires after 30 days unless used again."
+          ? "Temporary insight built by Bonsai from certified KPIs on synthetic pack facts. Expires after 30 days unless used again."
           : "Catalog entry from the Bayer pack: metadata about this analytics product. The report itself lives in " +
             `${asset.platform}; the pack holds no report contents, so no business figures are shown here.`}
       </Note>

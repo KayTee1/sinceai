@@ -85,7 +85,7 @@ Starting screen: **Manager → Dashboard → Estate overview**, clock paused on 
 | 2:45–3:20 | **+30d**. The header shows **56 Under review · 43 Escalated**. On the first card with an enabled **Reject** (*Eylea Inventory Monthly*, Julia Brown) → **Reject** → type "Finance close uses it in December; keep it." → **Reject with reason**. | "A month later, 52 used dashboards renewed themselves automatically. Unused ones went to their owners, and silent owners were escalated to stewards. A human said no, with a reason, so the dashboard is renewed for 90 days. Our Temporary insight wasn't opened again, so it expired. It's archived and can be restored." |
 | 3:20–3:40 | **Dashboard › Estate overview**. | Read the strip: "53 renewed · 43 escalated · 1 expired · 1 built · 1 rejected. Every change has a named person or policy in the audit log." Then close. |
 
-**Close:** "Analytics Steward doesn't add another dashboard. It makes every new one prove nobody has built it already, and every old one earn its next 90 days. Agents find the evidence, humans decide, and everything is auditable."
+**Close:** "Bonsai doesn't add another dashboard. It makes every new one prove nobody has built it already, and every old one earn its next 90 days. Agents find the evidence, humans decide, and everything is auditable."
 
 ### Path D: the 0:25–1:40 segment without the model (about 20 s longer)
 

@@ -1,4 +1,4 @@
-# Analytics Steward cinematic demo (standalone)
+# Bonsai cinematic demo (standalone)
 
 Status: **v1, owner-approved pacing and visual structure.**
 Branch `demo/mvp`, based on `origin/master` `3cdfb60` (docs PR #39).
@@ -7,9 +7,9 @@ A 55-second, deterministic 3D film for the pitch video of **Analytics
 Steward**: analytics sprawl, then one business request investigated by a
 Mastra-orchestrated workflow (discovery, KPI-definition checks, reuse), an
 explicit human approval, and an illustrative governed estate, ending on the
-Analytics Steward brand card. It explains the product. It is not the product.
+Bonsai brand card. It explains the product. It is not the product.
 
-Naming: *Analytics Steward* is the product (working name). *Mastra* is the
+Naming: *Bonsai* is the product. *Mastra* is the
 orchestration framework. *Since AI* is the hackathon organizer, credited on the
 end slate as "Built for the Since AI Hackathon"; it is not the product name.
 
@@ -143,7 +143,7 @@ approach, an action and a readable hold; the camera settles during holds.
 | 8–15 s | 02 A business request | TEAM-REQ-01 card flies in (8–11.6), then holds with its label until 14.3 |
 | 15–35 s | 03 Mastra investigation | Five gates, 4 s each (0.9 s approach, action, hold): Intent (mapped KPIs, product, market), Discovery (scan, catalog candidates), Conflict (approved vs variant definition), Duplicate (copies and pending builds checked), Recommend (reuse candidates for Net Sales, gap for Forecast Variance) |
 | 35–47 s | 04 Human governance and approval | Proposal reaches the boundary (35–36.6) and waits; an illustrative Inbox card appears (38.4), the Lead presses Approve (40.9), only then the proposal crosses (41.4–43.1) and becomes an approved Temporary insight with a 30-tick TTL ring |
-| 47–55 s | 05 Resolution | Estate settles (47–49.5) and holds with the illustrative-outcome note; Analytics Steward brand card (with "Orchestrated with Mastra" and the Since AI Hackathon credit) fades in at 50.9, is fully visible 51.6–54.45, then a clean dark end frame |
+| 47–55 s | 05 Resolution | Estate settles (47–49.5) and holds with the illustrative-outcome note; Bonsai brand card (with "Orchestrated with Mastra" and the Since AI Hackathon credit) fades in at 50.9, is fully visible 51.6–54.45, then a clean dark end frame |
 
 A screen-space header shows the orchestrator and active step in chapter 03,
 and the "AI proposes → Lead approves → Approved insight created" tracker in

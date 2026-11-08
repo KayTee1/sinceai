@@ -1,4 +1,4 @@
-# Analytics Steward — scope
+# Bonsai — scope
 
 ## Implementation status at the documentation snapshot
 
@@ -34,7 +34,7 @@ follow D9 and D11. Contract and lanes still need both developers' agreement.
 
 ## One-liner
 
-Analytics Steward stops BI sprawl at the source: before anything new is built,
+Bonsai stops BI sprawl at the source: before anything new is built,
 agents search what already exists, flag conflicting KPIs, and only then build a
 **temporary** insight on certified metrics. Every asset must earn its place:
 it is promoted on real use and re-justified every 90 days, otherwise it is

@@ -16,7 +16,7 @@ Net sales and forecast variance. Xarelto, North America.
 
 5
 00:00:15,450 --> 00:00:18,840
-Analytics Steward maps the request to its KPIs.
+Bonsai maps the request to its KPIs.
 
 6
 00:00:19,550 --> 00:00:22,720
@@ -56,4 +56,4 @@ Over time, approved decisions keep the estate lean.
 
 15
 00:00:50,150 --> 00:00:54,650
-Analytics Steward. Find before you build. Govern what you keep.
+Bonsai. Find before you build. Govern what you keep.

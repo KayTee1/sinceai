@@ -1,4 +1,4 @@
-# Analytics Steward — SinceAI
+# Bonsai — SinceAI
 
 A Bayer Pharmaceuticals analytics governance demo: find reusable dashboards,
 explain conflicting KPI definitions, and request a computed Temporary insight

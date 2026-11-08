@@ -1,9 +1,9 @@
 {
-  "name": "analytics-steward-cinematic-demo",
+  "name": "bonsai-cinematic-demo",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Standalone, deterministic 3D film for the Analytics Steward demo video (built for the Since AI Hackathon). No backend, no private data.",
+  "description": "Standalone, deterministic 3D film for the Bonsai demo video (built for the Since AI Hackathon). No backend, no private data.",
   "engines": {
     "node": ">=22.12"
   },
