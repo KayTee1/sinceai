@@ -7,10 +7,12 @@
 // produces them. Nothing is built without an approved proposal (Rule 1).
 import type { Client } from "@libsql/client";
 import { checkDuplicate, type DuplicateCheck } from "../estate";
+import { onBuildDecided, onBuildProposed } from "../pipeline";
 import {
   LifecycleError,
   POLICY_VERSION,
   appendAudit,
+  getAssetState,
   getProposal,
   recordDecision,
   regionSteward,
@@ -185,13 +187,13 @@ export async function proposeBuild(
 
   // The same-request check runs again inside the write transaction, so
   // concurrent submissions cannot both store a proposal.
-  const { existing, proposalId } = await serialised(db, async () => {
+  const { existing, stored } = await serialised(db, async () => {
     const tx = await db.transaction("write");
     try {
       const existing = await existingBuild(tx, requestId, requestSheet, scope);
-      const proposalId = existing ? null : await storeProposal(tx, analysis, scope, requestSheet, input.requesterId, date);
+      const stored = existing ? null : await storeProposal(tx, analysis, scope, requestSheet, input.requesterId, date);
       await tx.commit();
-      return { existing, proposalId };
+      return { existing, stored };
     } catch (err) {
       await tx.rollback();
       throw err;
@@ -200,7 +202,9 @@ export async function proposeBuild(
     }
   });
   if (existing) return existingResult(db, existing);
-  return { status: "proposed", proposal: (await getProposal(db, proposalId!))! };
+  // Pipeline continuation (T23) runs after the commit, outside the transaction.
+  await onBuildProposed(db, { requestId, proposalId: stored!.proposalId, approvers: stored!.approvers });
+  return { status: "proposed", proposal: (await getProposal(db, stored!.proposalId))! };
 }
 
 async function existingResult(db: Client, existing: { id: string; status: ProposalStatus }): Promise<ProposeBuildResult> {
@@ -209,7 +213,7 @@ async function existingResult(db: Client, existing: { id: string; status: Propos
   return { status: "already_proposed", proposal };
 }
 
-/** Stores the proposal and its audit row inside the caller's write transaction; returns its ID. */
+/** Stores the proposal and its audit row inside the caller's write transaction; returns its ID and approvers. */
 async function storeProposal(
   db: Db,
   analysis: Awaited<ReturnType<typeof analyzeRequest>>,
@@ -217,7 +221,7 @@ async function storeProposal(
   requestSheet: string,
   givenRequester: string | undefined,
   date: string,
-): Promise<string> {
+): Promise<{ proposalId: string; approvers: string[] }> {
   const requestId = analysis.request.id;
   let requesterId = givenRequester?.trim() || null;
   const requesterSource: BuildEvidence["requesterSource"] = requesterId ? "given" : "team_mapping";
@@ -288,7 +292,7 @@ async function storeProposal(
     rationale,
     evidence,
   });
-  return proposalId;
+  return { proposalId, approvers };
 }
 
 async function latestFactMonth(db: Client): Promise<string> {
@@ -395,6 +399,15 @@ export async function decideBuild(db: Client, input: DecisionInput, date: string
   } finally {
     tx.close();
   }
+  // T23: continue the pipeline run that asked for this approval, if any.
+  const ttlEnd = insight ? ((await getAssetState(db, insight.id))?.ttlEnd ?? null) : null;
+  await onBuildDecided(db, {
+    proposalId: input.proposalId,
+    actor: input.actor,
+    action: input.action,
+    reason: input.reason,
+    insight: insight ? { id: insight.id, kpiIds: insight.results.map((r) => r.kpiId), ttlEnd } : null,
+  });
   return { proposal: (await getProposal(db, input.proposalId))!, insight };
 }
 

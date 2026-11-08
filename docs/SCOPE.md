@@ -1,5 +1,29 @@
 # Analytics Steward — scope
 
+## Implementation status at the documentation snapshot
+
+Implementation snapshot: `1beff2ebd1e4df5393bc6b065795ca1ddb845edc` (`origin/master`, T26 merged in #38),
+verified 2026-11-08. Original refresh baseline: `43a1157`; reconciled against the
+committed final master revision. Local `master` is stale and was not moved.
+
+The sections below preserve product targets and historical planning. They are
+not a checklist of delivered functionality. Current behavior is specified in
+[ARCHITECTURE](ARCHITECTURE.md), [MASTRA](MASTRA.md), [API](API.md),
+[GOVERNANCE](GOVERNANCE.md) and the executable [DEMO](DEMO.md) runbook.
+D16 supersedes default lease auto-archive: silence escalates to a steward.
+
+Implemented: persisted request Pipeline, chat drafts, governed build/reuse,
+four mapped KPIs, usage/lease/TTL services, inbox, restore and merge proposals.
+Partial: catalog-only discovery remains separate from lifecycle-aware estate
+checks; lineage is catalog metadata plus built-value provenance, not a complete
+graph; counts do not establish KPI conflict resolution; owner reassignment,
+proposal editing and complete certification promotion are unfinished.
+B0–B5 are in the verified master snapshot: B1/B2 runners support manual runs,
+B3 proposal bridge stays disabled, B4 supplies Scheduler UI, and T26/B5 adds
+opt-in checks after explicit clock actions plus manual Check due jobs. No cron,
+background worker, freely ticking clock trigger or full-estate sweep. Synthetic sprawl generation remains
+planned. External BI/SSO integration and regulatory certification are absent.
+
 Updated 2026-11-06 from Viet's Miro board ("Replaced by AI", 3 diagrams; PDF
 kept outside Git) and the UI/stack vision (D7–D9). Builds on the final-brief
 intake (D5): [CHALLENGE](CHALLENGE.md) holds organizer facts,

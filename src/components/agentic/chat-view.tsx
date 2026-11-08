@@ -8,7 +8,9 @@ import type { AnalysisView, KpiChecksView } from "@/mastra/tools/steward-views";
 import type { BuildProposalView } from "@/mastra/tools/build-tools";
 import type { ProposalListView } from "@/mastra/tools/inbox-tools";
 import { useLifecycle } from "../lifecycle/lifecycle-context";
+import { safeChatErrorText } from "@/lib/chat-error";
 import type { MergeProposalView, RetireView } from "@/mastra/tools/estate-tools";
+import type { PipelineRunView } from "@/mastra/tools/pipeline-tools";
 import type {
   ArchivedView,
   AssetView,
@@ -52,6 +54,8 @@ const STEP: Record<string, string> = {
   searchAssets: "Searched assets",
   "find-kpi-definitions": "Looked up KPI definitions",
   findKpiDefinitions: "Looked up KPI definitions",
+  "run-request-pipeline": "Ran the request pipeline",
+  runRequestPipeline: "Ran the request pipeline",
   "analyze-request": "Checked the catalog",
   analyzeRequest: "Checked the catalog",
   "compute-kpi": "Computed the KPI",
@@ -124,8 +128,8 @@ function followUps(m: UIMessage): string[] {
   const chips: string[] = [];
   for (const t of toolParts(m)) {
     const view = viewOf(t);
-    if (view === "steward-analysis/v1") {
-      const a = t.output as AnalysisView;
+    if (view === "steward-analysis/v1" || view === "pipeline-run/v1") {
+      const a = view === "pipeline-run/v1" ? (t.output as PipelineRunView).analysis : (t.output as AnalysisView);
       if (a.kpiChecks.some((k) => k.conflict)) chips.push(`Why are the KPI definitions for ${a.request.id} in conflict?`);
       if (a.recommendation.kind === "reuse_candidates") chips.push(`What is unknown about the top candidate for ${a.request.id}?`);
     }
@@ -311,6 +315,23 @@ function ToolCards({ t, send, busy }: { t: ToolPart; send: (t: string) => void; 
   switch (viewOf(t)) {
     case "steward-analysis/v1":
       return <AnalysisCards v={t.output as AnalysisView} send={send} busy={busy} />;
+    case "pipeline-run/v1": {
+      const r = t.output as PipelineRunView;
+      const covered = r.duplicate && ["reuse", "pending", "restore"].includes(r.duplicate.verdict) && r.path !== "reuse";
+      return (
+        <div className="space-y-2">
+          <p className="flex items-center gap-1.5 text-[11px] text-ink-3">
+            <span className="h-1.5 w-1.5 rounded-full bg-blue" aria-hidden />
+            {r.runId} · shown live in the Pipeline view
+          </p>
+          {covered ? (
+            <DuplicateCard v={r.duplicate!} send={send} busy={busy} />
+          ) : (
+            <AnalysisCards v={r.analysis} send={send} busy={busy} />
+          )}
+        </div>
+      );
+    }
     case "kpi-checks/v1":
       return <KpiChecksCards v={t.output as KpiChecksView} />;
     case "build-proposal/v1":
@@ -411,6 +432,7 @@ function summarize(output: unknown): string {
     return `${o.checks.length} metrics${conflicts ? ` · ${conflicts} conflict` : ""}`;
   }
   if (o.view === "proposal-list/v1") return `${o.total} waiting`;
+  if (o.view === "pipeline-run/v1") return `${o.runId} · ${String(o.path ?? o.status)}`;
   if (o.view === "duplicate-check/v1") return String(o.verdict);
   if (o.view === "estate-search/v1" || o.view === "archived-list/v1") return `${o.total} found`;
   if (o.view === "draft-request/v1") return String(o.requestId);
@@ -433,12 +455,7 @@ function Thinking() {
   );
 }
 
+// The server sends a short message; never show a serialized error object or stack trace.
 function readError(error: Error): string {
-  try {
-    const parsed = JSON.parse(error.message);
-    if (parsed?.error) return parsed.error;
-  } catch {
-    // not JSON
-  }
-  return error.message || "Something went wrong.";
+  return safeChatErrorText(error.message);
 }

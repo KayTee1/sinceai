@@ -1,0 +1,59 @@
+1
+00:00:00,650 --> 00:00:02,920
+Analytics keeps multiplying.
+
+2
+00:00:03,750 --> 00:00:07,630
+Duplicate dashboards. Conflicting KPI definitions.
+
+3
+00:00:08,150 --> 00:00:10,250
+Then a business question arrives.
+
+4
+00:00:10,350 --> 00:00:14,810
+Net sales and forecast variance. Xarelto, North America.
+
+5
+00:00:15,450 --> 00:00:18,840
+Analytics Steward maps the request to its KPIs.
+
+6
+00:00:19,550 --> 00:00:22,720
+A Mastra workflow searches the catalog for candidates,
+
+7
+00:00:23,650 --> 00:00:26,330
+checks for conflicting KPI definitions,
+
+8
+00:00:27,650 --> 00:00:30,480
+and for existing copies and pending builds.
+
+9
+00:00:31,050 --> 00:00:35,300
+Net sales has reuse candidates. Forecast variance is a gap.
+
+10
+00:00:35,400 --> 00:00:38,700
+The gap becomes a proposal. Nothing is built yet.
+
+11
+00:00:38,800 --> 00:00:40,790
+A regional Lead must approve it.
+
+12
+00:00:41,550 --> 00:00:44,330
+Only then is the approved insight created,
+
+13
+00:00:44,450 --> 00:00:46,440
+temporary, with provenance.
+
+14
+00:00:46,600 --> 00:00:50,050
+Over time, approved decisions keep the estate lean.
+
+15
+00:00:50,150 --> 00:00:54,650
+Analytics Steward. Find before you build. Govern what you keep.

@@ -156,6 +156,27 @@ export async function processDue(db: Client, until: string): Promise<number> {
 }
 
 async function expireTemporary(tx: Db, assetId: string, date: string) {
+  // Say who did open it, so "expired" is not read as "nobody looked at it".
+  const state = await getAssetState(tx, assetId);
+  const owner = state?.ownerId ?? null;
+  const region = owner
+    ? ((await tx.execute({ sql: `SELECT scope FROM Owners WHERE owner_id = ?`, args: [owner] })).rows[0]?.scope as string | undefined)
+    : undefined;
+  const opens = await tx.execute({
+    sql: `SELECT u.user_id, o.scope FROM usage_events u LEFT JOIN Owners o ON o.owner_id = u.user_id
+          WHERE u.asset_id = ? AND u.origin = 'app' AND u.sim_date > ?`,
+    args: [assetId, addDays(date, -TTL_DAYS)],
+  });
+  const others = opens.rows.filter((r) => r.user_id !== owner);
+  const people = new Set(others.map((r) => r.user_id as string));
+  const inRegion = new Set(others.filter((r) => region && r.scope === region).map((r) => r.user_id as string));
+  const rule = `Promotion needs the owner${owner ? ` (${owner})` : ""} to open it again, or ${TEAM_USERS} people in ${region ?? "the owner's region"}.`;
+  const rationale =
+    others.length === 0
+      ? `Temporary insight was not opened again within ${TTL_DAYS} days; archived (restorable).`
+      : `Temporary insight expired after ${TTL_DAYS} days: opened ${others.length} time(s) by ${people.size} other ` +
+        `${people.size === 1 ? "person" : "people"} (${inRegion.size} in ${region ?? "the owner's region"}), never by its owner. ` +
+        `${rule} Archived (restorable).`;
   await archiveAsset(tx, assetId, date);
   await appendAudit(tx, {
     simDate: date,
@@ -163,7 +184,7 @@ async function expireTemporary(tx: Db, assetId: string, date: string) {
     action: "ttl_expired",
     assetId,
     policyVersion: POLICY_VERSION,
-    rationale: `Temporary insight was not used again within ${TTL_DAYS} days; archived (restorable).`,
+    rationale,
   });
 }
 
@@ -291,6 +312,37 @@ async function openLeaseReview(tx: Db, assetId: string, date: string) {
     rationale,
     evidence,
   });
+}
+
+export type LeaseOutlook = {
+  leaseEnd: string;
+  /** What the lease review would do on leaseEnd if usage stays as it is now (D21). */
+  outcome: "auto_renew" | "steward_review" | "retire_review";
+  rationale: string;
+};
+
+/**
+ * Read-only preview of the lease review (same rules as openLeaseReview), so
+ * nobody has to guess whether an asset "needs a review". Null for Temporary,
+ * archived or lease-less assets.
+ */
+export async function leaseOutlook(db: Db, assetId: string): Promise<LeaseOutlook | null> {
+  const state = await getAssetState(db, assetId);
+  if (!state || state.status !== "active" || state.tier === "temporary" || !state.leaseEnd) return null;
+  const evidence = await buildEvidence(db, state, state.leaseEnd);
+  const used = wasUsed(evidence);
+  const outcome = !used ? "retire_review" : evidence.ownerStatus === "active" ? "auto_renew" : "steward_review";
+  const what =
+    outcome === "auto_renew"
+      ? `renews automatically for ${LEASE_DAYS} days with no human step`
+      : outcome === "steward_review"
+        ? `goes to the data steward (in use, but the owner is ${evidence.ownerStatus})`
+        : `gets a retire proposal for the owner (below ${LOW_USAGE_USERS} users and no app views)`;
+  return {
+    leaseEnd: state.leaseEnd,
+    outcome,
+    rationale: `If usage stays as now (${usageText(evidence)}), on ${state.leaseEnd} it ${what}.`,
+  };
 }
 
 /**
@@ -424,6 +476,35 @@ async function archiveAsset(tx: Db, assetId: string, date: string) {
     sql: `UPDATE asset_state SET status = 'archived', prev_tier = tier WHERE asset_id = ?`,
     args: [assetId],
   });
+  await closeProposalsForArchived(tx, assetId, date);
+}
+
+/**
+ * Once an asset is archived, other open proposals on it are stale: a chat
+ * retire, a lease review or a merge can all be open at once. Close them so a
+ * later reject cannot renew (reactivate) the archived asset; bringing it back
+ * is only done through restore (D14).
+ */
+async function closeProposalsForArchived(tx: Db, assetId: string, date: string) {
+  const open = await tx.execute({
+    sql: `SELECT id FROM proposals WHERE status IN ('open', 'escalated') AND (
+            EXISTS (SELECT 1 FROM json_each(asset_ids) WHERE value = ?)
+            OR (type = 'merge' AND json_extract(evidence, '$.targetId') = ?))`,
+    args: [assetId, assetId],
+  });
+  for (const row of open.rows) {
+    const id = row.id as string;
+    await tx.execute({ sql: `UPDATE proposals SET status = 'expired', due_on = NULL WHERE id = ?`, args: [id] });
+    await appendAudit(tx, {
+      simDate: date,
+      actor: "policy",
+      action: "proposal_closed",
+      assetId,
+      proposalId: id,
+      policyVersion: POLICY_VERSION,
+      rationale: `Closed without a decision: ${assetId} was archived. Restore it first if it is needed again.`,
+    });
+  }
 }
 
 /**
@@ -450,6 +531,17 @@ async function decideMergeTx(tx: Db, p: Proposal, input: DecisionInput, reason: 
       rationale: `Merge of ${ev.sourceId} into ${ev.targetId} rejected: ${reason} Both dashboards stay as they are.`,
     });
     return null;
+  }
+  // A proposal stored before both sides were required (MERGE-APPROVERS) may
+  // name no approver for a side, or omit it from required_approvers. Approving
+  // it could archive an unrepresented source, so approval is refused; the row
+  // is left as stored (a reject or a lifecycle reset closes it).
+  const sides = [ev.sourceApprover, ev.targetApprover];
+  if (sides.some((a) => !a || !p.requiredApprovers.includes(a))) {
+    throw new LifecycleError(
+      `${p.id} does not require an approver for both ${ev.sourceId} and ${ev.targetId}; it cannot be approved. Reject it and propose the merge again`,
+      "invalid",
+    );
   }
   if (ev.approvals.includes(input.actor)) throw new LifecycleError(`${input.actor} has already approved ${p.id}`, "invalid");
   const approvals = [...ev.approvals, input.actor];
@@ -562,6 +654,11 @@ export async function decide(db: Client, input: DecisionInput, date: string): Pr
     }
 
     const assetId = p.assetIds[0];
+    // Never decide on an archived asset: a renew here would skip restore (D14).
+    const current = await getAssetState(tx, assetId);
+    if (current?.status === "archived") {
+      throw new LifecycleError(`${assetId} is archived; restore it before deciding ${p.id}`, "invalid");
+    }
     // approve renew / reject retire -> renew; approve retire / reject renew -> retire.
     const renew = (p.type === "renew") === (input.action === "approve");
     await recordDecision(tx, p, input, reason, date);
@@ -771,6 +868,8 @@ export async function recordUsage(
   try {
     const s = await getAssetState(tx, input.assetId);
     if (!s) throw new LifecycleError(`Unknown asset ${input.assetId}`, "not_found");
+    // An archived asset is not in use; opening it must not count toward renewal or promotion.
+    if (s.status === "archived") throw new LifecycleError(`${input.assetId} is archived; restore it before using it`, "invalid");
     await tx.execute({
       sql: `INSERT INTO usage_events (asset_id, user_id, sim_date, origin) VALUES (?, ?, ?, 'app')`,
       args: [input.assetId, input.userId, date],

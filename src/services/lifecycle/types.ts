@@ -76,6 +76,8 @@ export type MergeEvidence = {
   usage: { sourceUsers: number | null; targetUsers: number | null; sourceOpens90d: number; targetOpens90d: number };
   /** Assets fed by the source; redirected to the target on merge. */
   downstreamAssets: string[];
+  /** Set when the target has a lower tier than the source; absent on older proposals. */
+  tierWarning?: string | null;
   /** Required approvers who have approved so far. */
   approvals: string[];
   reason: string;

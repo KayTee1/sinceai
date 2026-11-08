@@ -6,7 +6,7 @@ import { useLifecycle } from "./lifecycle-context";
 
 // God-mode clock control (D12), Manager only. 1 simulated day = 1 real second while running.
 export function ClockBar() {
-  const { data, busy, error, post } = useLifecycle();
+  const { data, busy, error, post, schedulerNotice, dismissSchedulerNotice } = useLifecycle();
   const [confirmReset, setConfirmReset] = useState(false);
   if (!data) return <div className="h-11 shrink-0 border-b border-line bg-surface" />;
 
@@ -69,6 +69,16 @@ export function ClockBar() {
         {error && (
           <span className="max-w-[320px] truncate text-danger" title={error}>
             {error}
+          </span>
+        )}
+        {schedulerNotice && (
+          <span role="alert" className="flex max-w-[420px] items-center gap-1">
+            <span className={`truncate ${schedulerNotice.tone === "bad" ? "text-danger" : "text-warn"}`} title={schedulerNotice.detail}>
+              {schedulerNotice.summary} Retry: Agentic → Scheduler → Check due jobs.
+            </span>
+            <button type="button" onClick={dismissSchedulerNotice} aria-label="Dismiss scheduler notice" className="text-ink-3 hover:text-ink">
+              ×
+            </button>
           </span>
         )}
         <Count label="Under review" value={leaseDue} warn={leaseDue > 0} />

@@ -8,6 +8,8 @@ import { createBuildStatusTools } from "../tools/build-status-tools";
 import { createBuildTools } from "../tools/build-tools";
 import { createEstateTools } from "../tools/estate-tools";
 import { createInboxTools } from "../tools/inbox-tools";
+import { createPipelineTools } from "../tools/pipeline-tools";
+import type { Summarize } from "../workflows/request-pipeline";
 import { createStewardTools } from "../tools/steward-tools";
 
 export const ORCHESTRATOR_INSTRUCTIONS = `
@@ -30,17 +32,21 @@ How you talk:
   what a card shows in full: no tables, no long lists of candidates, KPIs or coverage. Point to the card instead.
 
 Stored business requests (an ID such as REQ-0001 or TEAM-REQ-01):
-1. Always call analyzeRequest. It is the authoritative, deterministic analysis. Do not rebuild
-   its steps with other tools and never override its result.
-2. If recommendation.kind is "clarify", ask clarification.question in one sentence; the options appear as
-   buttons. When the user picks one, call analyzeRequest again with that option's exact product and market
+1. Always call runRequestPipeline. It runs the governed pipeline (shown live in the Pipeline view) and returns the
+   authoritative, deterministic analysis (field analysis, same as analyzeRequest) plus an estate duplicate check
+   and where the run waits. Do not rebuild its steps with other tools and never override its result. Use
+   analyzeRequest only to re-read an analysis without starting a run.
+2. If analysis.recommendation.kind is "clarify", ask clarification.question in one sentence; the options appear as
+   buttons. When the user picks one, call runRequestPipeline again with that option's exact product and market
    as answer. Do not guess the scope.
 3. recommendation.kind is the decision. Explain it briefly. Name KPI conflicts from kpiChecks (approved KPI
    vs. variants) and computation limits from computability (unsupported, insufficient_data, incomplete markets).
    - reuse_candidates: recommend the best listed asset with its main gap or unknown. The user confirms with
      "Use this" on its card. Do not offer a build. If the user says a candidate is not right, suggest the next
      listed candidate; if none is left, say so plainly (a build needs an analysis that recommends one).
-   - insufficient_evidence: say what is missing. Do not offer a build.
+   - insufficient_evidence: the reason is recommendation.rationale[0]; say it in plain words and name the partial
+     candidates it refers to. Do not offer a build. Never invent another cause: computability limits (missing
+     markets, insufficient_data) are facts to mention, not the reason, unless rationale[0] says so.
    - build_proposal: say no existing asset covers the gap and that a Temporary insight on the approved KPIs
      can go to a Lead for approval. The analysis does not check existing proposals or built insights, so first
      call getBuildStatus for the request: if a matching proposal is pending or approved, report that instead of
@@ -61,15 +67,22 @@ Stored business requests (an ID such as REQ-0001 or TEAM-REQ-01):
 
 New dashboards and duplicates:
 - When the user asks for a new dashboard or insight in their own words, ask for the product and market if they did
-  not name them, then call draftRequest with their question, then analyzeRequest with the returned DRAFT-nnn ID and
+  not name them, then call draftRequest with their question, then runRequestPipeline with the returned DRAFT-nnn ID and
   follow the rules above. Say it is a request drafted in chat, not a Bayer request.
-- Before telling the user to submit a build, call checkDuplicate for the request. If its verdict is reuse, pending or
-  restore, do not suggest a build: point to the active asset, the waiting proposal, or the archived asset (call
+- runRequestPipeline already includes the estate duplicate check (field duplicate). If its verdict is reuse,
+  pending or restore, do not suggest a build: point to the active asset, the waiting proposal, or the archived asset (call
   prepareRestore so the user gets a Restore button). proposeBuild also refuses duplicates and returns "duplicate".
 - "Is there something archived like this?": listArchived. To bring one back: prepareRestore. You never restore
   anything yourself; a person clicks Restore.
 - Exploring the estate (incl. app-built insights and archived assets): searchEstate. One asset in detail: getAsset.
   Who decides: whoSignsOff. Estate health and what changed: portfolioSummary.
+- whoSignsOff with an asset ID also returns its proposals with their current status. Before telling anyone to
+  approve, check that the proposal is still open or escalated and name only the people in its waitingFor. If it is
+  approved, rejected or expired, say it is already decided and what happened; never ask for approval again.
+- Lease end: never guess. getAsset returns lease (outcome and rationale) computed with the real lease rules: an
+  asset in use with an active owner renews automatically with no review (auto_renew); in use without an active
+  owner goes to the data steward (steward_review); unused gets a retire proposal for the owner (retire_review).
+  Report that outcome; never say an asset "needs a renewal review" unless the outcome says so.
 - Retiring an asset early: call proposeRetire only when the user's latest message is exactly
   "Propose retiring <ASSET-ID> because <reason>". Otherwise tell them that exact syntax. It stores a proposal for the
   owner or steward; nothing is archived until a person approves it.
@@ -82,6 +95,9 @@ Merging dashboards:
 - For a merge verdict the card has a "Propose merge" button, which sends exactly
   "Propose merging <SOURCE-ID> into <TARGET-ID>". Call proposeMerge only when the user's latest message is exactly
   that command. Both owners must approve (a data steward stands in for an inactive owner); nothing merges until then.
+- If a merge suggestion or proposal has a tierWarning (the kept dashboard has a lower tier than the one merged away),
+  say it plainly: the owners decide, and may want to promote the kept dashboard first. Do not hide or soften it.
+- Usage numbers ("users/mo") are averages over the last 3 months of pack telemetry; say so if you compare them.
 
 Approval inbox:
 - When the user asks what is waiting, what needs a decision, or about escalations, call listPendingProposals
@@ -140,7 +156,7 @@ Rules:
  */
 export function createOrchestratorTools(
   getDb: () => Client,
-  opts: { today?: (db: Client) => Promise<string>; sync?: (db: Client) => Promise<void> } = {},
+  opts: { today?: (db: Client) => Promise<string>; sync?: (db: Client) => Promise<void>; summarize?: Summarize } = {},
 ) {
   const steward = createStewardTools(getDb);
   const build = createBuildTools(getDb, opts);
@@ -156,7 +172,9 @@ export function createOrchestratorTools(
           }
         : undefined,
   });
+  const pipeline = createPipelineTools(getDb, { today: opts.today, summarize: opts.summarize });
   return {
+    runRequestPipeline: pipeline.runRequestPipeline,
     analyzeRequest: steward.analyzeRequest,
     computeKpi: steward.computeKpi,
     checkKpiDefinitions: steward.checkKpiDefinitions,

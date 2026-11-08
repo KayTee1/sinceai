@@ -22,7 +22,8 @@ import type {
   RestoreOfferView,
 } from "@/mastra/tools/estate-views";
 import { ProposalCard } from "../lifecycle/inbox";
-import { useLifecycle } from "../lifecycle/lifecycle-context";
+import { useLifecycle, type LifecycleSnapshot } from "../lifecycle/lifecycle-context";
+import { useNavigation } from "../navigation";
 
 type Send = (text: string) => void;
 
@@ -266,6 +267,47 @@ export function KpiChecksCards({ v }: { v: KpiChecksView }) {
 // ---------- proposals ----------
 
 /** Live inbox cards for the given proposal IDs; decided ones show as settled. */
+const DECIDED_TAG: Record<string, string> = {
+  merged: "Merged",
+  retired: "Retired",
+  renewed: "Lease renewed",
+  promoted: "Promoted",
+  insight_built: "Insight built",
+  temporary_registered: "Insight built",
+  proposal_closed: "Closed",
+};
+
+/** Replaces a proposal card once it is decided: what happened, by whom, and where to look. */
+function DecidedCard({ id, d }: { id: string; d: LifecycleSnapshot["decided"][string] | undefined }) {
+  const { openAsset } = useNavigation();
+  if (!d) return <p className="text-[11px] text-ink-3">{id}: decided, no longer waiting.</p>;
+  const rejected = d.status === "rejected";
+  const tag = rejected ? "Rejected" : d.status === "expired" ? "Closed" : (DECIDED_TAG[d.outcome] ?? "Approved");
+  return (
+    <Card tag={tag} tone={rejected || d.status === "expired" ? "warn" : "good"}>
+      <p className="text-ink-2">
+        <span className="font-medium text-ink">{id}</span> {d.summary}.
+      </p>
+      <p className="mt-0.5 text-[11px] text-ink-3">Live status: this replaces what the reply above said before the decision.</p>
+      {d.open.length > 0 && (
+        <div className="mt-2 flex flex-wrap justify-end gap-1.5">
+          {d.open.map((o, i) => (
+            <button
+              key={o.assetId}
+              type="button"
+              onClick={() => openAsset(o.assetId)}
+              className={i === 0 ? btnPrimary : "rounded-sm border border-line-strong px-3 py-1 font-medium text-ink-2 hover:bg-canvas"}
+              title={`Open ${o.assetId} in the Dashboard tab`}
+            >
+              Open {o.assetId} <span className="font-normal opacity-80">({o.note})</span> →
+            </button>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function LiveProposals({ ids, emptyText }: { ids: string[]; emptyText: string }) {
   const { data } = useLifecycle();
   if (!data) return null;
@@ -281,11 +323,9 @@ function LiveProposals({ ids, emptyText }: { ids: string[]; emptyText: string })
           ))}
         </ul>
       )}
-      {settled.length > 0 && (
-        <p className="text-[11px] text-ink-3">
-          {settled.join(", ")}: decided, no longer waiting.
-        </p>
-      )}
+      {settled.map((id) => (
+        <DecidedCard key={id} id={id} d={data.decided?.[id]} />
+      ))}
       {ids.length === 0 && <p className="text-[11px] text-ink-3">{emptyText}</p>}
     </div>
   );
@@ -443,6 +483,12 @@ export function RestoreCard({ v }: { v: RestoreOfferView }) {
   );
 }
 
+const LEASE_OUTCOME: Record<NonNullable<AssetView["lease"]>["outcome"], string> = {
+  auto_renew: "renews automatically (in use)",
+  steward_review: "data steward review (owner inactive)",
+  retire_review: "retire review by the owner (unused)",
+};
+
 export function AssetCard({ v, send, busy }: { v: AssetView; send: Send; busy: boolean }) {
   const [retiring, setRetiring] = useState(false);
   const [reason, setReason] = useState("");
@@ -466,7 +512,13 @@ export function AssetCard({ v, send, busy }: { v: AssetView; send: Send; busy: b
           {v.usage.appOpens} opens · {v.usage.appViewers} people{v.usage.lastOpened ? ` · last ${v.usage.lastOpened}` : ""}
         </dd>
         <dt className="text-ink-3">Pack users</dt>
-        <dd className="tabular">{v.usage.packAvgMonthlyUsers ?? "unknown"} / month avg</dd>
+        <dd className="tabular">{v.usage.packAvgMonthlyUsers ?? "unknown"} / month (last 3 months)</dd>
+        {v.lease && (
+          <>
+            <dt className="text-ink-3">At lease end</dt>
+            <dd className={v.lease.outcome === "auto_renew" ? "" : "text-warn"}>{LEASE_OUTCOME[v.lease.outcome]}</dd>
+          </>
+        )}
         {v.openProposals.length > 0 && (
           <>
             <dt className="text-ink-3">Waiting</dt>
@@ -559,7 +611,7 @@ const MERGE_TAG: Record<MergeSuggestionsView["suggestions"][number]["verdict"], 
 function UsageLine({ s }: { s: MergeSuggestionsView["suggestions"][number]["keep"] }) {
   return (
     <span className="tabular text-ink-3">
-      {s.packUsers ?? "?"} users/mo · {s.appOpens90d} app opens · {s.kpiIds.length} KPIs
+      {s.packUsers ?? "?"} users/mo (last 3 mo) · {s.appOpens90d} app opens · {s.kpiIds.length} KPIs
     </span>
   );
 }
@@ -585,6 +637,7 @@ export function MergeSuggestionsCards({ v, send, busy }: { v: MergeSuggestionsVi
               </div>
             </div>
             <p className="mt-1.5 text-ink-2">{x.reason}</p>
+            {x.tierWarning && <p className="mt-1 text-warn">{x.tierWarning}</p>}
             {x.verdict === "merge" && (
               <div className="mt-2 flex items-center justify-end gap-2">
                 <span className="mr-auto text-ink-3">

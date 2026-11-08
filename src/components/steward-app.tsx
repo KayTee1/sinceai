@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { DashboardData, Role } from "@/lib/types";
 import { formatDate } from "@/lib/format";
 import { DashboardView } from "./dashboard/dashboard-view";
@@ -8,6 +8,10 @@ import { ChatView } from "./agentic/chat-view";
 import { LifecycleProvider, useLifecycle } from "./lifecycle/lifecycle-context";
 import { ClockBar } from "./lifecycle/clock-bar";
 import { Inbox } from "./lifecycle/inbox";
+import { PipelineView } from "./agentic/pipeline-view";
+import { NavigationProvider } from "./navigation";
+import { SchedulerView } from "./agentic/scheduler-view";
+import { AGENTIC_SIDE_TABS, type AgenticSideTab } from "@/lib/scheduler-client";
 
 type Tab = "agentic" | "dashboard";
 
@@ -17,37 +21,78 @@ export function StewardApp({ data }: { data: DashboardData }) {
 
   // Employees only browse dashboards (D8); the Agentic tab is shown but locked.
   const activeTab: Tab = role === "employee" ? "dashboard" : tab;
+  const showDashboard = useCallback(() => setTab("dashboard"), []);
 
   return (
     <LifecycleProvider>
-      <div className="flex h-dvh flex-col">
-        <header className="grid h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center bg-navy px-5 text-white">
-          <Brand />
-          <TabSwitch value={activeTab} onChange={setTab} agenticLocked={role === "employee"} />
-          <div className="flex items-center justify-end gap-4">
-            {role === "employee" ? <ViewerPicker /> : <SimDate fallback={data.clockDate} />}
-            <RoleSwitch value={role} onChange={setRole} />
-          </div>
-        </header>
-
-        {role === "manager" && <ClockBar />}
-
-        <main className="min-h-0 flex-1">
-          {activeTab === "dashboard" ? (
-            <DashboardView data={data} role={role} />
-          ) : (
-            <div className="flex h-full">
-              <div className="min-w-0 flex-1">
-                <ChatView />
-              </div>
-              <aside className="w-[380px] shrink-0 border-l border-line bg-surface">
-                <Inbox />
-              </aside>
+      <NavigationProvider onOpen={showDashboard}>
+        <div className="flex h-dvh flex-col">
+          <header className="grid h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center bg-navy px-5 text-white">
+            <Brand />
+            <TabSwitch value={activeTab} onChange={setTab} agenticLocked={role === "employee"} />
+            <div className="flex items-center justify-end gap-4">
+              {role === "employee" ? <ViewerPicker /> : <SimDate fallback={data.clockDate} />}
+              <RoleSwitch value={role} onChange={setRole} />
             </div>
-          )}
-        </main>
-      </div>
+          </header>
+
+          {role === "manager" && <ClockBar />}
+
+          <main className="min-h-0 flex-1">
+            {activeTab === "dashboard" && <DashboardView data={data} role={role} />}
+            {/* Kept mounted while hidden: the chat history lives in this component, so
+                opening a dashboard from a chat card and coming back keeps the conversation. */}
+            <div className={activeTab === "agentic" ? "h-full" : "hidden"}>
+              <AgenticLayout />
+            </div>
+          </main>
+        </div>
+      </NavigationProvider>
     </LifecycleProvider>
+  );
+}
+
+type Side = AgenticSideTab;
+
+const SIDE_LABEL: Record<Side, string> = { pipeline: "Pipeline", scheduler: "Scheduler", inbox: "Inbox" };
+
+// T23: the chat with the live Pipeline view beside it (default), the
+// governance Scheduler (T24) or the approval inbox. ChatView sits outside the
+// aside, so switching side tabs never remounts the chat.
+function AgenticLayout() {
+  const [side, setSide] = useState<Side>("pipeline");
+  const { data } = useLifecycle();
+  const waiting = data?.pending.length ?? 0;
+  return (
+    // Below md the chat and side panel stack (each keeps a usable height and
+    // the page scrolls) instead of the panel's min width squeezing the chat
+    // to nothing; ChatView stays mounted either way.
+    <div className="flex h-full flex-col overflow-y-auto md:flex-row md:overflow-hidden">
+      <div className="h-[70vh] min-w-0 shrink-0 md:h-auto md:flex-1 md:shrink">
+        <ChatView />
+      </div>
+      <aside
+        className={`flex h-[85vh] w-full shrink-0 flex-col border-t border-line bg-surface md:h-auto md:border-l md:border-t-0 ${side === "inbox" ? "md:w-[380px]" : "md:w-[46%] md:min-w-[420px]"}`}
+      >
+        <div role="tablist" aria-label="Agentic side panel" className="flex shrink-0 gap-1 border-b border-line px-3 py-2">
+          {AGENTIC_SIDE_TABS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              role="tab"
+              id={`agentic-side-${s}`}
+              aria-selected={side === s}
+              aria-controls="agentic-side-panel"
+              onClick={() => setSide(s)}
+              className={`rounded-sm px-2.5 py-1 text-xs font-medium ${side === s ? "bg-navy text-white" : "text-ink-2 hover:bg-canvas"}`}
+            >
+              {s === "inbox" && waiting ? `Inbox (${waiting})` : SIDE_LABEL[s]}
+            </button>
+          ))}
+        </div>
+        <div id="agentic-side-panel" role="tabpanel" aria-labelledby={`agentic-side-${side}`} className="min-h-0 flex-1">{side === "pipeline" ? <PipelineView /> : side === "scheduler" ? <SchedulerView /> : <Inbox />}</div>
+      </aside>
+    </div>
   );
 }
 

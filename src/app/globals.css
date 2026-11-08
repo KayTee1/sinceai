@@ -108,3 +108,35 @@ body {
   padding: 4px 8px;
   text-align: left;
 }
+
+/* T23 Pipeline view: steps waiting for a person pulse gently. */
+@keyframes pipeline-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.pipeline-pulse {
+  animation: pipeline-pulse 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pipeline-pulse { animation: none; }
+}
+
+/* T23 storyboard: steps slide in, the result card pops out. */
+@keyframes storyboard-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: none; }
+}
+.storyboard-in {
+  animation: storyboard-in 0.35s ease-out both;
+}
+@keyframes storyboard-pop {
+  0% { opacity: 0; transform: scale(0.85) translateY(10px); }
+  70% { opacity: 1; transform: scale(1.03); }
+  100% { opacity: 1; transform: none; }
+}
+.storyboard-pop {
+  animation: storyboard-pop 0.55s cubic-bezier(0.2, 1.2, 0.4, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .storyboard-in, .storyboard-pop { animation: none; }
+}

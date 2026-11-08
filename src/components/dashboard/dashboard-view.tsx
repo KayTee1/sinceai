@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AssetSummary, DashboardData, Role, Tier } from "@/lib/types";
 import { int, leaseLabel } from "@/lib/format";
 import { TierBadge } from "./tier-badge";
 import { useLifecycle } from "../lifecycle/lifecycle-context";
+import { useNavigation } from "../navigation";
 import { AssetDetail } from "./asset-detail";
 import { MyDashboards } from "./my-dashboards";
 import { EstateOverview } from "./estate-overview";
@@ -23,6 +24,13 @@ type Section = "teams" | "catalog" | "overview";
 // existing reports) and the estate overview; the two sources are never mixed (D19).
 export function DashboardView({ data, role }: { data: DashboardData; role: Role }) {
   const [section, setSection] = useState<Section>("teams");
+  // A card elsewhere asked to open an asset: show it in the catalog.
+  const { focus } = useNavigation();
+  const [seenFocus, setSeenFocus] = useState(0);
+  if (focus && focus.n !== seenFocus) {
+    setSeenFocus(focus.n);
+    if (role !== "employee") setSection("catalog");
+  }
   if (role === "employee") return <MyDashboards data={data} role={role} />;
   const sections: { id: Section; label: string; note: string }[] = [
     { id: "teams", label: "Team dashboards", note: "employee view, with views per dashboard" },
@@ -66,7 +74,15 @@ export function DashboardView({ data, role }: { data: DashboardData; role: Role 
 function CatalogView({ data, role }: { data: DashboardData; role: Role }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Tier | "all">("all");
-  const [selectedId, setSelectedId] = useState(data.assets[0]?.id);
+  const { focus } = useNavigation();
+  const [selectedId, setSelectedId] = useState(focus?.assetId ?? data.assets[0]?.id);
+  const [seenFocus, setSeenFocus] = useState(focus?.n ?? 0);
+  if (focus && focus.n !== seenFocus) {
+    setSeenFocus(focus.n);
+    setSelectedId(focus.assetId);
+    setQuery("");
+    setFilter("all");
+  }
   const { logOpen } = useLifecycle();
 
   const visible = useMemo(() => {
@@ -143,8 +159,13 @@ function CatalogView({ data, role }: { data: DashboardData; role: Role }) {
 }
 
 function AssetRow({ asset, active, onSelect }: { asset: AssetSummary; active: boolean; onSelect: () => void }) {
+  // Keep the selected row visible, e.g. when a chat card opens a dashboard deep in the list.
+  const ref = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (active) ref.current?.scrollIntoView({ block: "nearest" });
+  }, [active]);
   return (
-    <li>
+    <li ref={ref}>
       <button
         type="button"
         onClick={onSelect}
