@@ -1,0 +1,30 @@
+{
+  "name": "analytics-steward-cinematic-demo",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Standalone, deterministic 3D film for the Analytics Steward demo video (built for the Since AI Hackathon). No backend, no private data.",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@react-three/fiber": "9.8.2",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "three": "0.187.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/three": "0.187.0",
+    "@vitejs/plugin-react": "6.2.1",
+    "typescript": "5.9.3",
+    "vite": "8.3.6"
+  }
+}
