@@ -1,0 +1,42 @@
+{
+  "note": "Pruna AI prompts for the story shots only (S1-S3, S5, S12). Product shots are real screen recordings. Generate a still first (text-to-image), pick one, then animate it (image-to-video). Model names are confirmed against the current Pruna API before use.",
+  "style": "cinematic, 16:9, deep navy (#10384f) shadows, soft Bayer-green (#66b512) and light-blue (#00bcff) light, shallow depth of field, calm and premium, photoreal, no readable text, no letters, no numbers, no logos, no watermarks, no faces (hands only where needed)",
+  "negative": "text, letters, numbers, captions, logos, watermark, UI mockup with readable labels, distorted hands, extra fingers, faces, cluttered composition, oversaturated",
+  "shots": [
+    {
+      "id": "P1",
+      "shot": "S1",
+      "seconds": 9,
+      "image": "A modern laptop on a clean desk at night, the screen shows a glowing chat prompt and an abstract colorful dashboard of bar and line charts appearing, small holographic chart panels popping up above the laptop, navy room, soft green and light-blue glow",
+      "motion": "more holographic dashboard panels pop up one after another above the laptop, slow push in"
+    },
+    {
+      "id": "P2",
+      "shot": "S2",
+      "seconds": 10,
+      "image": "A huge wall of glowing chart screens overgrown like a jungle: vines and tangled cables wrapping the monitors, many near-identical charts side by side, some tinted amber and red, mist, dramatic side light",
+      "motion": "slow sideways pan, vines creep across the screens, a few screens flicker"
+    },
+    {
+      "id": "P3",
+      "shot": "S3",
+      "seconds": 10,
+      "image": "An empty office chair pushed back from a desk, a cardboard box with a plant and a mug on the desk, evening light, behind it one large monitor showing an abstract chart",
+      "motion": "the monitor behind the chair glitches, the chart breaks into static and goes dark, camera holds still"
+    },
+    {
+      "id": "P4",
+      "shot": "S5",
+      "seconds": 4,
+      "image": "Close-up of gentle hands holding small steel pruning shears, trimming a classic bonsai tree with a curved trunk and three distinct cloud-shaped foliage pads, in a simple dark navy ceramic pot, soft green rim light, minimal dark studio background",
+      "motion": "the shears make one careful snip, a small twig falls, camera slowly orbits the bonsai"
+    },
+    {
+      "id": "P5",
+      "shot": "S12",
+      "seconds": 9,
+      "image": "A classic bonsai tree with an elegantly curved trunk and three distinct cloud-shaped foliage pads, perfectly pruned, in a shallow light-blue ceramic pot on a wooden table, warm golden morning sunlight streaming through a window, soft lens flare, calm, clean, hopeful",
+      "motion": "slow pull back and rise, sunlight brightens, leaves move slightly"
+    }
+  ]
+}

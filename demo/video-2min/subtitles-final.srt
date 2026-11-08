@@ -1,0 +1,131 @@
+1
+00:00:00,472 --> 00:00:04,061
+In the age of AI, a dashboard
+is just a few prompts away.
+
+2
+00:00:04,344 --> 00:00:08,122
+Anyone can vibe-code one in minutes.
+
+3
+00:00:08,690 --> 00:00:10,400
+So they multiply.
+
+4
+00:00:10,590 --> 00:00:14,010
+Copies of copies,
+each with its own version of the truth.
+
+5
+00:00:14,200 --> 00:00:17,810
+At Bayer's scale,
+that is almost impossible to govern.
+
+6
+00:00:18,300 --> 00:00:21,400
+Then the person who built
+a critical dashboard leaves.
+
+7
+00:00:21,700 --> 00:00:23,200
+One day it breaks,
+
+8
+00:00:23,400 --> 00:00:27,700
+and nobody knows where its data comes from,
+or how to fix it.
+
+9
+00:00:28,200 --> 00:00:33,800
+In Bayer's synthetic estate, 86 of 360 dashboards
+already have no active owner.
+
+10
+00:00:34,200 --> 00:00:37,800
+Bonsai keeps analytics small, healthy, and owned.
+
+11
+00:00:38,316 --> 00:00:40,529
+Day one, before any migration:
+
+12
+00:00:40,740 --> 00:00:44,745
+Bonsai scans the whole estate,
+finds duplicates through their KPIs,
+
+13
+00:00:44,955 --> 00:00:47,695
+checks who actually uses each dashboard,
+
+14
+00:00:47,906 --> 00:00:51,489
+and suggests what to merge or retire.
+So you only move what earns its place.
+
+15
+00:00:51,991 --> 00:00:54,414
+Then every new request follows four rules.
+
+16
+00:00:54,705 --> 00:00:56,546
+One: find before you build.
+
+17
+00:00:56,740 --> 00:01:03,912
+Bonsai searches what already exists, flags conflicting
+KPI definitions, and proposes to build only the real gap.
+
+18
+00:01:04,509 --> 00:01:07,429
+Two: nothing gets built without a human.
+
+19
+00:01:07,637 --> 00:01:11,391
+The AI can only propose.
+A regional Lead approves.
+
+20
+00:01:11,933 --> 00:01:15,147
+Three: every number shows where it came from.
+
+21
+00:01:15,368 --> 00:01:20,245
+Its definition, its semantic model, the exact SQL.
+
+22
+00:01:20,467 --> 00:01:24,678
+So when something breaks, anyone can fix it.
+
+23
+00:01:25,218 --> 00:01:30,196
+Four: every dashboard has an owner,
+and must earn its next ninety days.
+
+24
+00:01:30,408 --> 00:01:34,221
+When an owner leaves, a data steward takes over.
+
+25
+00:01:34,767 --> 00:01:36,437
+And governance runs on its own.
+
+26
+00:01:36,604 --> 00:01:40,777
+Scheduled jobs watch every change,
+flag new duplicates,
+
+27
+00:01:40,944 --> 00:01:43,281
+and keep every finding up to date,
+
+28
+00:01:43,448 --> 00:01:49,124
+so your team can focus on the questions that matter.
+
+29
+00:01:49,903 --> 00:01:53,903
+Bonsai. Find before you build.
+
+30
+00:01:54,125 --> 00:01:58,792
+Govern what you keep.
