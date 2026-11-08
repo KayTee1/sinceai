@@ -75,13 +75,19 @@ export function ProposalCard({ p }: { p: PendingProposal }) {
   const decider = chosen && eligible.includes(chosen) ? chosen : (eligible[0] ?? null);
   const canDecide = decider !== null;
 
+  const [note, setNote] = useState<string | null>(null);
   const decide = async (action: "approve" | "reject") => {
+    const who = decider ? (people[decider]?.name ?? decider) : "";
     const ok = await post(`/api/proposals/${p.id}/decision`, { actor: decider, action, reason });
     if (ok) {
       setRejecting(false);
       setReason("");
+      // Shown while the card stays open (a merge waiting for its other owner);
+      // a fully decided proposal leaves the list and its outcome card takes over.
+      setNote(`${action === "approve" ? "Approved" : "Rejected"} as ${who}.`);
     }
   };
+  const waitingFor = p.requiredApprovers.filter((id) => !approved.includes(id));
 
   return (
     <li className="rounded-sm border border-line bg-surface p-3 text-xs">
@@ -151,7 +157,7 @@ export function ProposalCard({ p }: { p: PendingProposal }) {
             <dd>{ev.sharedKpis.join(", ")}</dd>
             <dt className="text-ink-3">Kept adds</dt>
             <dd>{ev.targetExtraKpis.join(", ") || "nothing"}</dd>
-            <dt className="text-ink-3">Users / month</dt>
+            <dt className="text-ink-3">Users / mo (3 mo)</dt>
             <dd className="tabular">
               {ev.usage.sourceUsers ?? "?"} here · {ev.usage.targetUsers ?? "?"} on kept
             </dd>
@@ -165,6 +171,7 @@ export function ProposalCard({ p }: { p: PendingProposal }) {
               {approved.length ? ` (${approved.map((id) => people[id]?.name ?? id).join(", ")})` : ""}
             </dd>
           </dl>
+          {ev.tierWarning && <p className="text-warn">{ev.tierWarning}</p>}
         </div>
       ) : "kind" in ev && (ev.kind as string) !== "team_use" ? (
         // A proposal type this app does not know (e.g. one written by another branch's code): show its rationale only.
@@ -222,6 +229,15 @@ export function ProposalCard({ p }: { p: PendingProposal }) {
           </button>
         ))}
       </div>
+
+      {approved.length > 0 && (
+        <p className="mt-2 rounded-sm bg-[#eef7e4] px-2 py-1 text-green-deep">
+          {note ? `${note} ` : ""}
+          {approved.length} of {p.requiredApprovers.length} approved
+          {waitingFor.length ? ` · waiting for ${waitingFor.map((id) => people[id]?.name ?? id).join(" and ")}` : ""}.
+          Nothing is merged until everyone approves.
+        </p>
+      )}
 
       {rejecting ? (
         <div className="mt-2 space-y-1.5">

@@ -205,6 +205,17 @@ describe("proposeRetire", () => {
     assert.ok(audit.some((e) => e.action === "proposal_closed" && e.proposalId === chat.id));
   });
 
+  it("getAsset previews the lease review with the real rules and uses the last 3 months of telemetry", async () => {
+    const busy = await getAsset(db, "AST-2"); // 300 users/mo, active owner
+    assert.equal(busy?.lease?.outcome, "auto_renew");
+    assert.match(busy?.lease?.rationale ?? "", /renews automatically/);
+    assert.equal(busy?.usage.packAvgMonthlyUsers, 300);
+    const unused = await getAsset(db, "AST-1"); // no telemetry, no app opens
+    assert.equal(unused?.lease?.outcome, "retire_review");
+    await archiveAst1();
+    assert.equal((await getAsset(db, "AST-1"))?.lease, null, "no lease preview once archived");
+  });
+
   it("archived assets list when and why", async () => {
     await archiveAst1();
     const { assets } = await listArchived(db);
@@ -342,6 +353,31 @@ describe("merge: suggest, propose, both owners decide", () => {
     assert.equal((await getAssetState(db, "AST-3"))?.status, "active");
     const merged = (await getAssetAudit(db, "AST-2")).find((e) => e.action === "merged");
     assert.deepEqual((merged?.evidence as { redirectTo: string }).redirectTo, "AST-3");
+  });
+
+  it("whoApproves shows each proposal's live status: waiting while open, decided after", async () => {
+    const p = await proposeMerge(db, { sourceId: "AST-2", targetId: "AST-3" }, DAY);
+    await decide(db, { proposalId: p.id, actor: "OWN-R", action: "approve" }, DAY);
+    let who = await whoApproves(db, { assetId: "AST-2" });
+    assert.deepEqual(who.proposals[0], { id: p.id, type: "merge", status: "open", waitingFor: ["OWN-1"] });
+    assert.match(who.rationale, /Waiting: .*OWN-1/);
+    // The target sees the merge too.
+    assert.equal((await whoApproves(db, { assetId: "AST-3" })).proposals[0]?.id, p.id);
+
+    await decide(db, { proposalId: p.id, actor: "OWN-1", action: "approve" }, DAY);
+    who = await whoApproves(db, { assetId: "AST-2" });
+    assert.deepEqual(who.proposals[0], { id: p.id, type: "merge", status: "approved", waitingFor: [] });
+    assert.match(who.rationale, /Nothing is waiting .* approved/);
+  });
+
+  it("warns when the kept dashboard has a lower tier than the one merged away", async () => {
+    assert.equal((await suggestMerge(db, { assetId: "AST-2" }, DAY)).suggestions.find((x) => x.verdict === "merge")?.tierWarning, null);
+    await db.execute(`UPDATE asset_state SET tier = CASE asset_id WHEN 'AST-2' THEN 'team' ELSE 'personal' END WHERE asset_id IN ('AST-2', 'AST-3')`);
+    const merge = (await suggestMerge(db, { assetId: "AST-2" }, DAY)).suggestions.find((x) => x.verdict === "merge");
+    assert.match(merge?.tierWarning ?? "", /AST-3 is personal, lower than AST-2 \(team\)/);
+    const p = await proposeMerge(db, { sourceId: "AST-2", targetId: "AST-3" }, DAY);
+    assert.match((p.evidence as { tierWarning: string }).tierWarning, /lower than/);
+    assert.match(p.rationale, /Warning: AST-3 is personal/);
   });
 
   it("one rejection closes it and nothing changes", async () => {

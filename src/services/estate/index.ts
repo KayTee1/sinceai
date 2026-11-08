@@ -8,11 +8,13 @@ import type { Client } from "@libsql/client";
 import {
   getAssetAudit,
   getPortfolioCounts,
+  leaseOutlook,
   listPendingProposals,
   nextDueEvent,
   regionSteward,
   type AuditEntry,
   type BuildEvidence,
+  type LeaseOutlook,
   type PortfolioChanges,
   type PortfolioCounts,
 } from "../lifecycle";
@@ -226,10 +228,26 @@ export async function listArchived(db: Client, q: Omit<EstateQuery, "status" | "
   return { total, assets: out.slice(0, q.limit ?? 10) };
 }
 
+/** Months of pack telemetry behind "users/mo": the same window merges and lease reviews use. */
+export const PACK_USAGE_MONTHS = 3;
+
+/** Average monthly users over the asset's last PACK_USAGE_MONTHS months of pack telemetry. */
+export async function packAvgUsers(db: Client, assetId: string): Promise<number | null> {
+  const r = await db.execute({
+    sql: `SELECT AVG(unique_users) AS u FROM (SELECT unique_users FROM Asset_Usage WHERE asset_id = ? ORDER BY month DESC LIMIT ?)`,
+    args: [assetId, PACK_USAGE_MONTHS],
+  });
+  const u = r.rows[0]?.u;
+  return u === null || u === undefined ? null : Math.round(Number(u));
+}
+
 export type AssetDetail = {
   asset: EstateAsset;
+  /** packAvgMonthlyUsers: average over the last PACK_USAGE_MONTHS months of pack telemetry. */
   usage: { appOpens: number; appViewers: number; lastOpened: string | null; packAvgMonthlyUsers: number | null };
   openProposals: { id: string; type: string; status: string; dueOn: string | null }[];
+  /** What the next lease review will do if usage stays as now (null for Temporary or archived). */
+  lease: LeaseOutlook | null;
   timeline: Pick<AuditEntry, "simDate" | "actor" | "action" | "rationale">[];
 };
 
@@ -237,27 +255,28 @@ export async function getAsset(db: Client, assetId: string): Promise<AssetDetail
   const id = assetId.trim().toUpperCase();
   const asset = (await loadEstate(db)).find((a) => a.assetId.toUpperCase() === id);
   if (!asset) return null;
-  const [opens, pack, pending, audit] = await Promise.all([
+  const [opens, packUsers, pending, audit, lease] = await Promise.all([
     db.execute({
       sql: `SELECT COUNT(*) AS n, COUNT(DISTINCT user_id) AS v, MAX(sim_date) AS last FROM usage_events WHERE asset_id = ? AND origin = 'app'`,
       args: [asset.assetId],
     }),
-    db.execute({ sql: `SELECT AVG(unique_users) AS u FROM Asset_Usage WHERE asset_id = ?`, args: [asset.assetId] }),
+    packAvgUsers(db, asset.assetId),
     listPendingProposals(db),
     getAssetAudit(db, asset.assetId),
+    leaseOutlook(db, asset.assetId),
   ]);
-  const u = pack.rows[0]?.u;
   return {
     asset,
     usage: {
       appOpens: Number(opens.rows[0]?.n ?? 0),
       appViewers: Number(opens.rows[0]?.v ?? 0),
       lastOpened: (opens.rows[0]?.last as string | null) ?? null,
-      packAvgMonthlyUsers: u === null || u === undefined ? null : Math.round(Number(u)),
+      packAvgMonthlyUsers: packUsers,
     },
     openProposals: pending
       .filter((p) => p.assetIds.includes(asset.assetId))
       .map((p) => ({ id: p.id, type: p.type, status: p.status, dueOn: p.dueOn })),
+    lease,
     timeline: audit.slice(-8).map((e) => ({ simDate: e.simDate, actor: e.actor, action: e.action, rationale: e.rationale })),
   };
 }
@@ -269,6 +288,12 @@ export type Approvers = {
   build: Approver[] | null;
   /** For a lease review or retire of this asset: its owner, then the region's steward on escalation. */
   review: { owner: Approver | null; steward: Approver | null } | null;
+  /**
+   * Proposals on this asset (as subject or merge target), newest first, with
+   * their current status, so "who decides" never suggests approving something
+   * already decided. waitingFor: approvers still to act (open ones only).
+   */
+  proposals: { id: string; type: string; status: string; waitingFor: string[] }[];
   rationale: string;
 };
 
@@ -291,6 +316,7 @@ async function regionOf(db: Client, market: string): Promise<string> {
 export async function whoApproves(db: Client, input: { market?: string; assetId?: string }): Promise<Approvers> {
   let build: Approver[] | null = null;
   let review: Approvers["review"] = null;
+  let proposals: Approvers["proposals"] = [];
   const notes: string[] = [];
   if (input.market) {
     const region = await regionOf(db, input.market);
@@ -320,9 +346,38 @@ export async function whoApproves(db: Client, input: { market?: string; assetId?
         `${a.assetId} reviews go to ${owner ? `${owner.name}${owner.active ? "" : " (inactive)"}` : "no owner"}, ` +
           `then escalate to ${steward?.name ?? "no active steward"} after 14 days (or at once without an active owner).`,
       );
+      proposals = await proposalsOn(db, a.assetId);
+      const open = proposals.filter((p) => p.status === "open" || p.status === "escalated");
+      if (open.length) {
+        notes.push(`Waiting: ${open.map((p) => `${p.id} (${p.type}) for ${p.waitingFor.join(" and ") || "an assigned owner"}`).join("; ")}.`);
+      } else if (proposals[0]) {
+        notes.push(`Nothing is waiting on ${a.assetId}; latest proposal ${proposals[0].id} is ${proposals[0].status}.`);
+      }
     } else notes.push(`Unknown asset ${input.assetId}.`);
   }
-  return { build, review, rationale: notes.join(" ") };
+  return { build, review, proposals, rationale: notes.join(" ") };
+}
+
+async function proposalsOn(db: Client, assetId: string): Promise<Approvers["proposals"]> {
+  const r = await db.execute({
+    sql: `SELECT id, type, status, required_approvers, evidence FROM proposals
+          WHERE EXISTS (SELECT 1 FROM json_each(asset_ids) WHERE value = ?)
+             OR (type = 'merge' AND json_extract(evidence, '$.targetId') = ?)
+          ORDER BY created_on DESC, rowid DESC LIMIT 5`,
+    args: [assetId, assetId],
+  });
+  return r.rows.map((row) => {
+    const status = row.status as string;
+    const required = JSON.parse(row.required_approvers as string) as string[];
+    const approvals = (JSON.parse(row.evidence as string) as { approvals?: string[] }).approvals ?? [];
+    const open = status === "open" || status === "escalated";
+    return {
+      id: row.id as string,
+      type: row.type as string,
+      status,
+      waitingFor: open ? required.filter((a) => !approvals.includes(a)) : [],
+    };
+  });
 }
 
 export type PortfolioSummary = {

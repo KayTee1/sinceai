@@ -109,6 +109,7 @@ export type AssetView = {
   asset: EstateItemView & { leaseEnd: string | null; ttlEnd: string | null };
   usage: AssetDetail["usage"];
   openProposals: AssetDetail["openProposals"];
+  lease: AssetDetail["lease"];
   timeline: AssetDetail["timeline"];
 };
 
@@ -118,6 +119,7 @@ export function assetView(d: AssetDetail): AssetView {
     asset: { ...estateItem({ ...d.asset, kpiMatches: [], coversAllKpis: false }), leaseEnd: d.asset.leaseEnd, ttlEnd: d.asset.ttlEnd },
     usage: d.usage,
     openProposals: d.openProposals,
+    lease: d.lease,
     timeline: d.timeline,
   };
 }
@@ -156,6 +158,7 @@ export type MergeSuggestionsView = {
     missingKpis: string[];
     extraKpis: string[];
     downstreamAssets: string[];
+    tierWarning: string | null;
     reason: string;
   }[];
   note: string;
@@ -180,6 +183,7 @@ export function mergeSuggestionsView(r: MergeSuggestions): MergeSuggestionsView 
       missingKpis: x.missingKpis,
       extraKpis: x.extraKpis,
       downstreamAssets: x.downstreamAssets,
+      tierWarning: x.tierWarning,
       reason: x.reason,
     })),
     note: r.note,

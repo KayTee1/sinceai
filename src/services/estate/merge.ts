@@ -24,7 +24,7 @@ import {
   type Proposal,
 } from "../lifecycle";
 import { scopeFit } from "../steward/discovery";
-import { loadEstate, type EstateAsset } from "./index";
+import { loadEstate, packAvgUsers, type EstateAsset } from "./index";
 
 /** TEAM ASSUMPTION: a target is bloated for a source when it adds at least this many unrelated KPIs... */
 export const BLOAT_MIN_EXTRA = 4;
@@ -47,6 +47,8 @@ export type MergeSuggestion = {
   /** KPIs on keep that mergeAway's users never use. */
   extraKpis: string[];
   downstreamAssets: string[];
+  /** merge only: set when the kept dashboard has a lower tier than the one merged away (owners still decide). */
+  tierWarning: string | null;
   reason: string;
 };
 
@@ -57,16 +59,11 @@ const USAGE_NOTE =
   "How many people look at one metric is unknown.";
 
 async function usage(db: Client, assetId: string, date: string) {
-  const pack = await db.execute({
-    sql: `SELECT AVG(unique_users) AS u FROM (SELECT unique_users FROM Asset_Usage WHERE asset_id = ? ORDER BY month DESC LIMIT 3)`,
-    args: [assetId],
-  });
   const opens = await db.execute({
     sql: `SELECT COUNT(*) AS n FROM usage_events WHERE asset_id = ? AND sim_date > ?`,
     args: [assetId, addDays(date, -90)],
   });
-  const u = pack.rows[0]?.u;
-  return { packUsers: u === null || u === undefined ? null : Math.round(Number(u)), appOpens90d: Number(opens.rows[0]?.n ?? 0) };
+  return { packUsers: await packAvgUsers(db, assetId), appOpens90d: Number(opens.rows[0]?.n ?? 0) };
 }
 
 /** Owner when active, else the region's data steward. */
@@ -109,6 +106,7 @@ async function pair(db: Client, source: EstateAsset, target: EstateAsset, date: 
       keep,
       ...base,
       downstreamAssets: [],
+      tierWarning: null,
       reason: `${label(target)} lacks ${missing.join(", ")} of ${label(source)}; merging would drop them. Keep both.`,
     };
   }
@@ -119,6 +117,7 @@ async function pair(db: Client, source: EstateAsset, target: EstateAsset, date: 
       keep,
       ...base,
       downstreamAssets: [],
+      tierWarning: null,
       reason:
         `${label(target)} covers all ${shared.length} KPI(s) of ${label(source)} but adds ${extra.length} others its users ` +
         `do not use; merging would bury them in a crowded dashboard. Keep the focused ${source.assetId}` +
@@ -131,6 +130,11 @@ async function pair(db: Client, source: EstateAsset, target: EstateAsset, date: 
     if (a[0] > b[0] || (a[0] === b[0] && a[1] > b[1])) [away, keep] = [keep, away];
   }
   const ds = await downstream(db, away.assetId);
+  const tierWarning =
+    (TIER_RANK[keep.tier] ?? 0) < (TIER_RANK[away.tier] ?? 0)
+      ? `${keep.assetId} is ${keep.tier}, lower than ${away.assetId} (${away.tier}): its users would move to a less governed ` +
+        `dashboard. The owners should check this, or promote ${keep.assetId} first.`
+      : null;
   return {
     verdict: "merge",
     mergeAway: away,
@@ -138,6 +142,7 @@ async function pair(db: Client, source: EstateAsset, target: EstateAsset, date: 
     ...base,
     extraKpis: keep.kpiIds.filter((k) => !away.kpiIds.includes(k)),
     downstreamAssets: ds,
+    tierWarning,
     reason:
       `${label(keep)} already covers every KPI of ${label(away)} (${shared.join(", ")}) for the same or a broader scope. ` +
       `Merge ${away.assetId} into ${keep.assetId}: its users${ds.length ? ` and ${ds.length} downstream asset(s)` : ""} ` +
@@ -238,6 +243,7 @@ export async function proposeMerge(
       targetOpens90d: s.keep.assetId === targetId ? s.keep.appOpens90d : s.mergeAway.appOpens90d,
     },
     downstreamAssets: await downstream(db, sourceId),
+    tierWarning: s.tierWarning,
     approvals: [],
     reason: s.reason,
     source: [
@@ -249,7 +255,8 @@ export async function proposeMerge(
   const id = `PRP-MERGE-${sourceId}-INTO-${targetId}-${date}`;
   const rationale =
     `Merge ${label(source)} into ${label(target)}: ${targetId} covers all its KPIs (${evidence.sharedKpis.join(", ")}). ` +
-    `Needs approval from ${approvers.join(" and ")}; on approval ${sourceId} is archived (restorable) and redirects to ${targetId}.`;
+    `Needs approval from ${approvers.join(" and ")}; on approval ${sourceId} is archived (restorable) and redirects to ${targetId}.` +
+    (s.tierWarning ? ` Warning: ${s.tierWarning}` : "");
   await db.execute({
     sql: `INSERT INTO proposals (id, version, type, asset_ids, rationale, evidence, required_approvers, status, created_on, due_on)
           VALUES (?, 1, 'merge', ?, ?, ?, ?, 'open', ?, NULL)`,
