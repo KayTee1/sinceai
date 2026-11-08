@@ -1,0 +1,49 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  html,body{margin:0;width:1920px;height:1080px;background:#06121b;color:#e9eef5;
+    font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;overflow:hidden}
+  .wrap{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+  .glow{position:absolute;inset:0;background:radial-gradient(60% 50% at 50% 45%,rgba(16,56,79,.85),rgba(6,18,27,1))}
+  .kicker{position:relative;font-size:26px;letter-spacing:.38em;text-transform:uppercase;color:#6fd6c8}
+  .big{position:relative;font-size:220px;font-weight:300;letter-spacing:-.03em;line-height:1;margin:28px 0 10px}
+  .big b{color:#66b512;font-weight:500}
+  .line{position:relative;font-size:52px;font-weight:300}
+  .sub{position:relative;margin-top:26px;font-size:28px;color:#8b98ab}
+  .src{position:absolute;bottom:56px;font-size:20px;letter-spacing:.14em;text-transform:uppercase;color:#56637a}
+  .num{position:relative;font-size:150px;font-weight:200;color:#66b512;line-height:1}
+  .rule{position:relative;margin-top:24px;font-size:84px;font-weight:300;letter-spacing:-.02em}
+  .logo{position:absolute;top:56px;left:64px;display:flex;align-items:center;gap:16px;font-size:30px;color:#c9d4df}
+</style></head>
+<body><div class="glow"></div><div class="wrap" id="root"></div>
+<script>
+const LOGO=`<svg width="44" height="44" viewBox="0 0 64 64"><g fill="none" stroke="#e9eef5" stroke-linecap="round" stroke-linejoin="round"><path d="M31 49 C29 42 37 40 35 34 C33 28 26 29 25 23" stroke-width="4.5"/><path d="M35 35 C39 34 42 33 44 31" stroke-width="3"/><path d="M29 27 C33 24 37 20 40 16" stroke-width="3"/></g><ellipse cx="22" cy="21" rx="12.5" ry="6.5" fill="#66b512"/><ellipse cx="41" cy="14.5" rx="12" ry="6.5" fill="#4e8a12"/><ellipse cx="45" cy="30.5" rx="10" ry="5.5" fill="#66b512"/><rect x="13" y="48" width="38" height="4.5" rx="1.5" fill="#6fd6c8"/><path d="M17 52.5 H47 L43.5 59 H20.5 Z" fill="#6fd6c8"/></svg>`;
+const q=new URLSearchParams(location.search), c=q.get("card"), root=document.getElementById("root");
+const RULES={
+  "1":["Find before you build","Reuse what exists. Build only the real gap."],
+  "2":["Nothing is built without a human","The AI proposes. A regional Lead approves."],
+  "3":["Every number shows where it came from","Definition, semantic model, exact SQL."],
+  "4":["Every dashboard has an owner","And must earn its next 90 days."],
+};
+const ACTS={
+  "day1":["Day one","Scan before you migrate","Duplicates by KPI · real usage · merge and retire suggestions"],
+  "auto":["Every day after","Governance runs on its own","Scheduled jobs watch every change and flag new duplicates"],
+};
+if(ACTS[c]){
+  root.innerHTML=`<div class="logo">${LOGO}<span>Bonsai</span></div>
+    <div class="kicker">${ACTS[c][0]}</div>
+    <div class="rule">${ACTS[c][1]}</div>
+    <div class="sub">${ACTS[c][2]}</div>`;
+}else if(c==="stat"){
+  root.innerHTML=`<div class="kicker">Bayer synthetic analytics estate</div>
+    <div class="big"><b>86</b> of 360</div>
+    <div class="line">dashboards have no active owner</div>
+    <div class="sub">65 owners inactive · 21 with no owner at all</div>
+    <div class="src">Source: Bayer synthetic data pack (Analytics_Assets, Owners)</div>`;
+}else if(RULES[c]){
+  root.innerHTML=`<div class="logo">${LOGO}<span>Bonsai</span></div>
+    <div class="kicker">Rule ${c} of 4</div>
+    <div class="rule">${RULES[c][0]}</div>
+    <div class="sub">${RULES[c][1]}</div>`;
+}
+</script></body></html>

@@ -1,0 +1,9 @@
+# Generated media stays out of git (about 200 MB); rebuild with the tools below.
+build/
+pruna/
+tools/node_modules/
+tools/A/
+tools/B/
+tools/C/
+tools/D/
+tools/*.mp4
