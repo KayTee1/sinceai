@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { formatDate } from "@/lib/format";
 import { useLifecycle, type PendingProposal } from "./lifecycle-context";
 
@@ -10,8 +10,10 @@ type Filter = "all" | "escalated" | "retire" | "renew" | "promote" | "build_temp
 // (Rule 11), so every card offers only its own approvers to decide as (D12).
 // Reject needs a reason.
 export function Inbox() {
-  const { data } = useLifecycle();
+  const { data, refresh } = useLifecycle();
   const [filter, setFilter] = useState<Filter>("all");
+  // Re-read on open: the snapshot only updates on clock ticks, own actions or chat proposals.
+  useEffect(() => refresh(), [refresh]);
   if (!data) return <div className="p-5 text-sm text-ink-3">Loading inbox…</div>;
 
   const items = data.pending.filter((p) =>
