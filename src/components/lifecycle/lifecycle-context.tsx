@@ -146,6 +146,21 @@ export function LifecycleProvider({ children }: { children: React.ReactNode }) {
       .catch((e) => setError(e.message));
   }, [load]);
 
+  // Proposals can be created outside this tab (another window, the HTTP API).
+  // While the clock is paused nothing polls, so re-read when the window regains focus.
+  useEffect(() => {
+    const onFocus = () => load().catch((e) => setError(e.message));
+    const onVisible = () => {
+      if (document.visibilityState === "visible") onFocus();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [load]);
+
   // While the clock runs (1 day per second), poll once a second.
   const running = data?.clock.running ?? false;
   useEffect(() => {

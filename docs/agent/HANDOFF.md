@@ -1,5 +1,38 @@
 # Handoff
 
+## Demo readiness (`fix/demo-readiness`, 2026-11-08)
+
+Base `origin/master` 3cdfb60. Fixes demo blockers only. No new features, and no change to
+approval rules, KPI math, governance or the scheduler. PR open against master, awaiting
+independent Codex review; not merged. Cinematic demo PR #40 is untouched.
+
+- **Chat errors:** `/api/chat` passes `onError` to `handleChatStream` (and wraps
+  pre-stream failures) through `src/lib/chat-error.ts`. The user sees one short message
+  (no credit, bad key, rate limit, unavailable or other). The server logs kind, status,
+  URL and a shortened message, never the request body, headers or stack. `readError` in
+  chat-view refuses to show JSON or stack text.
+- **Provenance label:** `MAPPING_LABEL` now reads "team-authored, proposed; not yet
+  approved", with no personal name. D14 is still proposed in DECISIONS. Insights built
+  before this change keep their stored label.
+- **Inbox refresh:** the inbox re-reads the lifecycle snapshot when opened and when the window
+  regains focus or visibility. Previously, while the clock was paused, a proposal created
+  outside the tab (API, another window) did not appear.
+- **Fallback CLI:** `src/mastra/workflows/request-pipeline-cli.ts` runs the real request
+  pipeline with template summaries (no model), so the Pipeline view works offline.
+  Always present it as a fallback, never as live AI.
+- **Runbook:** `docs/DEMO-RUNBOOK.md`: TEAM-REQ-01, about 3:40, model preflight with
+  GO/NO-GO. Preflight on 2026-11-08 returned 400 (no credit): NO-GO until the account is funded.
+- **Validation:** `PACK_XLSX=data/private/pack.xlsx npm test` 368/368 (4 new),
+  `npx tsc --noEmit`, `npm run lint` and `npm run build` pass after all changes. Browser checks on
+  a production build covered the friendly error, the inbox after an out-of-band proposal,
+  the fallback pipeline, approval, the provenance label, Next event, +30d, reject with a reason
+  and the before/after strip (53 renewed · 43 escalated · 1 expired · 1 built · 1 rejected).
+- **Open:** fund the Anthropic account and rerun the preflight. Scheduler B3 blocker text
+  still names Viet (`src/services/scheduler/proposals.ts`, not on the demo path). Mastra's
+  own logger prints the upstream error to the server console (not to users).
+
+## Previous snapshot (unchanged)
+
 Implementation snapshot: `1beff2ebd1e4df5393bc6b065795ca1ddb845edc` (`origin/master`, T26 merged in #38),
 verified 2026-11-08. Original refresh baseline: `43a1157`; reconciled against the
 committed final master revision. Local `master` is stale and was not moved.

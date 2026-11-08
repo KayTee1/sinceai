@@ -452,12 +452,17 @@ function Thinking() {
   );
 }
 
+const GENERIC_ERROR = "The AI assistant hit an error and stopped. Try again; details are in the server log.";
+
+// The server sends a short message; never show a serialized error object or stack trace.
 function readError(error: Error): string {
+  const text = error.message ?? "";
   try {
-    const parsed = JSON.parse(error.message);
-    if (parsed?.error) return parsed.error;
+    const parsed = JSON.parse(text);
+    return typeof parsed?.error === "string" ? parsed.error : GENERIC_ERROR;
   } catch {
     // not JSON
   }
-  return error.message || "Something went wrong.";
+  if (!text || text.length > 400 || /\n\s+at /.test(text)) return GENERIC_ERROR;
+  return text;
 }

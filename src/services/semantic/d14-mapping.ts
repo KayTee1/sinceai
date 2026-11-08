@@ -30,7 +30,9 @@ export type MappingEntry = {
   formula: string;
 };
 
-export const MAPPING_LABEL = "D14 computable KPI mapping (team-authored, proposed; pending Viet's agreement)";
+// Shown to users in every value's provenance. Status per docs/DECISIONS.md (D14
+// is still proposed); who must agree is tracked there, not in the UI.
+export const MAPPING_LABEL = "D14 computable KPI mapping (team-authored, proposed; not yet approved)";
 
 export const D14_MAPPING: Record<string, MappingEntry> = {
   "KPI-001": {

@@ -1,5 +1,8 @@
 # Demo runbook
 
+For the judged live demo after the film, use the rehearsed, timed
+[DEMO-RUNBOOK](DEMO-RUNBOOK.md) (TEAM-REQ-01, model preflight, no-model fallback).
+
 Implementation snapshot: `1beff2ebd1e4df5393bc6b065795ca1ddb845edc` (`origin/master`, T26 merged in #38),
 verified 2026-11-08. Original refresh baseline: `43a1157`; reconciled against the
 committed final master revision. Local `master` is stale and was not moved.
