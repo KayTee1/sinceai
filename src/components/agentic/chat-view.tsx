@@ -8,6 +8,7 @@ import type { AnalysisView, KpiChecksView } from "@/mastra/tools/steward-views";
 import type { BuildProposalView } from "@/mastra/tools/build-tools";
 import type { ProposalListView } from "@/mastra/tools/inbox-tools";
 import { useLifecycle } from "../lifecycle/lifecycle-context";
+import { safeChatErrorText } from "@/lib/chat-error";
 import type { MergeProposalView, RetireView } from "@/mastra/tools/estate-tools";
 import type { PipelineRunView } from "@/mastra/tools/pipeline-tools";
 import type {
@@ -452,17 +453,7 @@ function Thinking() {
   );
 }
 
-const GENERIC_ERROR = "The AI assistant hit an error and stopped. Try again; details are in the server log.";
-
 // The server sends a short message; never show a serialized error object or stack trace.
 function readError(error: Error): string {
-  const text = error.message ?? "";
-  try {
-    const parsed = JSON.parse(text);
-    return typeof parsed?.error === "string" ? parsed.error : GENERIC_ERROR;
-  } catch {
-    // not JSON
-  }
-  if (!text || text.length > 400 || /\n\s+at /.test(text)) return GENERIC_ERROR;
-  return text;
+  return safeChatErrorText(error.message);
 }
