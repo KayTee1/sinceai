@@ -23,6 +23,11 @@
 //   "team_mapping"). The model cannot pick who requests, and so cannot steer
 //   who approves.
 //
+// Duplicates (T21): the service returns already_proposed for a pending
+// proposal and already_built for an approved one (same request and scope),
+// storing nothing. already_built carries the stored build status (decision,
+// insight, lifecycle), so an archived insight is not mistaken for "no build".
+//
 // Request provenance (F5): the view labels the request with the sheet stored
 // in the proposal's evidence (the sheet the loader read it from), never one
 // inferred from the ID. A missing sheet is shown as "unknown" and listed in
@@ -34,6 +39,7 @@ import { proposeBuild, type ProposeBuildResult } from "../../services/build/buil
 import { ensureLifecycle, tick, type BuildEvidence, type Proposal } from "../../services/lifecycle";
 import { analyzeRequest } from "../../services/steward/analyze";
 import { TEAM_REQUEST_SHEET } from "../../services/steward/team-requests";
+import { buildRecordView, type BuildRecordView } from "./build-status-tools";
 import { duplicateView, type DuplicateView } from "./estate-views";
 import { passErrors } from "./steward-views";
 
@@ -133,7 +139,7 @@ export type ProposeBuildToolOutput = ProposeBuildResult | IntentRequired;
 export type BuildProposalView =
   | {
       view: "build-proposal/v1";
-      status: "proposed" | "already_proposed";
+      status: "proposed" | "already_proposed" | "already_built";
       request: { id: string; sourceSheet: string; teamAuthored: boolean };
       proposal: {
         id: string;
@@ -150,6 +156,8 @@ export type BuildProposalView =
       };
       next: string;
       knownIssues: string[];
+      /** already_built only: the stored approval, insight and lifecycle state. */
+      build?: BuildRecordView;
     }
   | { view: "build-proposal/v1"; status: "not_proposed"; recommendation: string; rationale: string[]; next: string }
   | { view: "build-proposal/v1"; status: "intent_required"; reason: AuthorizationFailure; message: string }
@@ -158,6 +166,10 @@ export type BuildProposalView =
 const PENDING_NOTE =
   "Pending human approval. Nothing is built, approved or registered yet. An authorised Lead (or the region's data " +
   "steward once escalated) decides in the approval inbox; the requester cannot approve their own build.";
+
+const alreadyBuiltNote = (b: BuildRecordView) =>
+  `No new proposal was stored: this request and scope already have an approved build. ${b.facts.join(" ")} ` +
+  "Rebuilding the same request and scope is not an agreed path; an archived insight can be restored from its timeline.";
 
 export const MISSING_REQUEST_SOURCE =
   "The stored proposal evidence names no source sheet for this request; its provenance is unknown.";
@@ -188,7 +200,7 @@ export function buildProposalView(o: ProposeBuildToolOutput): BuildProposalView 
   const ev = p.evidence as BuildEvidence;
   const requestSheet = ev.source?.find((s) => s.ids?.includes(ev.requestId))?.sheet ?? null;
   const teamAuthored = requestSheet === TEAM_REQUEST_SHEET;
-  return {
+  const stored: BuildProposalView = {
     view: "build-proposal/v1",
     status: o.status,
     request: { id: ev.requestId, sourceSheet: requestSheet ?? "unknown", teamAuthored },
@@ -208,6 +220,9 @@ export function buildProposalView(o: ProposeBuildToolOutput): BuildProposalView 
     next: PENDING_NOTE,
     knownIssues: requestSheet ? [] : [MISSING_REQUEST_SOURCE],
   };
+  if (o.status !== "already_built") return stored;
+  const build = buildRecordView(o.build);
+  return { ...stored, build, next: alreadyBuiltNote(build) };
 }
 
 /** Production date: the lifecycle clock, as POST /api/builds uses it (withLifecycle). */

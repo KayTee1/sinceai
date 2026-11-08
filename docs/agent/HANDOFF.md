@@ -1,5 +1,18 @@
 # Handoff
 
+## T21 build status (`feat/T21-build-status`, PR #32, 2026-11-08)
+
+Re-merged with master after #42. Read-only `getBuildStatus` (service
+`src/services/build/status.ts`, tool `get-build-status`) reports proposal
+status, decision, built insight and lifecycle separately. `proposeBuild`
+returns `already_proposed` / `already_built` for the same request (ID + source
+sheet) and scope and stores nothing; this check runs before T22's estate gate
+and again inside the write transaction. Merge note: master's insert had its
+own transaction plus the T23 `onBuildProposed` hook; the resolution keeps
+T21's caller-owned transaction and calls `onBuildProposed` after commit.
+Open: rebuild after TTL expiry is refused (restore is the path) until agreed;
+concurrent writers from other code paths can still hit SQLITE_BUSY.
+
 ## Demo readiness (`fix/demo-readiness`, 2026-11-08)
 
 Base `origin/master` 3cdfb60. Fixes demo blockers only. No new features, and no change to

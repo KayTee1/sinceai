@@ -4,6 +4,7 @@
 // prompt and tools against a disposable database: orchestrator.ts binds them
 // to the server-only client (src/db/client.ts) and adds search-assets.
 import type { Client } from "@libsql/client";
+import { createBuildStatusTools } from "../tools/build-status-tools";
 import { createBuildTools } from "../tools/build-tools";
 import { createEstateTools } from "../tools/estate-tools";
 import { createInboxTools } from "../tools/inbox-tools";
@@ -47,7 +48,9 @@ Stored business requests (an ID such as REQ-0001 or TEAM-REQ-01):
      candidates it refers to. Do not offer a build. Never invent another cause: computability limits (missing
      markets, insufficient_data) are facts to mention, not the reason, unless rationale[0] says so.
    - build_proposal: say no existing asset covers the gap and that a Temporary insight on the approved KPIs
-     can go to a Lead for approval. Tell the user to press "Submit build proposal" on the card, which sends
+     can go to a Lead for approval. The analysis does not check existing proposals or built insights, so first
+     call getBuildStatus for the request: if a matching proposal is pending or approved, report that instead of
+     offering a new one. Otherwise tell the user to press "Submit build proposal" on the card, which sends
      exactly: "Submit a build proposal for <ID>" (or, after a clarification, "Submit a build proposal for <ID>
      with product <PRODUCT> and market <MARKET>"). They may also type that command.
 4. Call proposeBuild only when the user's latest message is exactly that command. Use the request
@@ -57,6 +60,8 @@ Stored business requests (an ID such as REQ-0001 or TEAM-REQ-01):
    else returns "intent_required".
 5. Report proposeBuild exactly: "proposed" or "already_proposed" means a proposal is waiting for the listed
    approvers (its card has the Approve / Reject buttons); nothing is approved, built or registered.
+   "already_built" means nothing new was stored because the same request and scope were already
+   approved and built; give its build facts (approval, build and lifecycle state as stated).
    "not_proposed" means no proposal exists; give its rationale. "intent_required" means nothing
    was stored: give its message and the exact command syntax. Mention any knownIssues as given.
 
@@ -102,6 +107,23 @@ Approval inbox:
   buttons on a card; reject needs a reason. If asked to decide, say so and point to the card. The requester
   cannot approve their own build.
 
+Build status (was it proposed, approved, built, expired or archived; where is it):
+- Always call getBuildStatus with the request, proposal or insight ID and answer only from its
+  result. analyzeRequest is a fresh recommendation; it never tells you whether a proposal or
+  insight exists. Never call proposeBuild to check status.
+- If you have no ID, ask for one, or use the request ID from earlier in the conversation.
+- Keep three facts apart and state each: approval (proposal status and the recorded decision:
+  who, when, reason), build (whether the insight exists, when and by whom), and lifecycle (active
+  or archived, tier, TTL end, last lifecycle event). An approved build can be archived after its
+  Temporary TTL expired; that does not undo the approval. Use the facts lines as given.
+- Where to find it: use whereToFind as given. Never invent a URL or a screen.
+- What was built: a computed Temporary insight (approved KPI values per market with their
+  provenance), not a generated BI dashboard.
+- If store is "incomplete" (found is null), say the status cannot be verified and give its notes and any
+  storedProposals as listed. Never say that no proposal or insight exists in that case.
+- If found is false (store "complete"), say so with its notes; do not claim a build exists or not beyond them.
+- Each build lists its request.sourceSheet; builds from different sources are different requests.
+
 Free-text questions:
 - Metrics and definitions: checkKpiDefinitions.
 - KPI values: computeKpi (product name or All Pharma; market ID, region or Global).
@@ -110,7 +132,7 @@ Free-text questions:
 - A build proposal always needs a stored request: a pack or team request, or one drafted in chat (draftRequest).
 
 Rules:
-- Cite source IDs (AST-..., KPI-..., REQ-..., TEAM-REQ-..., PRP-...) for every claim. No evidence, no claim.
+- Cite source IDs (AST-..., KPI-..., REQ-..., TEAM-REQ-..., PRP-..., INS-...) for every claim. No evidence, no claim.
 - Numbers only from computability values (analyzeRequest) or computeKpi results, each with its
   unit, month and value type. Never estimate, derive or round a value yourself.
 - If a KPI is unsupported, insufficient_data or incomplete, say so and give no number.
@@ -128,7 +150,9 @@ Rules:
 
 /**
  * The governed tools of the live orchestrator: the T16A steward adapters and
- * the T16B propose-build adapter. orchestrator.ts adds search-assets.
+ * the T16B propose-build adapter, the T21 read-only build status and the
+ * T21 read-only inbox listing.
+ * orchestrator.ts adds search-assets.
  */
 export function createOrchestratorTools(
   getDb: () => Client,
@@ -136,6 +160,7 @@ export function createOrchestratorTools(
 ) {
   const steward = createStewardTools(getDb);
   const build = createBuildTools(getDb, opts);
+  const status = createBuildStatusTools(getDb);
   const inbox = createInboxTools(getDb, opts);
   // Tests inject a fixed date and a no-op lifecycle sync; production ticks the clock.
   const estate = createEstateTools(getDb, {
@@ -154,6 +179,7 @@ export function createOrchestratorTools(
     computeKpi: steward.computeKpi,
     checkKpiDefinitions: steward.checkKpiDefinitions,
     proposeBuild: build.proposeBuild,
+    getBuildStatus: status.getBuildStatus,
     listPendingProposals: inbox.listPendingProposals,
     ...estate,
   };

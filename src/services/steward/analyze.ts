@@ -215,7 +215,9 @@ export async function analyzeRequest(
       ...perMetric,
       `A build would use only approved KPIs: ${kpiChecks.map((k) => k.approved!.id).join(", ")}.`,
       ...perKpi,
-      "Computability was checked read-only; this proposal still needs approval, and nothing has been built.",
+      // T21: the analysis never reads proposals, built insights or lifecycle
+      // state, so it must not claim whether a build exists.
+      "Computability was checked read-only. This analysis does not check existing build proposals or built insights; any build needs a Lead's approval.",
       "Partial candidates are listed; the requester may still prefer one of them.",
     ],
     candidates.map((c) => c.source),

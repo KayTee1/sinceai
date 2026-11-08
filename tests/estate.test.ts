@@ -162,8 +162,9 @@ describe("proposeBuild duplicate gate", () => {
     const proposalId = await buildRequestS01();
     await decideBuild(db, { proposalId, actor: "OWN-1", action: "approve" }, DAY);
     const again = await proposeBuild(db, { requestId: "REQ-S01", requesterId: "OWN-R" }, DAY);
-    assert.equal(again.status, "duplicate");
-    assert.equal((again as { duplicate: { verdict: string } }).duplicate.verdict, "reuse");
+    // The same request is caught first by T21's same-request check (already_built);
+    // other requests over the same scope reach the T22 estate gate (duplicate).
+    assert.equal(again.status, "already_built");
     assert.equal((await listPendingProposals(db)).filter((p) => p.type === "build_temporary").length, 0);
   });
 });

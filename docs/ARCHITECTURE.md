@@ -80,6 +80,26 @@ show that stored evidence. Imported lineage remains catalog edges. There is no
 complete interactive lineage graph/on-demand evidence API or automatic proof
 that an imported dashboard uses the business fact calculations.
 
+### Build status and duplicates (T21)
+
+- `src/services/build/status.ts` (`getBuildStatus`, Mastra tool
+  `get-build-status`) reads `proposals`, `decisions`, `insights`, `asset_state`
+  and `audit_log` in one read-only transaction, with no clock tick. Approval
+  (proposal status and decision) and lifecycle (asset status) are separate
+  fields: an approved build whose Temporary TTL expired reports `approved` and
+  `archived`. A missing lifecycle table gives `store: "incomplete"` and
+  `found: null`, never "nothing exists".
+- `proposeBuild` checks for a pending or approved `build_temporary` proposal
+  with the same request ID, request source sheet (stored F5 `source` entry,
+  never the ID prefix), product and market. Pending → `already_proposed`;
+  approved, whatever the lifecycle state → `already_built`. Nothing is stored.
+  A rejection still allows a new proposal. Order: this same-request check,
+  then the T22 estate gate (`checkDuplicate` → `duplicate`), then the same
+  check again inside the write transaction (queued per client) with the
+  insert. The pipeline `onBuildProposed` hook runs after commit.
+- Open policy: rebuilding an archived (expired) build as a new proposal is
+  refused; restore is the path.
+
 ## Search and coverage limits
 
 `steward/discovery.ts` ranks catalog candidates by mapped approved/variant

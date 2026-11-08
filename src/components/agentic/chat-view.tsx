@@ -66,6 +66,8 @@ const STEP: Record<string, string> = {
   proposeBuild: "Submitted for approval",
   "list-pending-proposals": "Read the approval inbox",
   listPendingProposals: "Read the approval inbox",
+  "get-build-status": "Checked build status",
+  getBuildStatus: "Checked build status",
   "search-estate": "Searched the estate",
   searchEstate: "Searched the estate",
   "check-duplicate": "Checked for duplicates",

@@ -238,7 +238,7 @@ describe("computability in the steward analysis", () => {
         ["KPI-042", "computable", OCT, ["computed", "computed"]],
       ],
     );
-    assert.ok(a.recommendation.rationale.some((r) => r.includes("still needs approval, and nothing has been built")));
+    assert.ok(a.recommendation.rationale.some((r) => r.includes("does not check existing build proposals or built insights")));
     assert.ok(!a.recommendation.rationale.some((r) => r.includes("Not yet checked")));
     // Per-market values are kept alongside the statuses.
     assert.deepEqual(

@@ -27,6 +27,7 @@ Keys below are the model-facing names; IDs are the `createTool` registrations.
 | `pipeline-tools.ts` | `runRequestPipeline` (`run-request-pipeline`) | Execute request analysis workflow and persist run/events |
 | `steward-tools.ts` | `analyzeRequest` (`analyze-request`), `computeKpi` (`compute-kpi`), `checkKpiDefinitions` (`check-kpi-definitions`) | Deterministic service adapters |
 | `build-tools.ts` | `proposeBuild` (`propose-build`) | Command-gated proposal, never approval |
+| `build-tools.ts` | `getBuildStatus` (`get-build-status`) | Read-only proposal, decision, insight and lifecycle status (T21) |
 | `inbox-tools.ts` | `listPendingProposals` (`list-pending-proposals`) | Read open/escalated proposals |
 | `estate-tools.ts` | `searchEstate` (`search-estate`), `checkDuplicate` (`check-duplicate`), `listArchived` (`list-archived`), `getAsset` (`get-asset`) | Explore catalog plus app state |
 | same | `whoSignsOff` (`who-signs-off`), `portfolioSummary` (`portfolio-summary`), `prepareRestore` (`prepare-restore`) | Authority, counts, human restore offer |

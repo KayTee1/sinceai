@@ -19,8 +19,10 @@ import {
   registerTemporaryTx,
   validateDecision,
   type BuildEvidence,
+  type Db,
   type DecisionInput,
   type Proposal,
+  type ProposalStatus,
 } from "../lifecycle";
 import { scopeIds } from "../semantic/computability";
 import { computeKpiByMarket } from "../semantic/compute";
@@ -28,6 +30,7 @@ import type { KpiResult } from "../semantic/types";
 import { analyzeRequest } from "../steward/analyze";
 import { loadVocabulary } from "../steward/requests";
 import type { Scope } from "../steward/types";
+import { buildRecord, type BuildRecord } from "./status";
 
 export type InsightResult = {
   kpiId: string;
@@ -55,12 +58,19 @@ export type Insight = {
 export type ProposeBuildResult =
   | { status: "proposed"; proposal: Proposal }
   | { status: "already_proposed"; proposal: Proposal }
+  /**
+   * T21: this request and scope already have an approved build. Nothing new is
+   * stored. `build` reports the insight and its lifecycle state, which may be
+   * archived (Temporary TTL expired); rebuilding after expiry is not an agreed
+   * path (restore is), so it is refused too.
+   */
+  | { status: "already_built"; proposal: Proposal; build: BuildRecord }
   | { status: "not_proposed"; recommendation: string; rationale: string[] }
   /** T22: the estate already covers it (active or app-built asset, archived asset, or another waiting build). */
   | { status: "duplicate"; duplicate: DuplicateCheck };
 
 /** Region a scope's market belongs to: a region name, a market ID's region, or Global. */
-async function scopeRegion(db: Client, market: string): Promise<string> {
+async function scopeRegion(db: Db, market: string): Promise<string> {
   if (market === "Global") return "Global";
   const r = await db.execute({ sql: `SELECT region FROM Markets WHERE market_id = ?`, args: [market] });
   return (r.rows[0]?.region as string | undefined) ?? market;
@@ -68,7 +78,7 @@ async function scopeRegion(db: Client, market: string): Promise<string> {
 
 // D12: Business_Requests has no requester, so unless one is given we pick the
 // first active non-Lead, non-steward owner in the scope's region (our mapping, labelled).
-async function defaultRequester(db: Client, region: string): Promise<string | null> {
+async function defaultRequester(db: Db, region: string): Promise<string | null> {
   const r = await db.execute({
     sql: `SELECT owner_id FROM Owners WHERE status = 'active' AND scope = ?
           ORDER BY (role LIKE '%Lead%' OR role = 'Data Steward'), owner_id LIMIT 1`,
@@ -78,18 +88,73 @@ async function defaultRequester(db: Client, region: string): Promise<string | nu
 }
 
 /** D12 requester for a scope's market: our labelled team mapping, shared by builds and reuse confirmations. */
-export async function mappedRequester(db: Client, market: string): Promise<string | null> {
+export async function mappedRequester(db: Db, market: string): Promise<string | null> {
   return defaultRequester(db, await scopeRegion(db, market));
 }
 
-async function ownerRow(db: Client, id: string) {
+async function ownerRow(db: Db, id: string) {
   const r = await db.execute({ sql: `SELECT owner_id, scope, status FROM Owners WHERE owner_id = ?`, args: [id] });
   return r.rows[0];
 }
 
 /**
+ * Pending or approved build proposal for this request, request source and
+ * scope, approved first. Rejected proposals do not count: a new proposal may
+ * follow a rejection (existing versioning, INS-<request>-<n>).
+ *
+ * The request's identity is its ID plus the sheet it was loaded from, as
+ * recorded in the stored F5 evidence (`source` entry naming that sheet and
+ * listing the request ID). A pack request and a team-authored request that
+ * share an ID and scope are different requests; the ID prefix is never used.
+ */
+async function existingBuild(
+  db: Db,
+  requestId: string,
+  requestSheet: string,
+  scope: Scope,
+): Promise<{ id: string; status: ProposalStatus } | null> {
+  const r = await db.execute({
+    sql: `SELECT id, status FROM proposals WHERE type = 'build_temporary' AND status IN ('open', 'escalated', 'approved')
+          AND json_extract(evidence, '$.requestId') = ? AND json_extract(evidence, '$.scope.product') = ?
+          AND json_extract(evidence, '$.scope.market') = ?
+          AND EXISTS (
+            SELECT 1 FROM json_each(evidence, '$.source') src
+            WHERE json_extract(src.value, '$.sheet') = ?
+              AND EXISTS (SELECT 1 FROM json_each(src.value, '$.ids') i WHERE i.value = ?)
+          )
+          ORDER BY status = 'approved' DESC, created_on DESC, rowid DESC LIMIT 1`,
+    args: [requestId, scope.product, scope.market, requestSheet, requestId],
+  });
+  const row = r.rows[0];
+  return row ? { id: row.id as string, status: row.status as ProposalStatus } : null;
+}
+
+// Submissions through one client run their check-and-store one at a time.
+// Without this, concurrent calls race to BEGIN IMMEDIATE: the losers fail with
+// SQLITE_BUSY (no busy timeout is set), and with @libsql/client 0.18 such a
+// failure was seen to leave a pooled connection that later fails COMMIT
+// ("SQL statements in progress"). The write transaction still guards other
+// processes; there the loser gets SQLITE_BUSY and stores nothing.
+const submitQueue = new WeakMap<Client, Promise<unknown>>();
+
+function serialised<T>(db: Client, fn: () => Promise<T>): Promise<T> {
+  const run = (submitQueue.get(db) ?? Promise.resolve()).then(() => fn()); // the stored tail never rejects
+  submitQueue.set(db, run.catch(() => undefined));
+  return run;
+}
+
+/**
  * Runs the steward analysis and, only when it recommends a build, stores a
  * build_temporary proposal for the requester's team Lead (D13/D14).
+ *
+ * Duplicates (T21): a pending proposal for the same request (ID and source
+ * sheet) and scope returns
+ * already_proposed; an approved one returns already_built, whatever its
+ * insight's lifecycle state. The check, the insight numbering and the insert
+ * run in one write transaction (BEGIN IMMEDIATE), queued per client, so
+ * concurrent submissions cannot both store a proposal. Between the two, the
+ * T22 estate gate (checkDuplicate) returns duplicate when an active or archived
+ * asset, or a build waiting under another request, already covers the scope.
  */
 export async function proposeBuild(
   db: Client,
@@ -107,13 +172,10 @@ export async function proposeBuild(
   const requestSheet = analysis.request.source?.sheet;
   if (!requestSheet) throw new LifecycleError(`Request ${requestId} has no source sheet; refusing to guess its provenance`, "invalid");
 
-  const pending = await db.execute({
-    sql: `SELECT id FROM proposals WHERE type = 'build_temporary' AND status IN ('open', 'escalated')
-          AND json_extract(evidence, '$.requestId') = ? AND json_extract(evidence, '$.scope.product') = ?
-          AND json_extract(evidence, '$.scope.market') = ?`,
-    args: [requestId, scope.product, scope.market],
-  });
-  if (pending.rows[0]) return { status: "already_proposed", proposal: (await getProposal(db, pending.rows[0].id as string))! };
+  // T21 first: the same request (ID and source sheet) and scope already has a
+  // pending or approved build → already_proposed / already_built.
+  const prior = await existingBuild(db, requestId, requestSheet, scope);
+  if (prior) return existingResult(db, prior);
 
   // T22 duplicate gate: discovery reads only the imported catalog, so also
   // check app-built insights, archived assets and builds waiting under another
@@ -123,7 +185,45 @@ export async function proposeBuild(
     return { status: "duplicate", duplicate };
   }
 
-  let requesterId = input.requesterId?.trim() || null;
+  // The same-request check runs again inside the write transaction, so
+  // concurrent submissions cannot both store a proposal.
+  const { existing, stored } = await serialised(db, async () => {
+    const tx = await db.transaction("write");
+    try {
+      const existing = await existingBuild(tx, requestId, requestSheet, scope);
+      const stored = existing ? null : await storeProposal(tx, analysis, scope, requestSheet, input.requesterId, date);
+      await tx.commit();
+      return { existing, stored };
+    } catch (err) {
+      await tx.rollback();
+      throw err;
+    } finally {
+      tx.close();
+    }
+  });
+  if (existing) return existingResult(db, existing);
+  // Pipeline continuation (T23) runs after the commit, outside the transaction.
+  await onBuildProposed(db, { requestId, proposalId: stored!.proposalId, approvers: stored!.approvers });
+  return { status: "proposed", proposal: (await getProposal(db, stored!.proposalId))! };
+}
+
+async function existingResult(db: Client, existing: { id: string; status: ProposalStatus }): Promise<ProposeBuildResult> {
+  const proposal = (await getProposal(db, existing.id))!;
+  if (existing.status === "approved") return { status: "already_built", proposal, build: (await buildRecord(db, existing.id))! };
+  return { status: "already_proposed", proposal };
+}
+
+/** Stores the proposal and its audit row inside the caller's write transaction; returns its ID and approvers. */
+async function storeProposal(
+  db: Db,
+  analysis: Awaited<ReturnType<typeof analyzeRequest>>,
+  scope: Scope,
+  requestSheet: string,
+  givenRequester: string | undefined,
+  date: string,
+): Promise<{ proposalId: string; approvers: string[] }> {
+  const requestId = analysis.request.id;
+  let requesterId = givenRequester?.trim() || null;
   const requesterSource: BuildEvidence["requesterSource"] = requesterId ? "given" : "team_mapping";
   if (!requesterId) requesterId = await defaultRequester(db, await scopeRegion(db, scope.market));
   if (!requesterId) throw new LifecycleError(`No active person found to act as requester for ${requestId}`, "invalid");
@@ -177,32 +277,22 @@ export async function proposeBuild(
     `Proposed: build a Temporary insight from certified KPIs ${kpis.map((k) => k.kpiId).join(", ")} ` +
     `for ${requesterId}. Expires after 30 days unless used again.`;
 
-  const tx = await db.transaction("write");
-  try {
-    await tx.execute({
-      sql: `INSERT INTO proposals (id, version, type, asset_ids, rationale, evidence, required_approvers, status, created_on, due_on)
-            VALUES (?, 1, 'build_temporary', ?, ?, ?, ?, 'open', ?, NULL)`,
-      args: [proposalId, JSON.stringify([insightId]), rationale, JSON.stringify(evidence), JSON.stringify(approvers), date],
-    });
-    await appendAudit(tx, {
-      simDate: date,
-      actor: "steward",
-      action: "build_proposed",
-      assetId: insightId,
-      proposalId,
-      policyVersion: POLICY_VERSION,
-      rationale,
-      evidence,
-    });
-    await tx.commit();
-  } catch (err) {
-    await tx.rollback();
-    throw err;
-  } finally {
-    tx.close();
-  }
-  await onBuildProposed(db, { requestId, proposalId, approvers });
-  return { status: "proposed", proposal: (await getProposal(db, proposalId))! };
+  await db.execute({
+    sql: `INSERT INTO proposals (id, version, type, asset_ids, rationale, evidence, required_approvers, status, created_on, due_on)
+          VALUES (?, 1, 'build_temporary', ?, ?, ?, ?, 'open', ?, NULL)`,
+    args: [proposalId, JSON.stringify([insightId]), rationale, JSON.stringify(evidence), JSON.stringify(approvers), date],
+  });
+  await appendAudit(db, {
+    simDate: date,
+    actor: "steward",
+    action: "build_proposed",
+    assetId: insightId,
+    proposalId,
+    policyVersion: POLICY_VERSION,
+    rationale,
+    evidence,
+  });
+  return { proposalId, approvers };
 }
 
 async function latestFactMonth(db: Client): Promise<string> {
