@@ -10,6 +10,7 @@ import { ClockBar } from "./lifecycle/clock-bar";
 import { Inbox } from "./lifecycle/inbox";
 import { PipelineView } from "./agentic/pipeline-view";
 import { NavigationProvider } from "./navigation";
+import { BonsaiLogo } from "./bonsai-logo";
 import { SchedulerView } from "./agentic/scheduler-view";
 import { AGENTIC_SIDE_TABS, type AgenticSideTab } from "@/lib/scheduler-client";
 
@@ -108,12 +109,9 @@ function SimDate({ fallback }: { fallback: string }) {
 function Brand() {
   return (
     <div className="flex items-center gap-3">
-      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden>
-        <circle cx="11" cy="11" r="9.5" fill="none" stroke="var(--green)" strokeWidth="2" />
-        <circle cx="11" cy="11" r="4" fill="var(--sky)" />
-      </svg>
+      <BonsaiLogo size={30} tone="dark" />
       <div className="leading-tight">
-        <div className="text-[15px] font-semibold tracking-tight">Analytics Steward</div>
+        <div className="text-[15px] font-semibold tracking-tight">Bonsai</div>
         <div className="text-[11px] text-white/60">Bayer Pharmaceuticals · Since AI 2026 prototype</div>
       </div>
     </div>

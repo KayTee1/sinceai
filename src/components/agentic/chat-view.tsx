@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { BonsaiLogo } from "../bonsai-logo";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import ReactMarkdown from "react-markdown";
@@ -257,7 +258,8 @@ export function ChatView() {
 function Empty({ onPick }: { onPick: (prompt: string) => void }) {
   return (
     <div className="pt-10">
-      <div className="label">Analytics Steward</div>
+      <BonsaiLogo size={44} />
+      <div className="label mt-2">Bonsai</div>
       <h1 className="mt-2 text-2xl font-semibold tracking-tight">Ask before you build.</h1>
       <p className="mt-2 max-w-[560px] text-sm text-ink-2">
         Give me a request and I&apos;ll tell you whether something already answers it, which KPI definition to trust, and

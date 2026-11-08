@@ -61,7 +61,19 @@ export function Overlay() {
       </div>
 
       <div className="brand" style={{ opacity: brand }}>
-        <div className="brand__mark">Analytics Steward</div>
+        <svg className="brand__logo" viewBox="0 0 64 64" aria-hidden>
+          <g fill="none" stroke="var(--ink)" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M31 49 C29 42 37 40 35 34 C33 28 26 29 25 23" strokeWidth="4.5" />
+            <path d="M35 35 C39 34 42 33 44 31" strokeWidth="3" />
+            <path d="M29 27 C33 24 37 20 40 16" strokeWidth="3" />
+          </g>
+          <ellipse cx="22" cy="21" rx="12.5" ry="6.5" fill="#66b512" />
+          <ellipse cx="41" cy="14.5" rx="12" ry="6.5" fill="#4e8a12" />
+          <ellipse cx="45" cy="30.5" rx="10" ry="5.5" fill="#66b512" />
+          <rect x="13" y="48" width="38" height="4.5" rx="1.5" fill="var(--accent)" />
+          <path d="M17 52.5 H47 L43.5 59 H20.5 Z" fill="var(--accent)" />
+        </svg>
+        <div className="brand__mark">Bonsai</div>
         <div className="brand__product">Orchestrated with Mastra</div>
         <div className="brand__rule" />
         <div className="brand__line">Find before you build. Govern what you keep.</div>

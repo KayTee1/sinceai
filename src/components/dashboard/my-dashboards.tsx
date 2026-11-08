@@ -154,7 +154,7 @@ function Board({ asset, data, role }: { asset: AssetSummary; data: DashboardData
 
       <p className="mt-auto text-[11px] text-ink-3">
         {app
-          ? "Temporary insight built by Analytics Steward from certified KPIs. Synthetic challenge data."
+          ? "Temporary insight built by Bonsai from certified KPIs. Synthetic challenge data."
           : `View built from this dashboard's catalog KPIs on the pack's facts for its product and market; layout is ours, the report itself lives in ${asset.platform}. Synthetic challenge data, not actual Bayer performance.`}
       </p>
     </div>

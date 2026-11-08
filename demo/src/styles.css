@@ -448,6 +448,12 @@ body,
   text-align: center;
 }
 
+.brand__logo {
+  width: 5.5cqw;
+  height: 5.5cqw;
+  margin-bottom: 0.8cqw;
+}
+
 .brand__mark {
   font-size: 5.2cqw;
   font-weight: 300;

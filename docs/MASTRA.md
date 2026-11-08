@@ -8,7 +8,7 @@ committed final master revision. Local `master` is stale and was not moved.
 
 | Agent | Source | Model | Role |
 | --- | --- | --- | --- |
-| `orchestrator` / Analytics Steward | `src/mastra/agents/orchestrator.ts` | `anthropic/claude-sonnet-5-5` | Sole agent registered in `src/mastra/index.ts`; chat and governed tools |
+| `orchestrator` / Bonsai | `src/mastra/agents/orchestrator.ts` | `anthropic/claude-sonnet-5-5` | Sole agent registered in `src/mastra/index.ts`; chat and governed tools |
 | `discovery-agent` / Discovery agent | `src/mastra/agents/pipeline-agents.ts` | `anthropic/claude-haiku-5-5` | Local helper, summary wording only |
 | `conflict-detector` / Conflict detector | same file | `anthropic/claude-haiku-5-5` | Local helper, summary wording only |
 

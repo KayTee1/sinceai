@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Analytics Steward",
+  title: "Bonsai",
   description: "Every dashboard must earn its next 90 days.",
 };
 

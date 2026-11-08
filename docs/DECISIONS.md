@@ -606,3 +606,16 @@ T26 reconciliation: D26 is implemented in master #38; its original proposed/
 agreed-by labels above are retained as decision history, not overwritten by
 this documentation update. B5 supports explicit simulated-date checks and
 opt-in clock-action hooks, not background scheduling. B3 remains disabled.
+
+D27: Product name: Bonsai (2026-11-08)
+Status: agreed (Viet).
+Choice and why:
+- "Analytics Steward" was used by other teams at the event. The product is now
+  **Bonsai**: an analytics estate kept small, healthy and deliberate by careful
+  pruning. Brand only; behaviour, tools, IDs and the "Data Steward" role are
+  unchanged.
+- Renamed in the app UI, agent instructions, package names, README, docs, the
+  one-page summary (`summary/bonsai-summary.html`) and the demo film's text,
+  script and subtitles. D2 and the T16 proposal keep the old name as history.
+- The recorded voiceover (`demo/public/audio/voiceover.mp3`) still says
+  "Analytics Steward" in cues c05 and c15 until those two lines are re-recorded.

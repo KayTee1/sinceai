@@ -111,7 +111,7 @@ rectangular tables. START_HERE and Package_Overview are presentation sheets.
 - Similarity, lifecycle thresholds, 90-day leases, estimated cost savings and
   four planted net-revenue variants are team ideas, not source facts.
 
-## Proposed use in Analytics Steward
+## Proposed use in Bonsai
 
 Use real source IDs to connect requests → KPIs/assets → semantic models,
 owners, usage, lineage, quality and governance evidence. Require clarification

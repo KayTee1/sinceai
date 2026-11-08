@@ -1,4 +1,4 @@
-# Analytics Steward · voiceover script (v1 film)
+# Bonsai · voiceover script (v1 film)
 
 Status: **recorded.** The owner generated section 1 as one ElevenLabs take.
 `public/audio/voiceover.mp3` is that take, cut only inside its own pauses and
@@ -23,7 +23,7 @@ Duplicate dashboards. Conflicting KPI definitions.
 Then a business question arrives.
 Net sales and forecast variance. Xarelto, North America.
 
-Analytics Steward maps the request to its KPIs.
+Bonsai maps the request to its KPIs.
 A Mastra workflow searches the catalog for candidates,
 checks for conflicting KPI definitions,
 and for existing copies and pending builds.
@@ -35,7 +35,7 @@ Only then is the approved insight created, temporary, with provenance.
 
 Over time, approved decisions keep the estate lean.
 
-Analytics Steward. Find before you build. Govern what you keep.
+Bonsai. Find before you build. Govern what you keep.
 ```
 
 The same text with pause tags, for models that support `<break>` (check the
@@ -44,7 +44,7 @@ pause before the first line is left out on purpose. Set `audio.offset` in
 `cues.json` instead (see section 6).
 
 ```text
-Analytics keeps multiplying. <break time="0.5s" /> Duplicate dashboards. Conflicting KPI definitions. <break time="0.9s" /> Then a business question arrives. <break time="0.3s" /> Net sales and forecast variance. Xarelto, North America. <break time="1.2s" /> Analytics Steward maps the request to its KPIs. <break time="0.8s" /> A Mastra workflow searches the catalog for candidates, <break time="0.8s" /> checks for conflicting KPI definitions, <break time="1.1s" /> and for existing copies and pending builds. <break time="0.7s" /> Net sales has reuse candidates. Forecast variance is a gap. <break time="0.5s" /> The gap becomes a proposal. Nothing is built yet. <break time="0.4s" /> A regional Lead must approve it. <break time="1.0s" /> Only then is the approved insight created, temporary, with provenance. <break time="0.7s" /> Over time, approved decisions keep the estate lean. <break time="0.4s" /> Analytics Steward. Find before you build. Govern what you keep.
+Analytics keeps multiplying. <break time="0.5s" /> Duplicate dashboards. Conflicting KPI definitions. <break time="0.9s" /> Then a business question arrives. <break time="0.3s" /> Net sales and forecast variance. Xarelto, North America. <break time="1.2s" /> Bonsai maps the request to its KPIs. <break time="0.8s" /> A Mastra workflow searches the catalog for candidates, <break time="0.8s" /> checks for conflicting KPI definitions, <break time="1.1s" /> and for existing copies and pending builds. <break time="0.7s" /> Net sales has reuse candidates. Forecast variance is a gap. <break time="0.5s" /> The gap becomes a proposal. Nothing is built yet. <break time="0.4s" /> A regional Lead must approve it. <break time="1.0s" /> Only then is the approved insight created, temporary, with provenance. <break time="0.7s" /> Over time, approved decisions keep the estate lean. <break time="0.4s" /> Bonsai. Find before you build. Govern what you keep.
 ```
 
 102 words, about 44 s of speech and 11 s of pauses.
@@ -65,7 +65,7 @@ viewer sees while the line plays.
 | c04 | 10.5 → 14.3 | Net sales and forecast variance. Xarelto, North America. | request label (9.4–14.5); card lands 11.6 |
 | *pause* | 14.3 → 15.5 | | card collapses into a token (14.3–15.0) |
 | **03 Mastra investigation (15–35)** | | | |
-| c05 | 15.5 → 18.8 | Analytics Steward maps the request to its KPIs. | Intent gate (15–19); "Mapped KPIs" label (16.0–18.9) |
+| c05 | 15.5 → 18.8 | Bonsai maps the request to its KPIs. | Intent gate (15–19); "Mapped KPIs" label (16.0–18.9) |
 | c06 | 19.6 → 22.9 | A Mastra workflow searches the catalog for candidates, | Discovery gate (19–23); scan (19.9–22.0); candidates label (21.1–23.05) |
 | c07 | 23.7 → 26.6 | checks for conflicting KPI definitions, | Conflict gate (23–27); approved vs variant definition (23.9–26.95) |
 | c08 | 27.7 → 30.6 | and for existing copies and pending builds. | Duplicate gate (27–31); label (28.2–30.9) |
@@ -78,7 +78,7 @@ viewer sees while the line plays.
 | c13 | 44.5 → 46.5 | temporary, with provenance. | 30-day TTL ring (43.2–45.0); insight label (43.3–46.9) |
 | **05 Resolution and branding (47–55)** | | | |
 | c14 | 47.2 → 50.3 | Over time, approved decisions keep the estate lean. | estate organizes (46.9–49.5); caption "illustrative outcome" (47.4–51.0); archive label (49.3–51.0) |
-| c15 | 50.7 → 54.3 | Analytics Steward. Find before you build. Govern what you keep. | brand fades in (50.9), full (51.6–54.45), gone by 54.95 |
+| c15 | 50.7 → 54.3 | Bonsai. Find before you build. Govern what you keep. | brand fades in (50.9), full (51.6–54.45), gone by 54.95 |
 
 Hard limits: c11 must end before the Approve press at 40.9, and c12 must not
 start before the decision lands (41.4). Narration must stop by 54.45, when the
@@ -93,7 +93,7 @@ brand card starts to fade.
 | Mastra | MASS-truh | confirm with the owner |
 | Lead (the role) | leed | write `regional team lead` |
 | provenance | PROV-uh-nunss | — |
-| Analytics Steward | an-uh-LIT-iks STOO-erd | — |
+| Bonsai | BON-sy | — |
 | TEAM-REQ-01 | not spoken | — |
 
 ## 4. Delivery notes
@@ -137,7 +137,7 @@ brand card starts to fade.
   accurate.
 - The organized estate is an illustrative outcome over time. Don't promise
   automatic clean-up, bulk archiving or deletion.
-- Product: Analytics Steward. Orchestration: Mastra. Since AI organizes the
+- Product: Bonsai. Orchestration: Mastra. Since AI organizes the
   hackathon. It is not the product.
 
 ## 7. Producing the MP3

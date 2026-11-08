@@ -10,7 +10,7 @@ import { agentSummarize } from "./pipeline-agents";
 // (it also sees app-built and archived assets). All stay exported in catalog-tools.ts.
 export const orchestrator = new Agent({
   id: "orchestrator",
-  name: "Analytics Steward",
+  name: "Bonsai",
   description: "Turns analytics questions into reuse-first recommendations over the Bayer catalog.",
   instructions: ORCHESTRATOR_INSTRUCTIONS,
   model: "anthropic/claude-sonnet-5-5",
